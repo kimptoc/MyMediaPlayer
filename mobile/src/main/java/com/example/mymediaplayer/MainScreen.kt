@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -458,6 +460,7 @@ private fun CategoryTabContent(
                         isPlayingPlaylist = isPlayingPlaylist,
                         hasNext = hasNext,
                         hasPrev = hasPrev,
+                        showNavForNonPlaylist = true,
                         onPlay = onPlay,
                         onShuffle = onShuffle,
                         onStop = onStop,
@@ -516,6 +519,7 @@ private fun SongsListSection(
         isPlayingPlaylist = isPlayingPlaylist,
         hasNext = hasNext,
         hasPrev = hasPrev,
+        showNavForNonPlaylist = true,
         onPlay = onPlay,
         onShuffle = onShuffle,
         onStop = onStop,
@@ -632,6 +636,7 @@ private fun PlaybackButtonsRow(
     isPlayingPlaylist: Boolean,
     hasNext: Boolean,
     hasPrev: Boolean,
+    showNavForNonPlaylist: Boolean = false,
     onPlay: () -> Unit,
     onShuffle: () -> Unit,
     onStop: () -> Unit,
@@ -640,7 +645,7 @@ private fun PlaybackButtonsRow(
 ) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         if (isPlaying) {
-            if (isPlayingPlaylist) {
+            if (isPlayingPlaylist || showNavForNonPlaylist) {
                 if (hasPrev) {
                     TextButton(onClick = onPrev) { Text("Prev") }
                 }
@@ -650,8 +655,20 @@ private fun PlaybackButtonsRow(
             }
             TextButton(onClick = onStop) { Text("Stop") }
         } else {
-            TextButton(onClick = onPlay) { Text("Play") }
-            TextButton(onClick = onShuffle) { Text("Shuffle") }
+            Button(
+                onClick = onPlay,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            ) { Text("Play") }
+            Button(
+                onClick = onShuffle,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                )
+            ) { Text("Shuffle") }
         }
     }
 }

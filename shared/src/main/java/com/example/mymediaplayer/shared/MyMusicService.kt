@@ -25,6 +25,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         private const val GENRES_ID = "genres"
         private const val ARTISTS_ID = "artists"
         private const val PLAYLIST_PREFIX = "playlist:"
+        private const val PLAYLIST_URI_PREFIX = "playlist_uri:"
         private const val ALBUM_PREFIX = "album:"
         private const val GENRE_PREFIX = "genre:"
         private const val ARTIST_PREFIX = "artist:"
@@ -107,6 +108,14 @@ class MyMusicService : MediaBrowserServiceCompat() {
                         }
                         all
                     }
+                    listKey.startsWith(PLAYLIST_URI_PREFIX) -> {
+                        val playlistUri =
+                            Uri.decode(listKey.removePrefix(PLAYLIST_URI_PREFIX))
+                        playlistService.readPlaylist(
+                            this@MyMusicService,
+                            Uri.parse(playlistUri)
+                        )
+                    }
                     listKey.startsWith(ALBUM_PREFIX) -> {
                         ensureMetadataIndexes()
                         val album = Uri.decode(listKey.removePrefix(ALBUM_PREFIX))
@@ -136,6 +145,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 currentPlaylistName = when {
                     listKey == SONGS_ID -> "All Songs"
                     listKey == PLAYLISTS_ID -> "All Playlists"
+                    listKey.startsWith(PLAYLIST_URI_PREFIX) -> {
+                        Uri.decode(listKey.removePrefix(PLAYLIST_URI_PREFIX))
+                    }
                     listKey.startsWith(ALBUM_PREFIX) ->
                         Uri.decode(listKey.removePrefix(ALBUM_PREFIX))
                     listKey.startsWith(GENRE_PREFIX) ->
@@ -197,16 +209,22 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 else -> emptyList()
             }
 
-            if (listFromParent.isNotEmpty()) {
-                playlistQueue = listFromParent
-                currentQueueIndex = listFromParent.indexOfFirst { it.uriString == resolvedMediaId }
+            val parentList = when {
+                listFromParent.isNotEmpty() -> listFromParent
+                mediaCacheService.cachedFiles.isNotEmpty() -> mediaCacheService.cachedFiles
+                else -> emptyList()
+            }
+
+            if (parentList.isNotEmpty()) {
+                playlistQueue = parentList
+                currentQueueIndex = parentList.indexOfFirst { it.uriString == resolvedMediaId }
                 if (currentQueueIndex < 0) {
                     playlistQueue = emptyList()
                     currentQueueIndex = -1
                     currentPlaylistName = null
                 } else {
                     currentPlaylistName = when {
-                        parentId == SONGS_ID -> "All Songs"
+                        parentId == SONGS_ID || listFromParent.isEmpty() -> "All Songs"
                         parentId?.startsWith(ALBUM_PREFIX) == true ->
                             Uri.decode(parentId.removePrefix(ALBUM_PREFIX))
                         parentId?.startsWith(GENRE_PREFIX) == true ->
@@ -362,6 +380,41 @@ class MyMusicService : MediaBrowserServiceCompat() {
     }
 
     private fun buildMediaItems(parentId: String): MutableList<MediaItem> {
+        if (parentId.startsWith(PLAYLIST_PREFIX)) {
+            val playlistUri = Uri.decode(parentId.removePrefix(PLAYLIST_PREFIX))
+            val songs = playlistService.readPlaylist(this, Uri.parse(playlistUri))
+            val listKey = PLAYLIST_URI_PREFIX + Uri.encode(playlistUri)
+            val items = mutableListOf<MediaItem>()
+            if (songs.isNotEmpty()) {
+                items.add(
+                    MediaItem(
+                        MediaDescriptionCompat.Builder()
+                            .setMediaId(ACTION_PLAY_ALL_PREFIX + listKey)
+                            .setTitle("[Play All]")
+                            .build(),
+                        MediaItem.FLAG_PLAYABLE
+                    )
+                )
+                items.add(
+                    MediaItem(
+                        MediaDescriptionCompat.Builder()
+                            .setMediaId(ACTION_SHUFFLE_PREFIX + listKey)
+                            .setTitle("[Shuffle]")
+                            .build(),
+                        MediaItem.FLAG_PLAYABLE
+                    )
+                )
+            }
+            items += songs.map { fileInfo ->
+                val description = MediaDescriptionCompat.Builder()
+                    .setMediaId(fileInfo.uriString)
+                    .setTitle(fileInfo.title ?: fileInfo.displayName)
+                    .setSubtitle(fileInfo.artist)
+                    .build()
+                MediaItem(description, MediaItem.FLAG_PLAYABLE)
+            }
+            return items
+        }
         if (parentId.startsWith(ALBUM_PREFIX)) {
             ensureMetadataIndexes()
             val album = Uri.decode(parentId.removePrefix(ALBUM_PREFIX))
@@ -373,7 +426,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     MediaItem(
                         MediaDescriptionCompat.Builder()
                             .setMediaId(ACTION_PLAY_ALL_PREFIX + listKey)
-                            .setTitle("Play All")
+                            .setTitle("[Play All]")
                             .build(),
                         MediaItem.FLAG_PLAYABLE
                     )
@@ -382,7 +435,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     MediaItem(
                         MediaDescriptionCompat.Builder()
                             .setMediaId(ACTION_SHUFFLE_PREFIX + listKey)
-                            .setTitle("Shuffle")
+                            .setTitle("[Shuffle]")
                             .build(),
                         MediaItem.FLAG_PLAYABLE
                     )
@@ -392,6 +445,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 val description = MediaDescriptionCompat.Builder()
                     .setMediaId(fileInfo.uriString)
                     .setTitle(fileInfo.title ?: fileInfo.displayName)
+                    .setSubtitle(fileInfo.artist)
                     .build()
                 MediaItem(description, MediaItem.FLAG_PLAYABLE)
             }
@@ -408,7 +462,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     MediaItem(
                         MediaDescriptionCompat.Builder()
                             .setMediaId(ACTION_PLAY_ALL_PREFIX + listKey)
-                            .setTitle("Play All")
+                            .setTitle("[Play All]")
                             .build(),
                         MediaItem.FLAG_PLAYABLE
                     )
@@ -417,7 +471,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     MediaItem(
                         MediaDescriptionCompat.Builder()
                             .setMediaId(ACTION_SHUFFLE_PREFIX + listKey)
-                            .setTitle("Shuffle")
+                            .setTitle("[Shuffle]")
                             .build(),
                         MediaItem.FLAG_PLAYABLE
                     )
@@ -427,6 +481,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 val description = MediaDescriptionCompat.Builder()
                     .setMediaId(fileInfo.uriString)
                     .setTitle(fileInfo.title ?: fileInfo.displayName)
+                    .setSubtitle(fileInfo.artist)
                     .build()
                 MediaItem(description, MediaItem.FLAG_PLAYABLE)
             }
@@ -443,7 +498,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     MediaItem(
                         MediaDescriptionCompat.Builder()
                             .setMediaId(ACTION_PLAY_ALL_PREFIX + listKey)
-                            .setTitle("Play All")
+                            .setTitle("[Play All]")
                             .build(),
                         MediaItem.FLAG_PLAYABLE
                     )
@@ -452,7 +507,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     MediaItem(
                         MediaDescriptionCompat.Builder()
                             .setMediaId(ACTION_SHUFFLE_PREFIX + listKey)
-                            .setTitle("Shuffle")
+                            .setTitle("[Shuffle]")
                             .build(),
                         MediaItem.FLAG_PLAYABLE
                     )
@@ -462,6 +517,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 val description = MediaDescriptionCompat.Builder()
                     .setMediaId(fileInfo.uriString)
                     .setTitle(fileInfo.title ?: fileInfo.displayName)
+                    .setSubtitle(fileInfo.artist)
                     .build()
                 MediaItem(description, MediaItem.FLAG_PLAYABLE)
             }
@@ -524,7 +580,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                         MediaItem(
                             MediaDescriptionCompat.Builder()
                                 .setMediaId(ACTION_PLAY_ALL_PREFIX + SONGS_ID)
-                                .setTitle("Play All")
+                                .setTitle("[Play All]")
                                 .build(),
                             MediaItem.FLAG_PLAYABLE
                         )
@@ -533,7 +589,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                         MediaItem(
                             MediaDescriptionCompat.Builder()
                                 .setMediaId(ACTION_SHUFFLE_PREFIX + SONGS_ID)
-                                .setTitle("Shuffle")
+                                .setTitle("[Shuffle]")
                                 .build(),
                             MediaItem.FLAG_PLAYABLE
                         )
@@ -555,7 +611,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                         MediaItem(
                             MediaDescriptionCompat.Builder()
                                 .setMediaId(ACTION_PLAY_ALL_PREFIX + PLAYLISTS_ID)
-                                .setTitle("Play All")
+                                .setTitle("[Play All]")
                                 .build(),
                             MediaItem.FLAG_PLAYABLE
                         )
@@ -564,7 +620,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                         MediaItem(
                             MediaDescriptionCompat.Builder()
                                 .setMediaId(ACTION_SHUFFLE_PREFIX + PLAYLISTS_ID)
-                                .setTitle("Shuffle")
+                                .setTitle("[Shuffle]")
                                 .build(),
                             MediaItem.FLAG_PLAYABLE
                         )
@@ -572,10 +628,10 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 }
                 items += mediaCacheService.discoveredPlaylists.map { playlist ->
                     val description = MediaDescriptionCompat.Builder()
-                        .setMediaId(PLAYLIST_PREFIX + playlist.uriString)
+                        .setMediaId(PLAYLIST_PREFIX + Uri.encode(playlist.uriString))
                         .setTitle(playlist.displayName.removeSuffix(".m3u"))
                         .build()
-                    MediaItem(description, MediaItem.FLAG_PLAYABLE)
+                    MediaItem(description, MediaItem.FLAG_BROWSABLE)
                 }
                 items
             }
@@ -731,7 +787,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
         val queueItems = playlistQueue.mapIndexed { index, fileInfo ->
             val description = MediaDescriptionCompat.Builder()
                 .setMediaId(fileInfo.uriString)
-                .setTitle(fileInfo.displayName)
+                .setTitle(fileInfo.title ?: fileInfo.displayName)
+                .setSubtitle(fileInfo.artist)
                 .build()
             MediaSessionCompat.QueueItem(description, index.toLong())
         }
