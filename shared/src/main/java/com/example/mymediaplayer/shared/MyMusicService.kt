@@ -1,9 +1,12 @@
 package com.example.mymediaplayer.shared
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
+import android.media.MediaMetadataRetriever
 import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Bundle
@@ -14,6 +17,8 @@ import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
 import androidx.media.MediaBrowserServiceCompat
+import android.graphics.BitmapFactory
+import androidx.core.content.ContextCompat
 
 class MyMusicService : MediaBrowserServiceCompat() {
 
@@ -899,14 +904,45 @@ class MyMusicService : MediaBrowserServiceCompat() {
         val album = runtimeMetadata?.album ?: fileInfo.album
         val duration = runtimeMetadata?.durationMs?.toLongOrNull() ?: fileInfo.durationMs ?: 0L
         val year = runtimeMetadata?.year?.toLongOrNull() ?: (fileInfo.year ?: 0).toLong()
-        val metadata = MediaMetadataCompat.Builder()
+        val embeddedArtBitmap = runCatching {
+            val retriever = MediaMetadataRetriever()
+            try {
+                retriever.setDataSource(this, Uri.parse(fileInfo.uriString))
+                val artBytes = retriever.embeddedPicture ?: return@runCatching null
+                BitmapFactory.decodeByteArray(artBytes, 0, artBytes.size)
+            } finally {
+                try {
+                    retriever.release()
+                } catch (_: Exception) {
+                }
+            }
+        }.getOrNull()
+
+        val albumArtBitmap = embeddedArtBitmap ?: loadPlaceholderArt()
+
+        val builder = MediaMetadataCompat.Builder()
             .putString(MediaMetadataCompat.METADATA_KEY_MEDIA_ID, fileInfo.uriString)
             .putString(MediaMetadataCompat.METADATA_KEY_TITLE, title)
             .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, artist)
             .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, album)
             .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, duration)
             .putLong(MediaMetadataCompat.METADATA_KEY_YEAR, year)
-            .build()
-        session.setMetadata(metadata)
+        albumArtBitmap?.let { bitmap ->
+            builder.putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, bitmap)
+            builder.putBitmap(MediaMetadataCompat.METADATA_KEY_ART, bitmap)
+            builder.putBitmap(MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON, bitmap)
+        }
+        session.setMetadata(builder.build())
+    }
+
+    private fun loadPlaceholderArt(): Bitmap? {
+        val drawable = ContextCompat.getDrawable(this, R.drawable.ic_album_placeholder) ?: return null
+        val width = if (drawable.intrinsicWidth > 0) drawable.intrinsicWidth else 512
+        val height = if (drawable.intrinsicHeight > 0) drawable.intrinsicHeight else 512
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        drawable.setBounds(0, 0, canvas.width, canvas.height)
+        drawable.draw(canvas)
+        return bitmap
     }
 }
