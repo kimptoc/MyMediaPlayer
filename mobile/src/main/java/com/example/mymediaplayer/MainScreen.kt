@@ -139,7 +139,9 @@ fun MainScreen(
                     onPlayPause = onPlayPause,
                     onStop = onStop,
                     onNext = onNext,
-                    onPrev = onPrev
+                    onPrev = onPrev,
+                    hasNext = uiState.hasNext,
+                    hasPrev = uiState.hasPrev
                 )
             }
         },
@@ -179,6 +181,8 @@ fun MainScreen(
                         songs = uiState.scannedFiles,
                         isPlaying = uiState.isPlaying || uiState.isPlayingPlaylist,
                         isPlayingPlaylist = uiState.isPlayingPlaylist,
+                        hasNext = uiState.hasNext,
+                        hasPrev = uiState.hasPrev,
                         onPlay = { onPlaySongs(uiState.scannedFiles) },
                         onShuffle = { onShuffleSongs(uiState.scannedFiles) },
                         onStop = onStop,
@@ -196,6 +200,8 @@ fun MainScreen(
                         isLoading = uiState.isPlaylistLoading,
                         isPlaying = uiState.isPlaying || uiState.isPlayingPlaylist,
                         isPlayingPlaylist = uiState.isPlayingPlaylist,
+                        hasNext = uiState.hasNext,
+                        hasPrev = uiState.hasPrev,
                         onPlaylistSelected = onPlaylistSelected,
                         onPlayPlaylist = onPlayPlaylist,
                         onShufflePlaylistSongs = onShufflePlaylistSongs,
@@ -216,6 +222,8 @@ fun MainScreen(
                         songs = uiState.filteredSongs,
                         isPlaying = uiState.isPlaying || uiState.isPlayingPlaylist,
                         isPlayingPlaylist = uiState.isPlayingPlaylist,
+                        hasNext = uiState.hasNext,
+                        hasPrev = uiState.hasPrev,
                         onPlay = { onPlaySongs(uiState.filteredSongs) },
                         onShuffle = { onShuffleSongs(uiState.filteredSongs) },
                         onStop = onStop,
@@ -235,6 +243,8 @@ fun MainScreen(
                         songs = uiState.filteredSongs,
                         isPlaying = uiState.isPlaying || uiState.isPlayingPlaylist,
                         isPlayingPlaylist = uiState.isPlayingPlaylist,
+                        hasNext = uiState.hasNext,
+                        hasPrev = uiState.hasPrev,
                         onPlay = { onPlaySongs(uiState.filteredSongs) },
                         onShuffle = { onShuffleSongs(uiState.filteredSongs) },
                         onStop = onStop,
@@ -254,6 +264,8 @@ fun MainScreen(
                         songs = uiState.filteredSongs,
                         isPlaying = uiState.isPlaying || uiState.isPlayingPlaylist,
                         isPlayingPlaylist = uiState.isPlayingPlaylist,
+                        hasNext = uiState.hasNext,
+                        hasPrev = uiState.hasPrev,
                         onPlay = { onPlaySongs(uiState.filteredSongs) },
                         onShuffle = { onShuffleSongs(uiState.filteredSongs) },
                         onStop = onStop,
@@ -390,6 +402,8 @@ private fun CategoryTabContent(
     songs: List<MediaFileInfo>,
     isPlaying: Boolean,
     isPlayingPlaylist: Boolean,
+    hasNext: Boolean,
+    hasPrev: Boolean,
     onPlay: () -> Unit,
     onShuffle: () -> Unit,
     onStop: () -> Unit,
@@ -442,6 +456,8 @@ private fun CategoryTabContent(
                     PlaybackButtonsRow(
                         isPlaying = isPlaying,
                         isPlayingPlaylist = isPlayingPlaylist,
+                        hasNext = hasNext,
+                        hasPrev = hasPrev,
                         onPlay = onPlay,
                         onShuffle = onShuffle,
                         onStop = onStop,
@@ -476,6 +492,8 @@ private fun SongsListSection(
     songs: List<MediaFileInfo>,
     isPlaying: Boolean,
     isPlayingPlaylist: Boolean,
+    hasNext: Boolean,
+    hasPrev: Boolean,
     onPlay: () -> Unit,
     onShuffle: () -> Unit,
     onStop: () -> Unit,
@@ -496,6 +514,8 @@ private fun SongsListSection(
     PlaybackButtonsRow(
         isPlaying = isPlaying,
         isPlayingPlaylist = isPlayingPlaylist,
+        hasNext = hasNext,
+        hasPrev = hasPrev,
         onPlay = onPlay,
         onShuffle = onShuffle,
         onStop = onStop,
@@ -522,6 +542,8 @@ private fun PlaylistsSection(
     isLoading: Boolean,
     isPlaying: Boolean,
     isPlayingPlaylist: Boolean,
+    hasNext: Boolean,
+    hasPrev: Boolean,
     onPlaylistSelected: (PlaylistInfo) -> Unit,
     onPlayPlaylist: (PlaylistInfo) -> Unit,
     onShufflePlaylistSongs: (List<MediaFileInfo>) -> Unit,
@@ -576,6 +598,8 @@ private fun PlaylistsSection(
             PlaybackButtonsRow(
                 isPlaying = isPlaying,
                 isPlayingPlaylist = isPlayingPlaylist,
+                hasNext = hasNext,
+                hasPrev = hasPrev,
                 onPlay = { onPlayPlaylist(selectedPlaylist) },
                 onShuffle = { onShufflePlaylistSongs(playlistSongs) },
                 onStop = onStop,
@@ -606,6 +630,8 @@ private fun PlaylistsSection(
 private fun PlaybackButtonsRow(
     isPlaying: Boolean,
     isPlayingPlaylist: Boolean,
+    hasNext: Boolean,
+    hasPrev: Boolean,
     onPlay: () -> Unit,
     onShuffle: () -> Unit,
     onStop: () -> Unit,
@@ -615,8 +641,12 @@ private fun PlaybackButtonsRow(
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         if (isPlaying) {
             if (isPlayingPlaylist) {
-                TextButton(onClick = onPrev) { Text("Prev") }
-                TextButton(onClick = onNext) { Text("Next") }
+                if (hasPrev) {
+                    TextButton(onClick = onPrev) { Text("Prev") }
+                }
+                if (hasNext) {
+                    TextButton(onClick = onNext) { Text("Next") }
+                }
             }
             TextButton(onClick = onStop) { Text("Stop") }
         } else {
@@ -658,6 +688,8 @@ fun PlaybackBar(
     trackName: String,
     isPlaying: Boolean,
     isPlayingPlaylist: Boolean,
+    hasNext: Boolean,
+    hasPrev: Boolean,
     queuePosition: String?,
     onPlayPause: () -> Unit,
     onStop: () -> Unit,
@@ -689,11 +721,15 @@ fun PlaybackBar(
                 Text(if (isPlaying) "Pause" else "Play")
             }
             if (isPlayingPlaylist) {
-                TextButton(onClick = onPrev) {
-                    Text("Prev")
+                if (hasPrev) {
+                    TextButton(onClick = onPrev) {
+                        Text("Prev")
+                    }
                 }
-                TextButton(onClick = onNext) {
-                    Text("Next")
+                if (hasNext) {
+                    TextButton(onClick = onNext) {
+                        Text("Next")
+                    }
                 }
             }
             TextButton(onClick = onStop) {

@@ -20,6 +20,8 @@ class MediaCacheService {
     private val _discoveredPlaylists = mutableListOf<PlaylistInfo>()
     val discoveredPlaylists: List<PlaylistInfo> get() = _discoveredPlaylists.toList()
 
+    private val cacheLock = Any()
+
     private val albumIndex = mutableMapOf<String, MutableList<MediaFileInfo>>()
     private val genreIndex = mutableMapOf<String, MutableList<MediaFileInfo>>()
     private val artistIndex = mutableMapOf<String, MutableList<MediaFileInfo>>()
@@ -45,9 +47,11 @@ class MediaCacheService {
     }
 
     fun addFile(fileInfo: MediaFileInfo) {
-        if (_cachedFiles.size < MAX_CACHE_SIZE) {
-            _cachedFiles.add(fileInfo)
-            metadataIndexed = false
+        synchronized(cacheLock) {
+            if (_cachedFiles.size < MAX_CACHE_SIZE) {
+                _cachedFiles.add(fileInfo)
+                metadataIndexed = false
+            }
         }
     }
 
@@ -149,8 +153,10 @@ class MediaCacheService {
     }
 
     fun clearFiles() {
-        _cachedFiles.clear()
-        clearMetadataIndexes()
+        synchronized(cacheLock) {
+            _cachedFiles.clear()
+            clearMetadataIndexes()
+        }
     }
 
     fun clearPlaylists() {
@@ -158,14 +164,17 @@ class MediaCacheService {
     }
 
     fun clearCache() {
-        _cachedFiles.clear()
-        _discoveredPlaylists.clear()
-        clearMetadataIndexes()
+        synchronized(cacheLock) {
+            _cachedFiles.clear()
+            _discoveredPlaylists.clear()
+            clearMetadataIndexes()
+        }
     }
 
     fun buildMetadataIndexes(context: Context) {
         clearMetadataIndexes()
-        for (file in _cachedFiles) {
+        val snapshot = synchronized(cacheLock) { _cachedFiles.toList() }
+        for (file in snapshot) {
             val metadata = MediaMetadataHelper.extractMetadata(context, file.uriString)
             val album = metadata?.album?.ifBlank { null } ?: "Unknown Album"
             val artist = metadata?.artist?.ifBlank { null } ?: "Unknown Artist"

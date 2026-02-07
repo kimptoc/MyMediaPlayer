@@ -40,7 +40,9 @@ data class MainUiState(
     val isPlayingPlaylist: Boolean = false,
     val queuePosition: String? = null,
     val lastPlaylistCount: Int = 3,
-    val lastScanLimit: Int = MediaCacheService.MAX_CACHE_SIZE
+    val lastScanLimit: Int = MediaCacheService.MAX_CACHE_SIZE,
+    val hasNext: Boolean = false,
+    val hasPrev: Boolean = false
 )
 
 enum class LibraryTab(val label: String) {
@@ -270,7 +272,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 "${activeIndex + 1}/$queueSize"
             } else {
                 null
-            }
+            },
+            hasPrev = queueTitle != null && activeIndex > 0,
+            hasNext = queueTitle != null && activeIndex >= 0 && activeIndex < queueSize - 1
         )
     }
 
