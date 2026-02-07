@@ -3,6 +3,7 @@ package com.example.mymediaplayer
 import android.content.ComponentName
 import android.content.Intent
 import android.media.AudioManager
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -23,6 +24,8 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
 
     companion object {
+        private const val PREFS_NAME = "mymediaplayer_prefs"
+        private const val KEY_TREE_URI = "tree_uri"
         private const val ACTION_SET_MEDIA_FILES = "SET_MEDIA_FILES"
         private const val ACTION_SET_PLAYLISTS = "SET_PLAYLISTS"
         private const val EXTRA_URIS = "uris"
@@ -82,8 +85,12 @@ class MainActivity : ComponentActivity() {
             uri?.let {
                 contentResolver.takePersistableUriPermission(
                     it,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
                 )
+                getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                    .edit()
+                    .putString(KEY_TREE_URI, it.toString())
+                    .apply()
                 viewModel.setTreeUri(it)
                 viewModel.onDirectorySelected(it)
             }
@@ -92,6 +99,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         volumeControlStream = AudioManager.STREAM_MUSIC
+
+        restoreLastTreeUri()
 
         mediaBrowser = MediaBrowserCompat(
             this,
@@ -137,6 +146,7 @@ class MainActivity : ComponentActivity() {
                     },
                     onCreatePlaylist = { viewModel.createRandomPlaylist() },
                     onPlaylistMessageDismissed = { viewModel.clearPlaylistMessage() },
+                    onFolderMessageDismissed = { viewModel.clearFolderMessage() },
                     onPlaylistClick = { playlist ->
                         sendFilesToServiceIfNeeded(uiState.value.scannedFiles)
                         sendPlaylistsToServiceIfNeeded(uiState.value.discoveredPlaylists)
@@ -169,6 +179,22 @@ class MainActivity : ComponentActivity() {
         val queueSize = controller.queue?.size ?: 0
         val activeIndex = lastPlaybackState?.activeQueueItemId?.toInt() ?: -1
         viewModel.updateQueueState(queueTitle, queueSize, activeIndex)
+    }
+
+    private fun restoreLastTreeUri() {
+        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        val uriString = prefs.getString(KEY_TREE_URI, null) ?: return
+        val uri = Uri.parse(uriString)
+        val hasPermission = contentResolver.persistedUriPermissions.any {
+            it.uri == uri && it.isReadPermission
+        }
+        if (!hasPermission) {
+            prefs.edit().remove(KEY_TREE_URI).apply()
+            viewModel.setFolderMessage("Folder access expired. Please select a folder again.")
+            return
+        }
+        viewModel.setTreeUri(uri)
+        viewModel.onDirectorySelected(uri)
     }
 
     private fun sendFilesToServiceIfNeeded(files: List<com.example.mymediaplayer.shared.MediaFileInfo>) {

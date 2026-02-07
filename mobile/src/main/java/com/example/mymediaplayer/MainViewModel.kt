@@ -23,6 +23,7 @@ data class MainUiState(
     val currentTrackName: String? = null,
     val currentMediaId: String? = null,
     val playlistMessage: String? = null,
+    val folderMessage: String? = null,
     val isPlayingPlaylist: Boolean = false,
     val queuePosition: String? = null
 )
@@ -75,6 +76,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearPlaylistMessage() {
         _uiState.value = _uiState.value.copy(playlistMessage = null)
+    }
+
+    fun setFolderMessage(message: String) {
+        _uiState.value = _uiState.value.copy(folderMessage = message)
+    }
+
+    fun clearFolderMessage() {
+        _uiState.value = _uiState.value.copy(folderMessage = null)
     }
 
     fun updatePlaybackState(state: Int, mediaId: String?, trackName: String?) {

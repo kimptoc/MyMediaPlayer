@@ -45,14 +45,25 @@ fun MainScreen(
     onNext: () -> Unit,
     onCreatePlaylist: () -> Unit,
     onPlaylistMessageDismissed: () -> Unit,
+    onFolderMessageDismissed: () -> Unit,
     onPlaylistClick: (PlaylistInfo) -> Unit
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(uiState.playlistMessage) {
-        val message = uiState.playlistMessage ?: return@LaunchedEffect
-        snackbarHostState.showSnackbar(message)
-        onPlaylistMessageDismissed()
+        val message = uiState.playlistMessage
+        if (message != null) {
+            snackbarHostState.showSnackbar(message)
+            onPlaylistMessageDismissed()
+        }
+    }
+
+    LaunchedEffect(uiState.folderMessage) {
+        val message = uiState.folderMessage
+        if (message != null) {
+            snackbarHostState.showSnackbar(message)
+            onFolderMessageDismissed()
+        }
     }
 
     Scaffold(
