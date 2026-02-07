@@ -30,6 +30,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         private const val ARTIST_PREFIX = "artist:"
         private const val PREFS_NAME = "mymediaplayer_prefs"
         private const val KEY_TREE_URI = "tree_uri"
+        private const val KEY_SCAN_LIMIT = "scan_limit"
 
         private const val ACTION_SET_MEDIA_FILES = "SET_MEDIA_FILES"
         private const val ACTION_SET_PLAYLISTS = "SET_PLAYLISTS"
@@ -391,6 +392,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
     private fun loadCachedTreeIfAvailable() {
         val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         val uriString = prefs.getString(KEY_TREE_URI, null) ?: return
+        val limit = prefs.getInt(KEY_SCAN_LIMIT, MediaCacheService.MAX_CACHE_SIZE)
         val uri = Uri.parse(uriString)
         val hasPermission = contentResolver.persistedUriPermissions.any {
             it.uri == uri && it.isReadPermission
@@ -400,7 +402,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         Thread {
             isScanning = true
             try {
-                mediaCacheService.scanDirectory(this, uri)
+                mediaCacheService.scanDirectory(this, uri, limit)
                 mediaCacheService.buildMetadataIndexes(this)
             } finally {
                 isScanning = false

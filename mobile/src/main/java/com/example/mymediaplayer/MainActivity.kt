@@ -17,6 +17,7 @@ import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaControllerCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
+import com.example.mymediaplayer.shared.MediaCacheService
 import com.example.mymediaplayer.shared.MyMusicService
 import com.example.mymediaplayer.shared.PlaylistInfo
 import kotlinx.coroutines.launch
@@ -26,6 +27,7 @@ class MainActivity : ComponentActivity() {
     companion object {
         private const val PREFS_NAME = "mymediaplayer_prefs"
         private const val KEY_TREE_URI = "tree_uri"
+        private const val KEY_SCAN_LIMIT = "scan_limit"
         private const val ACTION_SET_MEDIA_FILES = "SET_MEDIA_FILES"
         private const val ACTION_SET_PLAYLISTS = "SET_PLAYLISTS"
         private const val EXTRA_URIS = "uris"
@@ -41,6 +43,7 @@ class MainActivity : ComponentActivity() {
     private var mediaController: MediaControllerCompat? = null
     private var lastSentUris: List<String>? = null
     private var lastSentPlaylistUris: List<String>? = null
+    private var pendingScanLimit: Int = MediaCacheService.MAX_CACHE_SIZE
 
     private var lastPlaybackState: PlaybackStateCompat? = null
     private var lastMetadata: MediaMetadataCompat? = null
@@ -90,9 +93,10 @@ class MainActivity : ComponentActivity() {
                 getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
                     .edit()
                     .putString(KEY_TREE_URI, it.toString())
+                    .putInt(KEY_SCAN_LIMIT, pendingScanLimit)
                     .apply()
                 viewModel.setTreeUri(it)
-                viewModel.onDirectorySelected(it)
+                viewModel.onDirectorySelected(it, pendingScanLimit)
             }
         }
 
@@ -125,7 +129,10 @@ class MainActivity : ComponentActivity() {
                 val uiState = viewModel.uiState.collectAsState()
                 MainScreen(
                     uiState = uiState.value,
-                    onSelectFolder = { openDocumentTree.launch(null) },
+                    onSelectFolderWithLimit = { limit ->
+                        pendingScanLimit = limit
+                        openDocumentTree.launch(null)
+                    },
                     onFileClick = { file ->
                         sendFilesToServiceIfNeeded(uiState.value.scannedFiles)
                         mediaController?.transportControls?.playFromMediaId(file.uriString, null)
@@ -144,9 +151,13 @@ class MainActivity : ComponentActivity() {
                     onNext = {
                         mediaController?.transportControls?.skipToNext()
                     },
+                    onPrev = {
+                        mediaController?.transportControls?.skipToPrevious()
+                    },
                     onCreatePlaylist = { count -> viewModel.createRandomPlaylist(count) },
                     onPlaylistMessageDismissed = { viewModel.clearPlaylistMessage() },
                     onFolderMessageDismissed = { viewModel.clearFolderMessage() },
+                    onScanMessageDismissed = { viewModel.clearScanMessage() },
                     onTabSelected = { viewModel.selectTab(it) },
                     onAlbumSelected = { viewModel.selectAlbum(it) },
                     onGenreSelected = { viewModel.selectGenre(it) },
@@ -219,6 +230,7 @@ class MainActivity : ComponentActivity() {
         val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         val uriString = prefs.getString(KEY_TREE_URI, null) ?: return
         val uri = Uri.parse(uriString)
+        val limit = prefs.getInt(KEY_SCAN_LIMIT, pendingScanLimit)
         val hasPermission = contentResolver.persistedUriPermissions.any {
             it.uri == uri && it.isReadPermission
         }
@@ -228,7 +240,8 @@ class MainActivity : ComponentActivity() {
             return
         }
         viewModel.setTreeUri(uri)
-        viewModel.onDirectorySelected(uri)
+        pendingScanLimit = limit
+        viewModel.onDirectorySelected(uri, limit)
     }
 
     private fun sendFilesToServiceIfNeeded(files: List<com.example.mymediaplayer.shared.MediaFileInfo>) {

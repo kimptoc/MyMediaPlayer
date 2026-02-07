@@ -24,11 +24,24 @@ class MediaCacheService {
     private val genreIndex = mutableMapOf<String, MutableList<MediaFileInfo>>()
     private val artistIndex = mutableMapOf<String, MutableList<MediaFileInfo>>()
     private var metadataIndexed: Boolean = false
+    private var maxFileLimit: Int = MAX_CACHE_SIZE
+    private var foldersScanned: Int = 0
+    private var songsFound: Int = 0
 
-    fun scanDirectory(context: Context, treeUri: Uri) {
+    fun scanDirectory(context: Context, treeUri: Uri, maxFiles: Int = MAX_CACHE_SIZE): ScanStats {
         clearCache()
+        maxFileLimit = maxFiles.coerceAtLeast(1)
+        foldersScanned = 0
+        songsFound = 0
+        val startTime = android.os.SystemClock.elapsedRealtime()
         val rootDocumentId = DocumentsContract.getTreeDocumentId(treeUri)
         walkTree(context, treeUri, rootDocumentId)
+        val durationMs = android.os.SystemClock.elapsedRealtime() - startTime
+        return ScanStats(
+            durationMs = durationMs,
+            foldersScanned = foldersScanned,
+            songsFound = songsFound
+        )
     }
 
     fun addFile(fileInfo: MediaFileInfo) {
@@ -46,6 +59,7 @@ class MediaCacheService {
         val contentResolver = context.contentResolver
         val toVisit = ArrayDeque<String>()
         toVisit.add(rootDocumentId)
+        foldersScanned = 1
 
         val projection = arrayOf(
             DocumentsContract.Document.COLUMN_DOCUMENT_ID,
@@ -82,12 +96,13 @@ class MediaCacheService {
 
                     if (mimeType == DocumentsContract.Document.MIME_TYPE_DIR) {
                         toVisit.add(childId)
+                        foldersScanned += 1
                         continue
                     }
 
                     val lowerName = name.lowercase(Locale.US)
                     if ((lowerName.endsWith(".mp3") || lowerName.endsWith(".m4a")) &&
-                        _cachedFiles.size < MAX_CACHE_SIZE
+                        _cachedFiles.size < maxFileLimit
                     ) {
                         val uri = DocumentsContract.buildDocumentUriUsingTree(treeUri, childId)
                         val metadata = MediaMetadataHelper.extractMetadata(context, uri.toString())
@@ -110,6 +125,7 @@ class MediaCacheService {
                                 year = yearValue
                             )
                         )
+                        songsFound += 1
                     } else if (lowerName.endsWith(".m3u") &&
                         _discoveredPlaylists.size < MAX_PLAYLIST_CACHE_SIZE
                     ) {
@@ -127,7 +143,7 @@ class MediaCacheService {
     }
 
     private fun isSearchComplete(): Boolean {
-        val filesFull = _cachedFiles.size >= MAX_CACHE_SIZE
+        val filesFull = _cachedFiles.size >= maxFileLimit
         val playlistsFull = _discoveredPlaylists.size >= MAX_PLAYLIST_CACHE_SIZE
         return filesFull && playlistsFull
     }
@@ -186,3 +202,9 @@ class MediaCacheService {
         metadataIndexed = false
     }
 }
+
+data class ScanStats(
+    val durationMs: Long,
+    val foldersScanned: Int,
+    val songsFound: Int
+)

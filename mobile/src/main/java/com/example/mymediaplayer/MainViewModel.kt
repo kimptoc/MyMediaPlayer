@@ -33,12 +33,14 @@ data class MainUiState(
     val currentMediaId: String? = null,
     val playlistMessage: String? = null,
     val folderMessage: String? = null,
+    val scanMessage: String? = null,
     val selectedPlaylist: PlaylistInfo? = null,
     val playlistSongs: List<MediaFileInfo> = emptyList(),
     val isPlaylistLoading: Boolean = false,
     val isPlayingPlaylist: Boolean = false,
     val queuePosition: String? = null,
-    val lastPlaylistCount: Int = 3
+    val lastPlaylistCount: Int = 3,
+    val lastScanLimit: Int = MediaCacheService.MAX_CACHE_SIZE
 )
 
 enum class LibraryTab(val label: String) {
@@ -61,8 +63,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState: StateFlow<MainUiState> = _uiState
 
-    fun onDirectorySelected(treeUri: Uri, forceRescan: Boolean = false) {
-        val key = treeUri.toString()
+    fun onDirectorySelected(
+        treeUri: Uri,
+        maxFiles: Int,
+        forceRescan: Boolean = false
+    ) {
+        val key = "${treeUri}|$maxFiles"
         if (!forceRescan) {
             val cached = scanCache[key]
             if (cached != null) {
@@ -73,6 +79,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     isScanning = false,
                     scannedFiles = cached.first,
                     discoveredPlaylists = cached.second,
+                    lastScanLimit = maxFiles,
                     lastPlaylistCount = _uiState.value.lastPlaylistCount,
                     selectedPlaylist = null,
                     playlistSongs = emptyList(),
@@ -84,7 +91,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     selectedGenre = null,
                     selectedArtist = null,
                     filteredSongs = emptyList(),
-                    isMetadataLoading = false
+                    isMetadataLoading = false,
+                    scanMessage = null
                 )
                 metadataKey = null
                 return
@@ -96,6 +104,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 isScanning = true,
                 scannedFiles = emptyList(),
                 discoveredPlaylists = emptyList(),
+                lastScanLimit = maxFiles,
                 lastPlaylistCount = _uiState.value.lastPlaylistCount,
                 selectedPlaylist = null,
                 playlistSongs = emptyList(),
@@ -107,20 +116,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 selectedGenre = null,
                 selectedArtist = null,
                 filteredSongs = emptyList(),
-                isMetadataLoading = false
+                isMetadataLoading = false,
+                scanMessage = null
             )
-            mediaCacheService.scanDirectory(getApplication(), treeUri)
+            val stats = mediaCacheService.scanDirectory(getApplication(), treeUri, maxFiles)
             val files = mediaCacheService.cachedFiles
             val playlists = mediaCacheService.discoveredPlaylists
             scanCache[key] = files to playlists
+            val seconds = stats.durationMs / 1000.0
+            val message = "Scan complete in %.1fs • Folders: %d • Songs: %d".format(
+                seconds,
+                stats.foldersScanned,
+                stats.songsFound
+            )
             _uiState.value = _uiState.value.copy(
                 isScanning = false,
                 scannedFiles = files,
                 discoveredPlaylists = playlists,
                 lastPlaylistCount = _uiState.value.lastPlaylistCount,
+                lastScanLimit = maxFiles,
                 selectedPlaylist = null,
                 playlistSongs = emptyList(),
-                isPlaylistLoading = false
+                isPlaylistLoading = false,
+                scanMessage = message
             )
             metadataKey = null
         }
@@ -229,6 +247,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearFolderMessage() {
         _uiState.value = _uiState.value.copy(folderMessage = null)
+    }
+
+    fun clearScanMessage() {
+        _uiState.value = _uiState.value.copy(scanMessage = null)
     }
 
     fun updatePlaybackState(state: Int, mediaId: String?, trackName: String?) {

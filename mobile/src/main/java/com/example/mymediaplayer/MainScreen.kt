@@ -45,14 +45,16 @@ import com.example.mymediaplayer.shared.PlaylistInfo
 @Composable
 fun MainScreen(
     uiState: MainUiState,
-    onSelectFolder: () -> Unit,
+    onSelectFolderWithLimit: (Int) -> Unit,
     onFileClick: (MediaFileInfo) -> Unit,
     onPlayPause: () -> Unit,
     onStop: () -> Unit,
     onNext: () -> Unit,
+    onPrev: () -> Unit,
     onCreatePlaylist: (Int) -> Unit,
     onPlaylistMessageDismissed: () -> Unit,
     onFolderMessageDismissed: () -> Unit,
+    onScanMessageDismissed: () -> Unit,
     onTabSelected: (LibraryTab) -> Unit,
     onAlbumSelected: (String) -> Unit,
     onGenreSelected: (String) -> Unit,
@@ -67,6 +69,8 @@ fun MainScreen(
     var menuExpanded by remember { mutableStateOf(false) }
     var showPlaylistDialog by remember { mutableStateOf(false) }
     var playlistCountText by remember { mutableStateOf("3") }
+    var showScanDialog by remember { mutableStateOf(false) }
+    var scanCountText by remember { mutableStateOf(uiState.lastScanLimit.toString()) }
 
     LaunchedEffect(uiState.playlistMessage) {
         val message = uiState.playlistMessage
@@ -84,6 +88,14 @@ fun MainScreen(
         }
     }
 
+    LaunchedEffect(uiState.scanMessage) {
+        val message = uiState.scanMessage
+        if (message != null) {
+            snackbarHostState.showSnackbar(message)
+            onScanMessageDismissed()
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -96,13 +108,14 @@ fun MainScreen(
                         expanded = menuExpanded,
                         onDismissRequest = { menuExpanded = false }
                     ) {
-                        DropdownMenuItem(
-                            text = { Text("Select Folder") },
-                            onClick = {
-                                menuExpanded = false
-                                onSelectFolder()
-                            }
-                        )
+                    DropdownMenuItem(
+                        text = { Text("Select Folder") },
+                        onClick = {
+                            menuExpanded = false
+                            scanCountText = uiState.lastScanLimit.toString()
+                            showScanDialog = true
+                        }
+                    )
                     DropdownMenuItem(
                         text = { Text("Create Playlist") },
                         onClick = {
@@ -125,7 +138,8 @@ fun MainScreen(
                     queuePosition = uiState.queuePosition,
                     onPlayPause = onPlayPause,
                     onStop = onStop,
-                    onNext = onNext
+                    onNext = onNext,
+                    onPrev = onPrev
                 )
             }
         },
@@ -164,9 +178,12 @@ fun MainScreen(
                         title = "${uiState.scannedFiles.size} file(s) found",
                         songs = uiState.scannedFiles,
                         isPlaying = uiState.isPlaying || uiState.isPlayingPlaylist,
+                        isPlayingPlaylist = uiState.isPlayingPlaylist,
                         onPlay = { onPlaySongs(uiState.scannedFiles) },
                         onShuffle = { onShuffleSongs(uiState.scannedFiles) },
                         onStop = onStop,
+                        onNext = onNext,
+                        onPrev = onPrev,
                         onFileClick = onFileClick,
                         currentMediaId = uiState.currentMediaId
                     )
@@ -178,10 +195,13 @@ fun MainScreen(
                         playlistSongs = uiState.playlistSongs,
                         isLoading = uiState.isPlaylistLoading,
                         isPlaying = uiState.isPlaying || uiState.isPlayingPlaylist,
+                        isPlayingPlaylist = uiState.isPlayingPlaylist,
                         onPlaylistSelected = onPlaylistSelected,
                         onPlayPlaylist = onPlayPlaylist,
                         onShufflePlaylistSongs = onShufflePlaylistSongs,
                         onStop = onStop,
+                        onNext = onNext,
+                        onPrev = onPrev,
                         onFileClick = onFileClick,
                         currentMediaId = uiState.currentMediaId
                     )
@@ -195,9 +215,12 @@ fun MainScreen(
                         onCategorySelected = onAlbumSelected,
                         songs = uiState.filteredSongs,
                         isPlaying = uiState.isPlaying || uiState.isPlayingPlaylist,
+                        isPlayingPlaylist = uiState.isPlayingPlaylist,
                         onPlay = { onPlaySongs(uiState.filteredSongs) },
                         onShuffle = { onShuffleSongs(uiState.filteredSongs) },
                         onStop = onStop,
+                        onNext = onNext,
+                        onPrev = onPrev,
                         onFileClick = onFileClick,
                         currentMediaId = uiState.currentMediaId
                     )
@@ -211,9 +234,12 @@ fun MainScreen(
                         onCategorySelected = onGenreSelected,
                         songs = uiState.filteredSongs,
                         isPlaying = uiState.isPlaying || uiState.isPlayingPlaylist,
+                        isPlayingPlaylist = uiState.isPlayingPlaylist,
                         onPlay = { onPlaySongs(uiState.filteredSongs) },
                         onShuffle = { onShuffleSongs(uiState.filteredSongs) },
                         onStop = onStop,
+                        onNext = onNext,
+                        onPrev = onPrev,
                         onFileClick = onFileClick,
                         currentMediaId = uiState.currentMediaId
                     )
@@ -227,9 +253,12 @@ fun MainScreen(
                         onCategorySelected = onArtistSelected,
                         songs = uiState.filteredSongs,
                         isPlaying = uiState.isPlaying || uiState.isPlayingPlaylist,
+                        isPlayingPlaylist = uiState.isPlayingPlaylist,
                         onPlay = { onPlaySongs(uiState.filteredSongs) },
                         onShuffle = { onShuffleSongs(uiState.filteredSongs) },
                         onStop = onStop,
+                        onNext = onNext,
+                        onPrev = onPrev,
                         onFileClick = onFileClick,
                         currentMediaId = uiState.currentMediaId
                     )
@@ -294,6 +323,61 @@ fun MainScreen(
             }
         )
     }
+
+    if (showScanDialog) {
+        val countValue = scanCountText.toIntOrNull()
+        val isValid = countValue != null && countValue > 0
+        val helperText = when {
+            countValue == null -> "Enter a number greater than 0."
+            countValue <= 0 -> "Enter a number greater than 0."
+            else -> "OK"
+        }
+
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showScanDialog = false },
+            title = { Text("Select Folder") },
+            text = {
+                Column {
+                    Text("How many songs should be scanned?")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextField(
+                        value = scanCountText,
+                        onValueChange = { scanCountText = it },
+                        singleLine = true,
+                        placeholder = { Text("e.g. 20") }
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = helperText,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (isValid) {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        } else {
+                            MaterialTheme.colorScheme.error
+                        }
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (isValid && countValue != null) {
+                            showScanDialog = false
+                            onSelectFolderWithLimit(countValue)
+                        }
+                    },
+                    enabled = isValid
+                ) {
+                    Text("Continue")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showScanDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -305,9 +389,12 @@ private fun CategoryTabContent(
     onCategorySelected: (String) -> Unit,
     songs: List<MediaFileInfo>,
     isPlaying: Boolean,
+    isPlayingPlaylist: Boolean,
     onPlay: () -> Unit,
     onShuffle: () -> Unit,
     onStop: () -> Unit,
+    onNext: () -> Unit,
+    onPrev: () -> Unit,
     onFileClick: (MediaFileInfo) -> Unit,
     currentMediaId: String?
 ) {
@@ -354,9 +441,12 @@ private fun CategoryTabContent(
                     Spacer(modifier = Modifier.height(8.dp))
                     PlaybackButtonsRow(
                         isPlaying = isPlaying,
+                        isPlayingPlaylist = isPlayingPlaylist,
                         onPlay = onPlay,
                         onShuffle = onShuffle,
-                        onStop = onStop
+                        onStop = onStop,
+                        onNext = onNext,
+                        onPrev = onPrev
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     if (songs.isEmpty()) {
@@ -385,9 +475,12 @@ private fun SongsListSection(
     title: String,
     songs: List<MediaFileInfo>,
     isPlaying: Boolean,
+    isPlayingPlaylist: Boolean,
     onPlay: () -> Unit,
     onShuffle: () -> Unit,
     onStop: () -> Unit,
+    onNext: () -> Unit,
+    onPrev: () -> Unit,
     onFileClick: (MediaFileInfo) -> Unit,
     currentMediaId: String?
 ) {
@@ -402,9 +495,12 @@ private fun SongsListSection(
     Spacer(modifier = Modifier.height(8.dp))
     PlaybackButtonsRow(
         isPlaying = isPlaying,
+        isPlayingPlaylist = isPlayingPlaylist,
         onPlay = onPlay,
         onShuffle = onShuffle,
-        onStop = onStop
+        onStop = onStop,
+        onNext = onNext,
+        onPrev = onPrev
     )
     Spacer(modifier = Modifier.height(8.dp))
     LazyColumn {
@@ -425,10 +521,13 @@ private fun PlaylistsSection(
     playlistSongs: List<MediaFileInfo>,
     isLoading: Boolean,
     isPlaying: Boolean,
+    isPlayingPlaylist: Boolean,
     onPlaylistSelected: (PlaylistInfo) -> Unit,
     onPlayPlaylist: (PlaylistInfo) -> Unit,
     onShufflePlaylistSongs: (List<MediaFileInfo>) -> Unit,
     onStop: () -> Unit,
+    onNext: () -> Unit,
+    onPrev: () -> Unit,
     onFileClick: (MediaFileInfo) -> Unit,
     currentMediaId: String?
 ) {
@@ -476,9 +575,12 @@ private fun PlaylistsSection(
 
             PlaybackButtonsRow(
                 isPlaying = isPlaying,
+                isPlayingPlaylist = isPlayingPlaylist,
                 onPlay = { onPlayPlaylist(selectedPlaylist) },
                 onShuffle = { onShufflePlaylistSongs(playlistSongs) },
-                onStop = onStop
+                onStop = onStop,
+                onNext = onNext,
+                onPrev = onPrev
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -503,12 +605,19 @@ private fun PlaylistsSection(
 @Composable
 private fun PlaybackButtonsRow(
     isPlaying: Boolean,
+    isPlayingPlaylist: Boolean,
     onPlay: () -> Unit,
     onShuffle: () -> Unit,
-    onStop: () -> Unit
+    onStop: () -> Unit,
+    onNext: () -> Unit,
+    onPrev: () -> Unit
 ) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         if (isPlaying) {
+            if (isPlayingPlaylist) {
+                TextButton(onClick = onPrev) { Text("Prev") }
+                TextButton(onClick = onNext) { Text("Next") }
+            }
             TextButton(onClick = onStop) { Text("Stop") }
         } else {
             TextButton(onClick = onPlay) { Text("Play") }
@@ -552,7 +661,8 @@ fun PlaybackBar(
     queuePosition: String?,
     onPlayPause: () -> Unit,
     onStop: () -> Unit,
-    onNext: () -> Unit
+    onNext: () -> Unit,
+    onPrev: () -> Unit
 ) {
     Surface(tonalElevation = 3.dp, modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -579,6 +689,9 @@ fun PlaybackBar(
                 Text(if (isPlaying) "Pause" else "Play")
             }
             if (isPlayingPlaylist) {
+                TextButton(onClick = onPrev) {
+                    Text("Prev")
+                }
                 TextButton(onClick = onNext) {
                     Text("Next")
                 }
