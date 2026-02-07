@@ -1,6 +1,7 @@
 package com.example.mymediaplayer
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -56,7 +57,11 @@ fun MainScreen(
     onAlbumSelected: (String) -> Unit,
     onGenreSelected: (String) -> Unit,
     onArtistSelected: (String) -> Unit,
-    onPlaylistClick: (PlaylistInfo) -> Unit
+    onPlaylistSelected: (PlaylistInfo) -> Unit,
+    onPlaySongs: (List<MediaFileInfo>) -> Unit,
+    onShuffleSongs: (List<MediaFileInfo>) -> Unit,
+    onPlayPlaylist: (PlaylistInfo) -> Unit,
+    onShufflePlaylistSongs: (List<MediaFileInfo>) -> Unit
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     var menuExpanded by remember { mutableStateOf(false) }
@@ -155,43 +160,31 @@ fun MainScreen(
 
             when (uiState.selectedTab) {
                 LibraryTab.Songs -> {
-                    if (uiState.scannedFiles.isNotEmpty()) {
-                        Text(
-                            text = "${uiState.scannedFiles.size} file(s) found",
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        LazyColumn {
-                            items(uiState.scannedFiles) { file ->
-                                FileCard(
-                                    file = file,
-                                    isCurrentTrack = file.uriString == uiState.currentMediaId,
-                                    onClick = { onFileClick(file) }
-                                )
-                            }
-                        }
-                    } else {
-                        Text("No songs found")
-                    }
+                    SongsListSection(
+                        title = "${uiState.scannedFiles.size} file(s) found",
+                        songs = uiState.scannedFiles,
+                        isPlaying = uiState.isPlaying || uiState.isPlayingPlaylist,
+                        onPlay = { onPlaySongs(uiState.scannedFiles) },
+                        onShuffle = { onShuffleSongs(uiState.scannedFiles) },
+                        onStop = onStop,
+                        onFileClick = onFileClick,
+                        currentMediaId = uiState.currentMediaId
+                    )
                 }
                 LibraryTab.Playlists -> {
-                    if (uiState.discoveredPlaylists.isNotEmpty()) {
-                        Text(
-                            text = "${uiState.discoveredPlaylists.size} playlist(s) found",
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        LazyColumn {
-                            items(uiState.discoveredPlaylists) { playlist ->
-                                PlaylistCard(
-                                    playlist = playlist,
-                                    onClick = { onPlaylistClick(playlist) }
-                                )
-                            }
-                        }
-                    } else {
-                        Text("No playlists found")
-                    }
+                    PlaylistsSection(
+                        playlists = uiState.discoveredPlaylists,
+                        selectedPlaylist = uiState.selectedPlaylist,
+                        playlistSongs = uiState.playlistSongs,
+                        isLoading = uiState.isPlaylistLoading,
+                        isPlaying = uiState.isPlaying || uiState.isPlayingPlaylist,
+                        onPlaylistSelected = onPlaylistSelected,
+                        onPlayPlaylist = onPlayPlaylist,
+                        onShufflePlaylistSongs = onShufflePlaylistSongs,
+                        onStop = onStop,
+                        onFileClick = onFileClick,
+                        currentMediaId = uiState.currentMediaId
+                    )
                 }
                 LibraryTab.Albums -> {
                     CategoryTabContent(
@@ -201,6 +194,10 @@ fun MainScreen(
                         selectedLabel = uiState.selectedAlbum,
                         onCategorySelected = onAlbumSelected,
                         songs = uiState.filteredSongs,
+                        isPlaying = uiState.isPlaying || uiState.isPlayingPlaylist,
+                        onPlay = { onPlaySongs(uiState.filteredSongs) },
+                        onShuffle = { onShuffleSongs(uiState.filteredSongs) },
+                        onStop = onStop,
                         onFileClick = onFileClick,
                         currentMediaId = uiState.currentMediaId
                     )
@@ -213,6 +210,10 @@ fun MainScreen(
                         selectedLabel = uiState.selectedGenre,
                         onCategorySelected = onGenreSelected,
                         songs = uiState.filteredSongs,
+                        isPlaying = uiState.isPlaying || uiState.isPlayingPlaylist,
+                        onPlay = { onPlaySongs(uiState.filteredSongs) },
+                        onShuffle = { onShuffleSongs(uiState.filteredSongs) },
+                        onStop = onStop,
                         onFileClick = onFileClick,
                         currentMediaId = uiState.currentMediaId
                     )
@@ -225,6 +226,10 @@ fun MainScreen(
                         selectedLabel = uiState.selectedArtist,
                         onCategorySelected = onArtistSelected,
                         songs = uiState.filteredSongs,
+                        isPlaying = uiState.isPlaying || uiState.isPlayingPlaylist,
+                        onPlay = { onPlaySongs(uiState.filteredSongs) },
+                        onShuffle = { onShuffleSongs(uiState.filteredSongs) },
+                        onStop = onStop,
                         onFileClick = onFileClick,
                         currentMediaId = uiState.currentMediaId
                     )
@@ -299,6 +304,10 @@ private fun CategoryTabContent(
     selectedLabel: String?,
     onCategorySelected: (String) -> Unit,
     songs: List<MediaFileInfo>,
+    isPlaying: Boolean,
+    onPlay: () -> Unit,
+    onShuffle: () -> Unit,
+    onStop: () -> Unit,
     onFileClick: (MediaFileInfo) -> Unit,
     currentMediaId: String?
 ) {
@@ -312,31 +321,198 @@ private fun CategoryTabContent(
         return
     }
 
-    LazyColumn {
-        items(categories) { category ->
-            CategoryCard(
-                title = category,
-                isSelected = category == selectedLabel,
-                onClick = { onCategorySelected(category) }
-            )
+    Column {
+        Surface(
+            color = MaterialTheme.colorScheme.secondaryContainer,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            LazyColumn(
+                modifier = Modifier.padding(8.dp)
+            ) {
+                items(categories) { category ->
+                    CategoryCard(
+                        title = category,
+                        isSelected = category == selectedLabel,
+                        onClick = { onCategorySelected(category) }
+                    )
+                }
+            }
         }
 
-        if (selectedLabel != null) {
-            item {
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Songs in $selectedLabel",
-                    style = MaterialTheme.typography.titleSmall
-                )
-                Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(12.dp)) {
+                if (selectedLabel != null) {
+                    Text(
+                        text = "Songs in $selectedLabel",
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    PlaybackButtonsRow(
+                        isPlaying = isPlaying,
+                        onPlay = onPlay,
+                        onShuffle = onShuffle,
+                        onStop = onStop
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    if (songs.isEmpty()) {
+                        Text("No songs in $selectedLabel")
+                    } else {
+                        LazyColumn {
+                            items(songs) { file ->
+                                FileCard(
+                                    file = file,
+                                    isCurrentTrack = file.uriString == currentMediaId,
+                                    onClick = { onFileClick(file) }
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    Text("Select a $title to view songs")
+                }
             }
-            items(songs) { file ->
-                FileCard(
-                    file = file,
-                    isCurrentTrack = file.uriString == currentMediaId,
-                    onClick = { onFileClick(file) }
+        }
+    }
+}
+
+@Composable
+private fun SongsListSection(
+    title: String,
+    songs: List<MediaFileInfo>,
+    isPlaying: Boolean,
+    onPlay: () -> Unit,
+    onShuffle: () -> Unit,
+    onStop: () -> Unit,
+    onFileClick: (MediaFileInfo) -> Unit,
+    currentMediaId: String?
+) {
+    if (songs.isEmpty()) {
+        Text("No songs found")
+        return
+    }
+    Text(
+        text = title,
+        style = MaterialTheme.typography.titleMedium
+    )
+    Spacer(modifier = Modifier.height(8.dp))
+    PlaybackButtonsRow(
+        isPlaying = isPlaying,
+        onPlay = onPlay,
+        onShuffle = onShuffle,
+        onStop = onStop
+    )
+    Spacer(modifier = Modifier.height(8.dp))
+    LazyColumn {
+        items(songs) { file ->
+            FileCard(
+                file = file,
+                isCurrentTrack = file.uriString == currentMediaId,
+                onClick = { onFileClick(file) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun PlaylistsSection(
+    playlists: List<PlaylistInfo>,
+    selectedPlaylist: PlaylistInfo?,
+    playlistSongs: List<MediaFileInfo>,
+    isLoading: Boolean,
+    isPlaying: Boolean,
+    onPlaylistSelected: (PlaylistInfo) -> Unit,
+    onPlayPlaylist: (PlaylistInfo) -> Unit,
+    onShufflePlaylistSongs: (List<MediaFileInfo>) -> Unit,
+    onStop: () -> Unit,
+    onFileClick: (MediaFileInfo) -> Unit,
+    currentMediaId: String?
+) {
+    if (playlists.isEmpty()) {
+        Text("No playlists found")
+        return
+    }
+
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        LazyColumn(modifier = Modifier.padding(8.dp)) {
+            items(playlists) { playlist ->
+                PlaylistCard(
+                    playlist = playlist,
+                    onClick = { onPlaylistSelected(playlist) }
                 )
             }
+        }
+    }
+
+    Spacer(modifier = Modifier.height(8.dp))
+
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            if (selectedPlaylist == null) {
+                Text("Select a playlist to view songs")
+                return@Column
+            }
+
+            Text(
+                text = selectedPlaylist.displayName.removeSuffix(".m3u"),
+                style = MaterialTheme.typography.titleSmall
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            if (isLoading) {
+                CircularProgressIndicator()
+                return@Column
+            }
+
+            PlaybackButtonsRow(
+                isPlaying = isPlaying,
+                onPlay = { onPlayPlaylist(selectedPlaylist) },
+                onShuffle = { onShufflePlaylistSongs(playlistSongs) },
+                onStop = onStop
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            if (playlistSongs.isEmpty()) {
+                Text("No songs in playlist")
+            } else {
+                LazyColumn {
+                    items(playlistSongs) { file ->
+                        FileCard(
+                            file = file,
+                            isCurrentTrack = file.uriString == currentMediaId,
+                            onClick = { onFileClick(file) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlaybackButtonsRow(
+    isPlaying: Boolean,
+    onPlay: () -> Unit,
+    onShuffle: () -> Unit,
+    onStop: () -> Unit
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (isPlaying) {
+            TextButton(onClick = onStop) { Text("Stop") }
+        } else {
+            TextButton(onClick = onPlay) { Text("Play") }
+            TextButton(onClick = onShuffle) { Text("Shuffle") }
         }
     }
 }

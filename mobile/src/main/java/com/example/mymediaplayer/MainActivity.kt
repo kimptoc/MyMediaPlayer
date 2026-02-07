@@ -151,13 +151,43 @@ class MainActivity : ComponentActivity() {
                     onAlbumSelected = { viewModel.selectAlbum(it) },
                     onGenreSelected = { viewModel.selectGenre(it) },
                     onArtistSelected = { viewModel.selectArtist(it) },
-                    onPlaylistClick = { playlist ->
+                    onPlaylistSelected = { viewModel.selectPlaylist(it) },
+                    onPlaySongs = { songs ->
+                        if (songs.isNotEmpty()) {
+                            sendFilesToServiceIfNeeded(uiState.value.scannedFiles)
+                            mediaController?.transportControls?.playFromMediaId(
+                                songs.first().uriString,
+                                null
+                            )
+                        }
+                    },
+                    onShuffleSongs = { songs ->
+                        if (songs.isNotEmpty()) {
+                            sendFilesToServiceIfNeeded(uiState.value.scannedFiles)
+                            val random = songs.random()
+                            mediaController?.transportControls?.playFromMediaId(
+                                random.uriString,
+                                null
+                            )
+                        }
+                    },
+                    onPlayPlaylist = { playlist ->
                         sendFilesToServiceIfNeeded(uiState.value.scannedFiles)
                         sendPlaylistsToServiceIfNeeded(uiState.value.discoveredPlaylists)
                         mediaController?.transportControls?.playFromMediaId(
                             "playlist:${playlist.uriString}",
                             null
                         )
+                    },
+                    onShufflePlaylistSongs = { songs ->
+                        if (songs.isNotEmpty()) {
+                            sendFilesToServiceIfNeeded(uiState.value.scannedFiles)
+                            val random = songs.random()
+                            mediaController?.transportControls?.playFromMediaId(
+                                random.uriString,
+                                null
+                            )
+                        }
                     }
                 )
             }

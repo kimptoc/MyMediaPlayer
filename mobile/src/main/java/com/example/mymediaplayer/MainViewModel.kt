@@ -33,6 +33,9 @@ data class MainUiState(
     val currentMediaId: String? = null,
     val playlistMessage: String? = null,
     val folderMessage: String? = null,
+    val selectedPlaylist: PlaylistInfo? = null,
+    val playlistSongs: List<MediaFileInfo> = emptyList(),
+    val isPlaylistLoading: Boolean = false,
     val isPlayingPlaylist: Boolean = false,
     val queuePosition: String? = null,
     val lastPlaylistCount: Int = 3
@@ -71,6 +74,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     scannedFiles = cached.first,
                     discoveredPlaylists = cached.second,
                     lastPlaylistCount = _uiState.value.lastPlaylistCount,
+                    selectedPlaylist = null,
+                    playlistSongs = emptyList(),
+                    isPlaylistLoading = false,
                     albums = emptyList(),
                     genres = emptyList(),
                     artists = emptyList(),
@@ -91,6 +97,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 scannedFiles = emptyList(),
                 discoveredPlaylists = emptyList(),
                 lastPlaylistCount = _uiState.value.lastPlaylistCount,
+                selectedPlaylist = null,
+                playlistSongs = emptyList(),
+                isPlaylistLoading = false,
                 albums = emptyList(),
                 genres = emptyList(),
                 artists = emptyList(),
@@ -108,7 +117,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 isScanning = false,
                 scannedFiles = files,
                 discoveredPlaylists = playlists,
-                lastPlaylistCount = _uiState.value.lastPlaylistCount
+                lastPlaylistCount = _uiState.value.lastPlaylistCount,
+                selectedPlaylist = null,
+                playlistSongs = emptyList(),
+                isPlaylistLoading = false
             )
             metadataKey = null
         }
@@ -161,6 +173,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             selectedArtist = artist
         )
         applyFilteredSongs()
+    }
+
+    fun selectPlaylist(playlist: PlaylistInfo) {
+        _uiState.value = _uiState.value.copy(
+            selectedPlaylist = playlist,
+            playlistSongs = emptyList(),
+            isPlaylistLoading = true
+        )
+        viewModelScope.launch(Dispatchers.IO) {
+            val songs = playlistService.readPlaylist(getApplication(), Uri.parse(playlist.uriString))
+            _uiState.value = _uiState.value.copy(
+                playlistSongs = songs,
+                isPlaylistLoading = false
+            )
+        }
     }
 
     fun createRandomPlaylist(count: Int) {
