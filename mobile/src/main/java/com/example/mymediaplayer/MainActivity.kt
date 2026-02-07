@@ -68,6 +68,7 @@ class MainActivity : ComponentActivity() {
                     it,
                     Intent.FLAG_GRANT_READ_URI_PERMISSION
                 )
+                viewModel.setTreeUri(it)
                 viewModel.onDirectorySelected(it)
             }
         }
@@ -111,7 +112,9 @@ class MainActivity : ComponentActivity() {
                     },
                     onStop = {
                         mediaController?.transportControls?.stop()
-                    }
+                    },
+                    onCreatePlaylist = { viewModel.createRandomPlaylist() },
+                    onPlaylistMessageDismissed = { viewModel.clearPlaylistMessage() }
                 )
             }
         }

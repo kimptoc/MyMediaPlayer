@@ -1,6 +1,7 @@
 package com.example.mymediaplayer
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,11 +18,15 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
@@ -35,8 +40,18 @@ fun MainScreen(
     onSelectFolder: () -> Unit,
     onFileClick: (MediaFileInfo) -> Unit,
     onPlayPause: () -> Unit,
-    onStop: () -> Unit
+    onStop: () -> Unit,
+    onCreatePlaylist: () -> Unit,
+    onPlaylistMessageDismissed: () -> Unit
 ) {
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(uiState.playlistMessage) {
+        val message = uiState.playlistMessage ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(message)
+        onPlaylistMessageDismissed()
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(title = { Text("MyMediaPlayer") })
@@ -50,7 +65,8 @@ fun MainScreen(
                     onStop = onStop
                 )
             }
-        }
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
         Column(
             modifier = Modifier
@@ -58,11 +74,23 @@ fun MainScreen(
                 .padding(padding)
                 .padding(16.dp)
         ) {
-            Button(
-                onClick = onSelectFolder,
-                enabled = !uiState.isScanning
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text("Select Folder")
+                Button(
+                    onClick = onSelectFolder,
+                    enabled = !uiState.isScanning
+                ) {
+                    Text("Select Folder")
+                }
+
+                Button(
+                    onClick = onCreatePlaylist,
+                    enabled = uiState.scannedFiles.isNotEmpty()
+                ) {
+                    Text("Create Playlist")
+                }
             }
 
             Spacer(modifier = Modifier.height(16.dp))

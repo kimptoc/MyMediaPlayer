@@ -848,3 +848,148 @@ items(uiState.scannedFiles) { file ->
 7. **Volume**: Hardware buttons control music volume
 8. **Highlight**: Currently playing file highlighted in list
 9. **Android Auto** (if available): browse shows tracks, tap plays, car controls work
+
+---
+
+# Task 3: Create Playlists (Random 3 Files, M3U Format)
+
+## Overview
+
+Add a "Create Playlist" button that picks 3 random files from the scanned list and writes an M3U playlist file to the same SAF directory. Uses timestamped filenames for uniqueness. If fewer than 3 files are scanned, uses all available files. Button is disabled when no files have been scanned.
+
+## Current State (after Task 2)
+
+| File | Description |
+|---|---|
+| `shared/.../MyMusicService.kt` | Fully implemented `MediaBrowserServiceCompat` with `MediaPlayer` playback |
+| `shared/.../MediaCacheService.kt` | Scans SAF directories, `addFile()`, caches up to 20 |
+| `shared/.../MediaFileInfo.kt` | Data class: `uriString`, `displayName`, `sizeBytes` |
+| `mobile/.../MainActivity.kt` | `ComponentActivity` with Compose, SAF picker, `MediaBrowserCompat` connection |
+| `mobile/.../MainViewModel.kt` | `StateFlow<MainUiState>` with scanning + playback state |
+| `mobile/.../MainScreen.kt` | Scaffold with TopAppBar, "Select Folder" button, LazyColumn, PlaybackBar |
+
+## Files to Create / Modify (in order)
+
+### Step 1. `shared/.../PlaylistService.kt` — NEW playlist generation + writing
+
+**New file:** `shared/src/main/java/com/example/mymediaplayer/shared/PlaylistService.kt`
+
+Two responsibilities:
+- **Generate M3U content** from a list of `MediaFileInfo`:
+  ```
+  #EXTM3U
+  #EXTINF:-1,song1.mp3
+  content://...uri1...
+  #EXTINF:-1,song2.mp3
+  content://...uri2...
+  ```
+- **Write to SAF directory** using `DocumentFile.fromTreeUri(context, treeUri).createFile("audio/x-mpegurl", filename)` + `contentResolver.openOutputStream()`
+
+```kotlin
+class PlaylistService {
+    fun generateM3uContent(files: List<MediaFileInfo>): String
+    fun writePlaylist(context: Context, treeUri: Uri, files: List<MediaFileInfo>): String?
+    // returns the created filename on success, null on failure
+}
+```
+
+`writePlaylist` generates a timestamped filename (`playlist_yyyyMMdd_HHmmss.m3u`), calls `generateM3uContent`, writes via SAF, returns filename.
+
+**Why:** Lives in `shared` so automotive module could reuse it later. Keeps ViewModel thin.
+
+---
+
+### Step 2. `mobile/.../MainViewModel.kt` — Add playlist creation
+
+**What changes:**
+
+Extend `MainUiState`:
+```kotlin
+data class MainUiState(
+    // ... existing fields ...
+    val playlistMessage: String? = null   // transient success/error message
+)
+```
+
+Add fields + method:
+```kotlin
+private val playlistService = PlaylistService()
+private var treeUri: Uri? = null
+
+fun setTreeUri(uri: Uri) { treeUri = uri }
+
+fun createRandomPlaylist() {
+    val uri = treeUri ?: return
+    val files = _uiState.value.scannedFiles
+    if (files.isEmpty()) return
+    val selected = files.shuffled().take(3)
+    viewModelScope.launch(Dispatchers.IO) {
+        val result = playlistService.writePlaylist(getApplication(), uri, selected)
+        _uiState.value = _uiState.value.copy(
+            playlistMessage = if (result != null) "Created $result" else "Failed to create playlist"
+        )
+    }
+}
+
+fun clearPlaylistMessage() {
+    _uiState.value = _uiState.value.copy(playlistMessage = null)
+}
+```
+
+**Why:** `shuffled().take(3)` naturally handles < 3 files. IO dispatcher avoids blocking the UI during SAF write. `playlistMessage` is a transient field shown via Snackbar then cleared.
+
+---
+
+### Step 3. `mobile/.../MainScreen.kt` — Add "Create Playlist" button + Snackbar
+
+**What changes:**
+
+- Add `onCreatePlaylist: () -> Unit` and `onPlaylistMessageDismissed: () -> Unit` callback parameters to `MainScreen`
+- Add a "Create Playlist" `Button` next to "Select Folder", enabled when `scannedFiles.isNotEmpty()`
+- Add `SnackbarHost` to `Scaffold` and a `LaunchedEffect` that shows a Snackbar when `playlistMessage` changes
+
+```kotlin
+// In the Column, after "Select Folder" button:
+Button(
+    onClick = onCreatePlaylist,
+    enabled = uiState.scannedFiles.isNotEmpty()
+) {
+    Text("Create Playlist")
+}
+```
+
+**Why:** Snackbar is the standard Material 3 pattern for transient feedback messages.
+
+---
+
+### Step 4. `mobile/.../MainActivity.kt` — Wire treeUri + callback
+
+**What changes:**
+
+- Store `treeUri` when SAF picker returns: call `viewModel.setTreeUri(it)` in the `openDocumentTree` result handler
+- Pass `onCreatePlaylist = { viewModel.createRandomPlaylist() }` to `MainScreen`
+- Pass `onPlaylistMessageDismissed = { viewModel.clearPlaylistMessage() }` to `MainScreen`
+
+**Why:** The `treeUri` from the SAF picker is needed by `PlaylistService` to write the M3U file to the same directory.
+
+---
+
+## Key Design Decisions
+
+| Decision | Rationale |
+|---|---|
+| **Save to SAF directory** | Playlist alongside MP3s; uses existing SAF grant; no extra permissions |
+| **Timestamped filename** | Unique, no user input needed, avoids collisions |
+| **`PlaylistService` in shared** | Reusable by automotive module; keeps ViewModel thin |
+| **`playlistMessage` as transient state** | Simple Snackbar pattern; cleared after display |
+| **`take(3)` with `shuffled()`** | If < 3 files, `take(3)` returns all available — no crash |
+| **No build/manifest changes** | SAF write uses existing tree URI grant; `DocumentFile` already in shared deps |
+
+## Verification Steps
+
+1. **Build**: `./gradlew :shared:build && ./gradlew :mobile:build`
+2. **Create**: Deploy, scan folder, tap "Create Playlist" — Snackbar shows "Created playlist_XXXXXXXX_XXXXXX.m3u"
+3. **File check**: Verify .m3u file exists in scanned directory with correct M3U content (`#EXTM3U`, 3 entries)
+4. **Repeat**: Tap again — new file with different timestamp, potentially different random files
+5. **Few files**: With 1-2 files scanned, playlist created with 1-2 entries
+6. **No files**: With 0 files scanned, button is disabled

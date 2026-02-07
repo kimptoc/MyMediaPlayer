@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.mymediaplayer.shared.MediaCacheService
 import com.example.mymediaplayer.shared.MediaFileInfo
+import com.example.mymediaplayer.shared.PlaylistService
 import android.support.v4.media.session.PlaybackStateCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,12 +19,15 @@ data class MainUiState(
     val isPlaying: Boolean = false,
     val isPaused: Boolean = false,
     val currentTrackName: String? = null,
-    val currentMediaId: String? = null
+    val currentMediaId: String? = null,
+    val playlistMessage: String? = null
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val mediaCacheService = MediaCacheService()
+    private val playlistService = PlaylistService()
+    private var treeUri: Uri? = null
 
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState: StateFlow<MainUiState> = _uiState
@@ -40,6 +44,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 scannedFiles = mediaCacheService.cachedFiles
             )
         }
+    }
+
+    fun setTreeUri(uri: Uri) {
+        treeUri = uri
+    }
+
+    fun createRandomPlaylist() {
+        val uri = treeUri ?: return
+        val files = _uiState.value.scannedFiles
+        if (files.isEmpty()) return
+        val selected = files.shuffled().take(3)
+        viewModelScope.launch(Dispatchers.IO) {
+            val result = playlistService.writePlaylist(getApplication(), uri, selected)
+            _uiState.value = _uiState.value.copy(
+                playlistMessage = if (result != null) {
+                    "Created $result"
+                } else {
+                    "Failed to create playlist"
+                }
+            )
+        }
+    }
+
+    fun clearPlaylistMessage() {
+        _uiState.value = _uiState.value.copy(playlistMessage = null)
     }
 
     fun updatePlaybackState(state: Int, mediaId: String?, trackName: String?) {
