@@ -514,3 +514,337 @@ class MainActivity : ComponentActivity() {
    - Directory with > 20 `.mp3` files (only 20 shown)
    - Directory with no `.mp3` files (empty list)
    - Cancel the folder picker (nothing happens)
+
+---
+
+# Task 2: Play Media Files (Stop/Pause/Resume, Volume)
+
+## Overview
+
+Add playback capability using `android.media.MediaPlayer`. The mobile app gets tappable file cards and a bottom playback bar (track name + play/pause/stop). Android Auto works automatically through the existing `MediaBrowserServiceCompat`. Volume is handled by the system via hardware buttons.
+
+## Current State (after Task 1)
+
+| File | Description |
+|---|---|
+| `shared/.../MyMusicService.kt` | `MediaBrowserServiceCompat` with empty callbacks |
+| `shared/.../MediaCacheService.kt` | Scans SAF directories for `.mp3` files, caches up to 20 |
+| `shared/.../MediaFileInfo.kt` | Data class: `uriString`, `displayName`, `sizeBytes` |
+| `mobile/.../MainActivity.kt` | `ComponentActivity` with Compose, SAF folder picker |
+| `mobile/.../MainViewModel.kt` | `AndroidViewModel` with `StateFlow<MainUiState>` (scanning state + file list) |
+| `mobile/.../MainScreen.kt` | Compose UI: Scaffold, "Select Folder" button, LazyColumn of FileCards |
+
+## Files to Modify (in order)
+
+### Step 1. `shared/.../MediaCacheService.kt` — Add `addFile()` method
+
+**What changes:**
+
+```kotlin
+fun addFile(fileInfo: MediaFileInfo) {
+    if (_cachedFiles.size < MAX_CACHE_SIZE) {
+        _cachedFiles.add(fileInfo)
+    }
+}
+```
+
+**Why:** The mobile app scans files via the ViewModel, then pushes them to `MyMusicService` via a custom action. The service needs a way to populate its cache without re-scanning.
+
+---
+
+### Step 2. `shared/.../MyMusicService.kt` — Full playback implementation
+
+**What changes (replace empty stub with working service):**
+
+New instance fields:
+- `private var mediaPlayer: MediaPlayer? = null`
+- `private val mediaCacheService = MediaCacheService()`
+- `private var currentFileInfo: MediaFileInfo? = null`
+- `private var currentMediaId: String? = null`
+- `private lateinit var audioManager: AudioManager`
+- `private var audioFocusRequest: AudioFocusRequest? = null`
+- `private val playbackStateBuilder = PlaybackStateCompat.Builder()`
+
+**`onCreate()` additions:**
+- Get `AudioManager` via `getSystemService()`
+- Set initial `PlaybackStateCompat` with `STATE_NONE` and available actions (`PLAY`, `PLAY_FROM_MEDIA_ID`, `PAUSE`, `STOP`)
+- Set `session.isActive = true`
+
+**Callback implementations:**
+
+- **`onPlayFromMediaId(mediaId, extras)`** — Primary entry point. Looks up file in cache by `uriString`, releases any existing player, requests audio focus, creates `MediaPlayer` with SAF content URI via `setDataSource(context, uri)`, calls `prepareAsync()`. On prepared: `start()`, update playback state + metadata. On completion: update state to `STOPPED`. On error: update state to `ERROR`.
+
+- **`onPlay()`** — Resume paused playback: `mediaPlayer.start()`, request audio focus, update state to `PLAYING`.
+
+- **`onPause()`** — Pause: `mediaPlayer.pause()`, update state to `PAUSED`.
+
+- **`onStop()`** — Release player, abandon audio focus, update state to `STOPPED`.
+
+- **`onCustomAction("SET_MEDIA_FILES", extras)`** — Receive scanned file list from mobile app as parallel `StringArrayList`/`LongArray` in `Bundle`. Populate `MediaCacheService` via `addFile()`. Call `notifyChildrenChanged("root")` so Android Auto refreshes.
+
+**`onLoadChildren()` implementation:**
+```kotlin
+override fun onLoadChildren(parentId: String, result: Result<MutableList<MediaItem>>) {
+    if (parentId == "root") {
+        val items = mediaCacheService.cachedFiles.map { fileInfo ->
+            val description = MediaDescriptionCompat.Builder()
+                .setMediaId(fileInfo.uriString)
+                .setTitle(fileInfo.displayName)
+                .build()
+            MediaItem(description, MediaItem.FLAG_PLAYABLE)
+        }.toMutableList()
+        result.sendResult(items)
+    } else {
+        result.sendResult(ArrayList())
+    }
+}
+```
+
+**Helper methods:**
+
+- **`requestAudioFocus(): Boolean`** — `AudioFocusRequest.Builder(AUDIOFOCUS_GAIN)` with music attributes. Focus change listener: `AUDIOFOCUS_LOSS` -> stop, `AUDIOFOCUS_LOSS_TRANSIENT` -> pause.
+
+- **`abandonAudioFocus()`** — Calls `audioManager.abandonAudioFocusRequest()`.
+
+- **`releaseMediaPlayer()`** — Stop + release `MediaPlayer`, set to `null`.
+
+- **`updatePlaybackState(state: Int)`** — Build `PlaybackStateCompat` with current position + appropriate actions based on state, set on session.
+
+- **`updateMetadata(fileInfo: MediaFileInfo)`** — Build `MediaMetadataCompat` with title + mediaId, set on session.
+
+**`onDestroy()`:**
+- Release player, abandon focus, deactivate + release session, call `super.onDestroy()`.
+
+**Why:** This is the core playback engine shared by both mobile and Android Auto. Using `uriString` as `mediaId` provides a direct mapping for `MediaPlayer.setDataSource()`.
+
+---
+
+### Step 3. `mobile/build.gradle.kts` — Add media dependency
+
+**What changes:**
+
+```kotlin
+dependencies {
+    // ... existing ...
+    implementation(libs.androidx.media)  // NEW — for MediaBrowserCompat, MediaControllerCompat
+}
+```
+
+**Why:** `shared/build.gradle` uses `implementation` (not `api`), so `MediaBrowserCompat`/`MediaControllerCompat` aren't available transitively in the mobile module.
+
+---
+
+### Step 4. `mobile/.../MainViewModel.kt` — Add playback state to UI state
+
+**What changes:**
+
+Expand `MainUiState`:
+```kotlin
+data class MainUiState(
+    val isScanning: Boolean = false,
+    val scannedFiles: List<MediaFileInfo> = emptyList(),
+    val isPlaying: Boolean = false,
+    val isPaused: Boolean = false,
+    val currentTrackName: String? = null,
+    val currentMediaId: String? = null
+)
+```
+
+Add method called by Activity's controller callback:
+```kotlin
+fun updatePlaybackState(state: Int, mediaId: String?, trackName: String?) {
+    val current = _uiState.value
+    _uiState.value = current.copy(
+        isPlaying = (state == PlaybackStateCompat.STATE_PLAYING),
+        isPaused = (state == PlaybackStateCompat.STATE_PAUSED),
+        currentTrackName = if (state == PlaybackStateCompat.STATE_STOPPED) null else trackName,
+        currentMediaId = if (state == PlaybackStateCompat.STATE_STOPPED) null else mediaId
+    )
+}
+```
+
+**Why:** The ViewModel carries playback state so Compose can observe it. The Activity receives controller callbacks and pushes state updates here.
+
+---
+
+### Step 5. `mobile/.../MainScreen.kt` — Bottom bar + tappable cards
+
+**What changes:**
+
+Update `MainScreen` signature:
+```kotlin
+fun MainScreen(
+    uiState: MainUiState,
+    onSelectFolder: () -> Unit,
+    onFileClick: (MediaFileInfo) -> Unit,
+    onPlayPause: () -> Unit,
+    onStop: () -> Unit
+)
+```
+
+Add `bottomBar` to `Scaffold`:
+```kotlin
+bottomBar = {
+    if (uiState.currentTrackName != null) {
+        PlaybackBar(
+            trackName = uiState.currentTrackName,
+            isPlaying = uiState.isPlaying,
+            onPlayPause = onPlayPause,
+            onStop = onStop
+        )
+    }
+}
+```
+
+New `PlaybackBar` composable:
+```kotlin
+@Composable
+fun PlaybackBar(
+    trackName: String,
+    isPlaying: Boolean,
+    onPlayPause: () -> Unit,
+    onStop: () -> Unit
+) {
+    Surface(tonalElevation = 3.dp, modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = trackName,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            TextButton(onClick = onPlayPause) {
+                Text(if (isPlaying) "Pause" else "Play")
+            }
+            TextButton(onClick = onStop) {
+                Text("Stop")
+            }
+        }
+    }
+}
+```
+
+Update `FileCard` to be tappable with highlight:
+```kotlin
+@Composable
+fun FileCard(file: MediaFileInfo, isCurrentTrack: Boolean, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable { onClick() },
+        colors = if (isCurrentTrack) {
+            CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+        } else {
+            CardDefaults.cardColors()
+        }
+    ) { /* ... existing content ... */ }
+}
+```
+
+Update LazyColumn:
+```kotlin
+items(uiState.scannedFiles) { file ->
+    FileCard(
+        file = file,
+        isCurrentTrack = file.uriString == uiState.currentMediaId,
+        onClick = { onFileClick(file) }
+    )
+}
+```
+
+**Why:** Uses `TextButton` instead of `IconButton` to avoid the `material-icons-extended` dependency. Bottom bar appears only when a track is active.
+
+---
+
+### Step 6. `mobile/.../MainActivity.kt` — Wire everything together
+
+**What changes:**
+
+- **Volume**: `volumeControlStream = AudioManager.STREAM_MUSIC` in `onCreate()` so hardware buttons control music.
+
+- **MediaBrowserCompat connection**: Connect to `MyMusicService` in `onCreate()`, disconnect in `onDestroy()`.
+
+- **Connection callback**: On connected, create `MediaControllerCompat`, register controller callback.
+
+- **Controller callback**: `onPlaybackStateChanged` + `onMetadataChanged` -> call `viewModel.updatePlaybackState(...)`.
+
+- **Send files to service**: `lifecycleScope.launch` collector on `viewModel.uiState` — when `scannedFiles` is non-empty and controller is connected, send via `transportControls.sendCustomAction("SET_MEDIA_FILES", bundle)` with parallel arrays (uris, names, sizes).
+
+- **Compose callbacks**:
+  - `onFileClick` -> `sendFilesToService()` + `transportControls.playFromMediaId(uri, null)`
+  - `onPlayPause` -> toggle pause/play based on current state
+  - `onStop` -> `transportControls.stop()`
+
+- **Cleanup in `onDestroy()`**: Unregister controller callback + disconnect browser.
+
+**Why:** `MediaBrowserCompat` is the standard way to connect an Activity to a `MediaBrowserServiceCompat`. The controller callback bridges service state changes to the ViewModel/Compose UI.
+
+---
+
+## Architecture Diagram (after Task 2)
+
+```
++------------------------------------------------------------------+
+|  mobile module                                                    |
+|                                                                   |
+|  MainActivity (ComponentActivity)                                 |
+|    +-- volumeControlStream = STREAM_MUSIC                         |
+|    +-- MediaBrowserCompat -> MyMusicService                       |
+|    +-- MediaControllerCompat -> transport controls                |
+|    +-- Controller callback -> viewModel.updatePlaybackState()     |
+|    +-- sendFilesToService() via sendCustomAction                  |
+|                                                                   |
+|  MainViewModel (AndroidViewModel)                                 |
+|    +-- mediaCacheService: MediaCacheService                       |
+|    +-- uiState: StateFlow<MainUiState>                            |
+|    +-- onDirectorySelected(uri)                                   |
+|    +-- updatePlaybackState(state, mediaId, trackName)             |
+|                                                                   |
+|  MainScreen (Composable)                                          |
+|    +-- Scaffold + TopAppBar + bottomBar: PlaybackBar              |
+|    +-- "Select Folder" Button                                     |
+|    +-- LazyColumn of tappable FileCards (highlight current)       |
+|    +-- PlaybackBar: track name, Play/Pause, Stop                  |
++------------------------------------------------------------------+
+|  shared module                                                    |
+|                                                                   |
+|  MyMusicService (MediaBrowserServiceCompat)                       |
+|    +-- MediaPlayer for playback                                   |
+|    +-- AudioManager for audio focus                               |
+|    +-- MediaSessionCompat with working callbacks                  |
+|    +-- onLoadChildren() -> browsable MediaItems                   |
+|    +-- onPlayFromMediaId() -> play specific track                 |
+|    +-- Updates PlaybackStateCompat + MediaMetadataCompat          |
+|                                                                   |
+|  MediaCacheService                                                |
+|    +-- scanDirectory(), addFile(), clearCache()                   |
+|    +-- cachedFiles: List<MediaFileInfo>                            |
+|                                                                   |
+|  MediaFileInfo (data class) — unchanged                           |
++------------------------------------------------------------------+
+```
+
+## Key Design Decisions
+
+| Decision | Rationale |
+|---|---|
+| **`uriString` as `mediaId`** | Direct mapping — `onPlayFromMediaId` can `Uri.parse()` it for `MediaPlayer.setDataSource()` |
+| **Files pushed to service via `sendCustomAction`** | Avoids duplicate scanning; works with MediaBrowser/Controller pattern |
+| **Audio focus with `AUDIOFOCUS_GAIN`** | Standard for music apps; pauses on transient loss, stops on permanent loss |
+| **`TextButton` for playback controls** | Avoids `material-icons-extended` dependency (~2.4MB) |
+| **No foreground service notification** | Acceptable for Task 2 scope; can be added later |
+| **`MediaPlayer` (not ExoPlayer)** | Built-in, simpler, no extra dependencies; sufficient for basic `.mp3` playback |
+
+## Verification Steps
+
+1. **Build**: `./gradlew :shared:build && ./gradlew :mobile:build`
+2. **Play**: Deploy, scan folder, tap file — bottom bar appears, music plays
+3. **Pause**: Tap Pause — pauses, button shows "Play"
+4. **Resume**: Tap Play — resumes
+5. **Stop**: Tap Stop — music stops, bottom bar disappears
+6. **Switch tracks**: Tap different file — switches, bar updates
+7. **Volume**: Hardware buttons control music volume
+8. **Highlight**: Currently playing file highlighted in list
+9. **Android Auto** (if available): browse shows tracks, tap plays, car controls work

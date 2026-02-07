@@ -19,6 +19,12 @@ class MediaCacheService {
         walkTree(root)
     }
 
+    fun addFile(fileInfo: MediaFileInfo) {
+        if (_cachedFiles.size < MAX_CACHE_SIZE) {
+            _cachedFiles.add(fileInfo)
+        }
+    }
+
     private fun walkTree(directory: DocumentFile) {
         if (_cachedFiles.size >= MAX_CACHE_SIZE) return
         for (file in directory.listFiles()) {
