@@ -32,12 +32,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val mediaCacheService = MediaCacheService()
     private val playlistService = PlaylistService()
+    private val scanCache =
+        mutableMapOf<String, Pair<List<MediaFileInfo>, List<PlaylistInfo>>>()
     private var treeUri: Uri? = null
 
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState: StateFlow<MainUiState> = _uiState
 
-    fun onDirectorySelected(treeUri: Uri) {
+    fun onDirectorySelected(treeUri: Uri, forceRescan: Boolean = false) {
+        val key = treeUri.toString()
+        if (!forceRescan) {
+            val cached = scanCache[key]
+            if (cached != null) {
+                _uiState.value = _uiState.value.copy(
+                    isScanning = false,
+                    scannedFiles = cached.first,
+                    discoveredPlaylists = cached.second
+                )
+                return
+            }
+        }
+
         viewModelScope.launch(Dispatchers.IO) {
             _uiState.value = _uiState.value.copy(
                 isScanning = true,
@@ -45,10 +60,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 discoveredPlaylists = emptyList()
             )
             mediaCacheService.scanDirectory(getApplication(), treeUri)
+            val files = mediaCacheService.cachedFiles
+            val playlists = mediaCacheService.discoveredPlaylists
+            scanCache[key] = files to playlists
             _uiState.value = _uiState.value.copy(
                 isScanning = false,
-                scannedFiles = mediaCacheService.cachedFiles,
-                discoveredPlaylists = mediaCacheService.discoveredPlaylists
+                scannedFiles = files,
+                discoveredPlaylists = playlists
             )
         }
     }

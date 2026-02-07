@@ -3,6 +3,8 @@
 ## Roadmap
 
 - **Task 1** — Mobile: Directory scanner with Compose UI (find files)
+- **Task 1.1** — Rework file scanning for speed (early-exit, DocumentsContract query, optional MediaStore, cache per treeUri)
+- **Task 1.2** — Mobile: Add tabbed library view (Songs/Playlists + Album/Genre/Artist with metadata filtering)
 - **Task 2** — Mobile + Android Auto: Play media files (stop/pause/resume, volume)
 - **Task 3** — Mobile: Create playlists (random 3 files, m3u format)
 - **Task 4** — Mobile + Android Auto: Play playlists (play, pause, stop, next track)
@@ -14,6 +16,98 @@
 ## Overview
 
 Replace the bare "Hello World" XML layout in the mobile module with a Jetpack Compose UI that allows the user to select a folder via the Storage Access Framework (SAF), scan it for `.mp3` files, cache metadata (max 20 files), and display results in a scrollable list.
+
+---
+
+# Task 1.1: Rework File Scanning for Speed
+
+## Overview
+
+Reduce SAF scan latency from ~30s by minimizing `DocumentFile` creation, avoiding full tree traversal when results are already sufficient, and optionally leveraging indexed MediaStore queries.
+
+## Steps
+
+### Step 1. `shared/.../MediaCacheService.kt` — Add early-exit and limits
+
+**What changes:**
+
+- Stop walking the tree once `MAX_CACHE_SIZE` is reached for files.
+- Optionally cap playlist discovery (new constant, ex: `MAX_PLAYLIST_CACHE_SIZE`).
+
+**Why:** Current implementation continues scanning the entire tree even after enough files are found.
+
+---
+
+### Step 2. `shared/.../MediaCacheService.kt` — Replace `DocumentFile.listFiles()` with `DocumentsContract` query
+
+**What changes:**
+
+- Use `ContentResolver.query()` with `DocumentsContract.buildChildDocumentsUriUsingTree()`.
+- Only request required columns: `DISPLAY_NAME`, `MIME_TYPE`, `SIZE`, `DOCUMENT_ID`.
+- Avoid `DocumentFile` creation inside the traversal loop.
+
+**Why:** SAF queries are significantly faster when you avoid per-item `DocumentFile` instantiation.
+
+---
+
+### Step 3. Optional: `shared/.../MediaCacheService.kt` — MediaStore fast path
+
+**What changes:**
+
+- Derive a path prefix from `DocumentsContract.getTreeDocumentId(treeUri)`.
+- Query `MediaStore.Audio.Media` for files whose `RELATIVE_PATH` matches the selected tree.
+
+**Why:** MediaStore is indexed and much faster for large libraries.
+
+---
+
+### Step 4. `mobile/.../MainViewModel.kt` — Cache scan results per `treeUri`
+
+**What changes:**
+
+- Keep a map of `treeUri` to cached results and only rescan on folder change or manual refresh.
+
+**Why:** Avoid rescanning on every UI event or app resume.
+
+---
+
+# Task 1.2: Mobile Tabbed Library View
+
+## Overview
+
+Align mobile UI with Auto-style browsing: start with Songs and Playlists tabs, and add Album/Genre/Artist tabs that filter songs by metadata.
+
+## Steps
+
+### Step 1. `mobile/.../MainScreen.kt` — Add tabbed UI
+
+- Tabs: Songs, Playlists, Albums, Genres, Artists.
+- Default to Songs; persist selected tab in UI state.
+
+---
+
+### Step 2. `shared/.../MediaCacheService.kt` — Build metadata indexes
+
+- Capture album/genre/artist when scanning (from metadata).
+- Maintain maps: `album -> songs`, `genre -> songs`, `artist -> songs`.
+
+---
+
+### Step 3. `mobile/.../MainViewModel.kt` — Expose tab data + selection
+
+- Add UI state for available albums/genres/artists and selected filter.
+- When a category is selected, show filtered songs list.
+
+---
+
+### Step 4. `shared/.../MediaMetadata` helper (new or existing)
+
+- Extract metadata for each media file (album/genre/artist).
+- Use only when needed to avoid scanning overhead.
+
+## Why
+
+- Matches Auto UX expectations and adds richer browsing.
 
 ## Current State
 

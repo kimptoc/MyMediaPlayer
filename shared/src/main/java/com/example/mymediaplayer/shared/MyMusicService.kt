@@ -22,6 +22,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
         private const val SONGS_ID = "songs"
         private const val PLAYLISTS_ID = "playlists"
         private const val PLAYLIST_PREFIX = "playlist:"
+        private const val PREFS_NAME = "mymediaplayer_prefs"
+        private const val KEY_TREE_URI = "tree_uri"
 
         private const val ACTION_SET_MEDIA_FILES = "SET_MEDIA_FILES"
         private const val ACTION_SET_PLAYLISTS = "SET_PLAYLISTS"
@@ -46,6 +48,10 @@ class MyMusicService : MediaBrowserServiceCompat() {
     private var playlistQueue: List<MediaFileInfo> = emptyList()
     private var currentQueueIndex: Int = -1
     private var currentPlaylistName: String? = null
+    @Volatile
+    private var isScanning: Boolean = false
+    private val pendingResults =
+        mutableMapOf<String, MutableList<MediaBrowserServiceCompat.Result<MutableList<MediaItem>>>>()
 
     private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
         when (focusChange) {
@@ -203,6 +209,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
             .setState(PlaybackStateCompat.STATE_NONE, 0L, 0f, SystemClock.elapsedRealtime())
         session.setPlaybackState(playbackStateBuilder.build())
         session.isActive = true
+
+        loadCachedTreeIfAvailable()
     }
 
     override fun onDestroy() {
@@ -222,7 +230,20 @@ class MyMusicService : MediaBrowserServiceCompat() {
     }
 
     override fun onLoadChildren(parentId: String, result: Result<MutableList<MediaItem>>) {
-        when (parentId) {
+        if (isScanning) {
+            synchronized(pendingResults) {
+                val list = pendingResults.getOrPut(parentId) { mutableListOf() }
+                list.add(result)
+            }
+            result.detach()
+            return
+        }
+
+        result.sendResult(buildMediaItems(parentId))
+    }
+
+    private fun buildMediaItems(parentId: String): MutableList<MediaItem> {
+        return when (parentId) {
             ROOT_ID -> {
                 val items = mutableListOf<MediaItem>()
                 val songsDesc = MediaDescriptionCompat.Builder()
@@ -239,29 +260,66 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     items.add(MediaItem(playlistsDesc, MediaItem.FLAG_BROWSABLE))
                 }
 
-                result.sendResult(items)
+                items
             }
             SONGS_ID -> {
-                val items = mediaCacheService.cachedFiles.map { fileInfo ->
+                mediaCacheService.cachedFiles.map { fileInfo ->
                     val description = MediaDescriptionCompat.Builder()
                         .setMediaId(fileInfo.uriString)
                         .setTitle(fileInfo.displayName)
                         .build()
                     MediaItem(description, MediaItem.FLAG_PLAYABLE)
                 }.toMutableList()
-                result.sendResult(items)
             }
             PLAYLISTS_ID -> {
-                val items = mediaCacheService.discoveredPlaylists.map { playlist ->
+                mediaCacheService.discoveredPlaylists.map { playlist ->
                     val description = MediaDescriptionCompat.Builder()
                         .setMediaId(PLAYLIST_PREFIX + playlist.uriString)
                         .setTitle(playlist.displayName.removeSuffix(".m3u"))
                         .build()
                     MediaItem(description, MediaItem.FLAG_PLAYABLE)
                 }.toMutableList()
+            }
+            else -> mutableListOf()
+        }
+    }
+
+    private fun loadCachedTreeIfAvailable() {
+        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        val uriString = prefs.getString(KEY_TREE_URI, null) ?: return
+        val uri = Uri.parse(uriString)
+        val hasPermission = contentResolver.persistedUriPermissions.any {
+            it.uri == uri && it.isReadPermission
+        }
+        if (!hasPermission) return
+
+        Thread {
+            isScanning = true
+            try {
+                mediaCacheService.scanDirectory(this, uri)
+            } finally {
+                isScanning = false
+                deliverPendingResults()
+                notifyChildrenChanged(ROOT_ID)
+                notifyChildrenChanged(SONGS_ID)
+                notifyChildrenChanged(PLAYLISTS_ID)
+            }
+        }.start()
+    }
+
+    private fun deliverPendingResults() {
+        val pending: Map<String, List<MediaBrowserServiceCompat.Result<MutableList<MediaItem>>>> =
+            synchronized(pendingResults) {
+                val copy = pendingResults.mapValues { it.value.toList() }
+                pendingResults.clear()
+                copy
+            }
+
+        for ((parentId, results) in pending) {
+            val items = buildMediaItems(parentId)
+            for (result in results) {
                 result.sendResult(items)
             }
-            else -> result.sendResult(ArrayList())
         }
     }
 
