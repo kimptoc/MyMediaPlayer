@@ -29,12 +29,14 @@ class MainActivity : ComponentActivity() {
         private const val KEY_TREE_URI = "tree_uri"
         private const val KEY_SCAN_LIMIT = "scan_limit"
         private const val ACTION_SET_MEDIA_FILES = "SET_MEDIA_FILES"
+        private const val ACTION_REFRESH_LIBRARY = "REFRESH_LIBRARY"
         private const val ACTION_SET_PLAYLISTS = "SET_PLAYLISTS"
         private const val EXTRA_URIS = "uris"
         private const val EXTRA_NAMES = "names"
         private const val EXTRA_SIZES = "sizes"
         private const val EXTRA_PLAYLIST_URIS = "playlist_uris"
         private const val EXTRA_PLAYLIST_NAMES = "playlist_names"
+        private const val MAX_MEDIA_FILES_FOR_BUNDLE = 500
     }
 
     private val viewModel: MainViewModel by viewModels()
@@ -42,6 +44,7 @@ class MainActivity : ComponentActivity() {
     private var mediaBrowser: MediaBrowserCompat? = null
     private var mediaController: MediaControllerCompat? = null
     private var lastSentUris: List<String>? = null
+    private var lastSentLargeLibraryCount: Int? = null
     private var lastSentPlaylistUris: List<String>? = null
     private var pendingScanLimit: Int = MediaCacheService.MAX_CACHE_SIZE
 
@@ -162,6 +165,7 @@ class MainActivity : ComponentActivity() {
                     onAlbumSelected = { viewModel.selectAlbum(it) },
                     onGenreSelected = { viewModel.selectGenre(it) },
                     onArtistSelected = { viewModel.selectArtist(it) },
+                    onDecadeSelected = { viewModel.selectDecade(it) },
                     onClearCategorySelection = { viewModel.clearCategorySelection() },
                     onPlaylistSelected = { viewModel.selectPlaylist(it) },
                     onPlaySongs = { songs ->
@@ -247,6 +251,12 @@ class MainActivity : ComponentActivity() {
 
     private fun sendFilesToServiceIfNeeded(files: List<com.example.mymediaplayer.shared.MediaFileInfo>) {
         val controller = mediaController ?: return
+        if (files.size > MAX_MEDIA_FILES_FOR_BUNDLE) {
+            if (lastSentLargeLibraryCount == files.size) return
+            controller.transportControls.sendCustomAction(ACTION_REFRESH_LIBRARY, null)
+            lastSentLargeLibraryCount = files.size
+            return
+        }
         val uris = files.map { it.uriString }
         if (uris == lastSentUris) return
 
@@ -260,6 +270,7 @@ class MainActivity : ComponentActivity() {
         }
         controller.transportControls.sendCustomAction(ACTION_SET_MEDIA_FILES, bundle)
         lastSentUris = uris
+        lastSentLargeLibraryCount = null
     }
 
     private fun sendPlaylistsToServiceIfNeeded(playlists: List<PlaylistInfo>) {

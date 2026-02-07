@@ -12,6 +12,7 @@ class MediaCacheService {
     companion object {
         const val MAX_CACHE_SIZE = 20
         const val MAX_PLAYLIST_CACHE_SIZE = 20
+        private const val UNKNOWN_DECADE = "Unknown Decade"
     }
 
     private val _cachedFiles = mutableListOf<MediaFileInfo>()
@@ -27,19 +28,32 @@ class MediaCacheService {
     private val albumIndex = mutableMapOf<String, MutableList<MediaFileInfo>>()
     private val genreIndex = mutableMapOf<String, MutableList<MediaFileInfo>>()
     private val artistIndex = mutableMapOf<String, MutableList<MediaFileInfo>>()
+    private val decadeIndex = mutableMapOf<String, MutableList<MediaFileInfo>>()
     private var metadataIndexed: Boolean = false
+    private var albumArtistIndexed: Boolean = false
     private var maxFileLimit: Int = MAX_CACHE_SIZE
     private var foldersScanned: Int = 0
     private var songsFound: Int = 0
 
-    fun scanDirectory(context: Context, treeUri: Uri, maxFiles: Int = MAX_CACHE_SIZE): ScanStats {
+    fun scanDirectory(
+        context: Context,
+        treeUri: Uri,
+        maxFiles: Int = MAX_CACHE_SIZE,
+        onProgress: ((songsFound: Int, foldersScanned: Int) -> Unit)? = null
+    ): ScanStats {
         clearCache()
         maxFileLimit = maxFiles.coerceAtLeast(1)
         foldersScanned = 0
         songsFound = 0
         val startTime = android.os.SystemClock.elapsedRealtime()
+        var lastReported = 0
         val rootDocumentId = DocumentsContract.getTreeDocumentId(treeUri)
-        walkTree(context, treeUri, rootDocumentId)
+        walkTree(context, treeUri, rootDocumentId) {
+            if (onProgress != null && songsFound - lastReported >= 100) {
+                lastReported = songsFound
+                onProgress(songsFound, foldersScanned)
+            }
+        }
         val durationMs = android.os.SystemClock.elapsedRealtime() - startTime
         return ScanStats(
             durationMs = durationMs,
@@ -63,7 +77,12 @@ class MediaCacheService {
         }
     }
 
-    private fun walkTree(context: Context, treeUri: Uri, rootDocumentId: String) {
+    private fun walkTree(
+        context: Context,
+        treeUri: Uri,
+        rootDocumentId: String,
+        onProgress: (() -> Unit)? = null
+    ) {
         val contentResolver = context.contentResolver
         val toVisit = ArrayDeque<String>()
         toVisit.add(rootDocumentId)
@@ -123,20 +142,22 @@ class MediaCacheService {
                         val durationMs = metadata?.durationMs?.toLongOrNull()
                         synchronized(cacheLock) {
                             if (_cachedFiles.size < maxFileLimit) {
-                                _cachedFiles.add(
-                                    MediaFileInfo(
-                                        uriString = uri.toString(),
-                                        displayName = name,
-                                        sizeBytes = size,
-                                        title = metadata?.title ?: name,
-                                        artist = metadata?.artist,
-                                        album = metadata?.album,
-                                        durationMs = durationMs,
-                                        year = yearValue
-                                    )
-                                )
+                        _cachedFiles.add(
+                            MediaFileInfo(
+                                uriString = uri.toString(),
+                                displayName = name,
+                                sizeBytes = size,
+                                title = metadata?.title ?: name,
+                                artist = metadata?.artist,
+                                album = metadata?.album,
+                                genre = metadata?.genre,
+                                durationMs = durationMs,
+                                year = yearValue
+                            )
+                        )
                                 metadataIndexed = false
                                 songsFound += 1
+                                onProgress?.invoke()
                             }
                         }
                     } else if (lowerName.endsWith(".m3u") &&
@@ -161,9 +182,7 @@ class MediaCacheService {
 
     private fun isSearchComplete(): Boolean {
         synchronized(cacheLock) {
-            val filesFull = _cachedFiles.size >= maxFileLimit
-            val playlistsFull = _discoveredPlaylists.size >= MAX_PLAYLIST_CACHE_SIZE
-            return filesFull && playlistsFull
+            return _cachedFiles.size >= maxFileLimit
         }
     }
 
@@ -196,21 +215,52 @@ class MediaCacheService {
             val album = metadata?.album?.ifBlank { null } ?: "Unknown Album"
             val artist = metadata?.artist?.ifBlank { null } ?: "Unknown Artist"
             val genre = metadata?.genre?.ifBlank { null } ?: "Unknown Genre"
+            val decade = decadeLabel(metadata?.year?.toIntOrNull() ?: file.year)
 
             albumIndex.getOrPut(album) { mutableListOf() }.add(file)
             artistIndex.getOrPut(artist) { mutableListOf() }.add(file)
             genreIndex.getOrPut(genre) { mutableListOf() }.add(file)
+            decadeIndex.getOrPut(decade) { mutableListOf() }.add(file)
         }
         metadataIndexed = true
+        albumArtistIndexed = true
     }
 
     fun hasMetadataIndexes(): Boolean = metadataIndexed
+
+    fun hasAlbumArtistIndexes(): Boolean = albumArtistIndexed
+
+    fun buildAlbumArtistIndexesFromCache() {
+        clearMetadataIndexes()
+        val snapshot = synchronized(cacheLock) { _cachedFiles.toList() }
+        for (file in snapshot) {
+            val album = file.album?.ifBlank { null } ?: "Unknown Album"
+            val artist = file.artist?.ifBlank { null } ?: "Unknown Artist"
+            val genre = file.genre?.ifBlank { null } ?: "Unknown Genre"
+            val decade = decadeLabel(file.year)
+            albumIndex.getOrPut(album) { mutableListOf() }.add(file)
+            artistIndex.getOrPut(artist) { mutableListOf() }.add(file)
+            genreIndex.getOrPut(genre) { mutableListOf() }.add(file)
+            decadeIndex.getOrPut(decade) { mutableListOf() }.add(file)
+        }
+        albumArtistIndexed = true
+    }
 
     fun albums(): List<String> = albumIndex.keys.sorted()
 
     fun genres(): List<String> = genreIndex.keys.sorted()
 
     fun artists(): List<String> = artistIndex.keys.sorted()
+
+    fun decades(): List<String> {
+        val labels = decadeIndex.keys.toMutableList()
+        labels.remove(UNKNOWN_DECADE)
+        labels.sortBy { it.removeSuffix("s").toIntOrNull() ?: Int.MAX_VALUE }
+        if (decadeIndex.containsKey(UNKNOWN_DECADE)) {
+            labels.add(UNKNOWN_DECADE)
+        }
+        return labels
+    }
 
     fun songsForAlbum(album: String): List<MediaFileInfo> =
         albumIndex[album]?.toList() ?: emptyList()
@@ -221,12 +271,24 @@ class MediaCacheService {
     fun songsForArtist(artist: String): List<MediaFileInfo> =
         artistIndex[artist]?.toList() ?: emptyList()
 
+    fun songsForDecade(decade: String): List<MediaFileInfo> =
+        decadeIndex[decade]?.toList() ?: emptyList()
+
     private fun clearMetadataIndexes() {
         albumIndex.clear()
         genreIndex.clear()
         artistIndex.clear()
+        decadeIndex.clear()
         metadataIndexed = false
+        albumArtistIndexed = false
     }
+
+    private fun decadeLabel(year: Int?): String {
+        if (year == null || year <= 0) return UNKNOWN_DECADE
+        val decade = (year / 10) * 10
+        return "${decade}s"
+    }
+
 }
 
 data class ScanStats(

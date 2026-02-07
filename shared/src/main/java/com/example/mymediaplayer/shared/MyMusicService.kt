@@ -29,11 +29,13 @@ class MyMusicService : MediaBrowserServiceCompat() {
         private const val ALBUMS_ID = "albums"
         private const val GENRES_ID = "genres"
         private const val ARTISTS_ID = "artists"
+        private const val DECADES_ID = "decades"
         private const val PLAYLIST_PREFIX = "playlist:"
         private const val PLAYLIST_URI_PREFIX = "playlist_uri:"
         private const val ALBUM_PREFIX = "album:"
         private const val GENRE_PREFIX = "genre:"
         private const val ARTIST_PREFIX = "artist:"
+        private const val DECADE_PREFIX = "decade:"
         private const val ACTION_PLAY_ALL_PREFIX = "action:play_all:"
         private const val ACTION_SHUFFLE_PREFIX = "action:shuffle:"
         private const val PREFS_NAME = "mymediaplayer_prefs"
@@ -41,6 +43,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         private const val KEY_SCAN_LIMIT = "scan_limit"
 
         private const val ACTION_SET_MEDIA_FILES = "SET_MEDIA_FILES"
+        private const val ACTION_REFRESH_LIBRARY = "REFRESH_LIBRARY"
         private const val ACTION_SET_PLAYLISTS = "SET_PLAYLISTS"
 
         private const val EXTRA_URIS = "uris"
@@ -136,6 +139,11 @@ class MyMusicService : MediaBrowserServiceCompat() {
                         val artist = Uri.decode(listKey.removePrefix(ARTIST_PREFIX))
                         mediaCacheService.songsForArtist(artist)
                     }
+                    listKey.startsWith(DECADE_PREFIX) -> {
+                        ensureMetadataIndexes()
+                        val decade = Uri.decode(listKey.removePrefix(DECADE_PREFIX))
+                        mediaCacheService.songsForDecade(decade)
+                    }
                     else -> emptyList()
                 }
 
@@ -159,6 +167,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
                         Uri.decode(listKey.removePrefix(GENRE_PREFIX))
                     listKey.startsWith(ARTIST_PREFIX) ->
                         Uri.decode(listKey.removePrefix(ARTIST_PREFIX))
+                    listKey.startsWith(DECADE_PREFIX) ->
+                        Uri.decode(listKey.removePrefix(DECADE_PREFIX))
                     else -> "Playlist"
                 }
                 updateSessionQueue()
@@ -211,6 +221,11 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     val artist = Uri.decode(parentId.removePrefix(ARTIST_PREFIX))
                     mediaCacheService.songsForArtist(artist)
                 }
+                parentId != null && parentId.startsWith(DECADE_PREFIX) -> {
+                    ensureMetadataIndexes()
+                    val decade = Uri.decode(parentId.removePrefix(DECADE_PREFIX))
+                    mediaCacheService.songsForDecade(decade)
+                }
                 else -> emptyList()
             }
 
@@ -236,6 +251,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
                             Uri.decode(parentId.removePrefix(GENRE_PREFIX))
                         parentId?.startsWith(ARTIST_PREFIX) == true ->
                             Uri.decode(parentId.removePrefix(ARTIST_PREFIX))
+                        parentId?.startsWith(DECADE_PREFIX) == true ->
+                            Uri.decode(parentId.removePrefix(DECADE_PREFIX))
                         else -> null
                     }
                 }
@@ -303,6 +320,10 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     notifyChildrenChanged(ALBUMS_ID)
                     notifyChildrenChanged(GENRES_ID)
                     notifyChildrenChanged(ARTISTS_ID)
+                    notifyChildrenChanged(DECADES_ID)
+                }
+                ACTION_REFRESH_LIBRARY -> {
+                    loadCachedTreeIfAvailable()
                 }
                 ACTION_SET_PLAYLISTS -> {
                     if (extras == null) return
@@ -320,10 +341,10 @@ class MyMusicService : MediaBrowserServiceCompat() {
                         )
                     }
                     notifyChildrenChanged(ROOT_ID)
-                    notifyChildrenChanged(PLAYLISTS_ID)
-                }
+                notifyChildrenChanged(PLAYLISTS_ID)
             }
         }
+    }
     }
 
     override fun onCreate() {
@@ -528,6 +549,42 @@ class MyMusicService : MediaBrowserServiceCompat() {
             }
             return items
         }
+        if (parentId.startsWith(DECADE_PREFIX)) {
+            ensureMetadataIndexes()
+            val decade = Uri.decode(parentId.removePrefix(DECADE_PREFIX))
+            val listKey = DECADE_PREFIX + Uri.encode(decade)
+            val songs = mediaCacheService.songsForDecade(decade)
+            val items = mutableListOf<MediaItem>()
+            if (songs.isNotEmpty()) {
+                items.add(
+                    MediaItem(
+                        MediaDescriptionCompat.Builder()
+                            .setMediaId(ACTION_PLAY_ALL_PREFIX + listKey)
+                            .setTitle("[Play All]")
+                            .build(),
+                        MediaItem.FLAG_PLAYABLE
+                    )
+                )
+                items.add(
+                    MediaItem(
+                        MediaDescriptionCompat.Builder()
+                            .setMediaId(ACTION_SHUFFLE_PREFIX + listKey)
+                            .setTitle("[Shuffle]")
+                            .build(),
+                        MediaItem.FLAG_PLAYABLE
+                    )
+                )
+            }
+            items += songs.map { fileInfo ->
+                val description = MediaDescriptionCompat.Builder()
+                    .setMediaId(fileInfo.uriString)
+                    .setTitle(fileInfo.title ?: fileInfo.displayName)
+                    .setSubtitle(fileInfo.artist)
+                    .build()
+                MediaItem(description, MediaItem.FLAG_PLAYABLE)
+            }
+            return items
+        }
 
         return when (parentId) {
             ROOT_ID -> {
@@ -570,6 +627,15 @@ class MyMusicService : MediaBrowserServiceCompat() {
                             MediaDescriptionCompat.Builder()
                                 .setMediaId(ARTISTS_ID)
                                 .setTitle("Artists")
+                                .build(),
+                            MediaItem.FLAG_BROWSABLE
+                        )
+                    )
+                    items.add(
+                        MediaItem(
+                            MediaDescriptionCompat.Builder()
+                                .setMediaId(DECADES_ID)
+                                .setTitle("Decades")
                                 .build(),
                             MediaItem.FLAG_BROWSABLE
                         )
@@ -670,11 +736,22 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     MediaItem(description, MediaItem.FLAG_BROWSABLE)
                 }.toMutableList()
             }
+            DECADES_ID -> {
+                ensureMetadataIndexes()
+                mediaCacheService.decades().map { decade ->
+                    val description = MediaDescriptionCompat.Builder()
+                        .setMediaId(DECADE_PREFIX + Uri.encode(decade))
+                        .setTitle(decade)
+                        .build()
+                    MediaItem(description, MediaItem.FLAG_BROWSABLE)
+                }.toMutableList()
+            }
             else -> mutableListOf()
         }
     }
 
     private fun loadCachedTreeIfAvailable() {
+        if (isScanning) return
         val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         val uriString = prefs.getString(KEY_TREE_URI, null) ?: return
         val limit = prefs.getInt(KEY_SCAN_LIMIT, MediaCacheService.MAX_CACHE_SIZE)
@@ -688,7 +765,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
             isScanning = true
             try {
                 mediaCacheService.scanDirectory(this, uri, limit)
-                mediaCacheService.buildMetadataIndexes(this)
+                mediaCacheService.buildAlbumArtistIndexesFromCache()
             } finally {
                 isScanning = false
                 deliverPendingResults()
@@ -698,6 +775,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 notifyChildrenChanged(ALBUMS_ID)
                 notifyChildrenChanged(GENRES_ID)
                 notifyChildrenChanged(ARTISTS_ID)
+                notifyChildrenChanged(DECADES_ID)
             }
         }.start()
     }
@@ -719,8 +797,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
     }
 
     private fun ensureMetadataIndexes() {
-        if (!mediaCacheService.hasMetadataIndexes()) {
-            mediaCacheService.buildMetadataIndexes(this)
+        if (!mediaCacheService.hasAlbumArtistIndexes()) {
+            mediaCacheService.buildAlbumArtistIndexesFromCache()
         }
     }
 

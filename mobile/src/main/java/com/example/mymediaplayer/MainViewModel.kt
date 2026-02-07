@@ -21,10 +21,12 @@ data class MainUiState(
     val albums: List<String> = emptyList(),
     val genres: List<String> = emptyList(),
     val artists: List<String> = emptyList(),
+    val decades: List<String> = emptyList(),
     val selectedTab: LibraryTab = LibraryTab.Songs,
     val selectedAlbum: String? = null,
     val selectedGenre: String? = null,
     val selectedArtist: String? = null,
+    val selectedDecade: String? = null,
     val filteredSongs: List<MediaFileInfo> = emptyList(),
     val isMetadataLoading: Boolean = false,
     val isPlaying: Boolean = false,
@@ -34,6 +36,7 @@ data class MainUiState(
     val playlistMessage: String? = null,
     val folderMessage: String? = null,
     val scanMessage: String? = null,
+    val scanProgress: String? = null,
     val selectedPlaylist: PlaylistInfo? = null,
     val playlistSongs: List<MediaFileInfo> = emptyList(),
     val isPlaylistLoading: Boolean = false,
@@ -50,7 +53,8 @@ enum class LibraryTab(val label: String) {
     Playlists("Playlists"),
     Albums("Albums"),
     Genres("Genres"),
-    Artists("Artists")
+    Artists("Artists"),
+    Decades("Decades")
 }
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -89,12 +93,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     albums = emptyList(),
                     genres = emptyList(),
                     artists = emptyList(),
+                    decades = emptyList(),
                     selectedAlbum = null,
                     selectedGenre = null,
                     selectedArtist = null,
+                    selectedDecade = null,
                     filteredSongs = emptyList(),
                     isMetadataLoading = false,
-                    scanMessage = null
+                    scanMessage = null,
+                    scanProgress = null
                 )
                 metadataKey = null
                 return
@@ -114,14 +121,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 albums = emptyList(),
                 genres = emptyList(),
                 artists = emptyList(),
+                decades = emptyList(),
                 selectedAlbum = null,
                 selectedGenre = null,
                 selectedArtist = null,
+                selectedDecade = null,
                 filteredSongs = emptyList(),
                 isMetadataLoading = false,
-                scanMessage = null
+                scanMessage = null,
+                scanProgress = "Scanning… 0 songs"
             )
-            val stats = mediaCacheService.scanDirectory(getApplication(), treeUri, maxFiles)
+            val stats = mediaCacheService.scanDirectory(
+                getApplication(),
+                treeUri,
+                maxFiles
+            ) { songsFound, foldersScanned ->
+                _uiState.value = _uiState.value.copy(
+                    scanProgress = "Scanning… $songsFound songs • $foldersScanned folders"
+                )
+            }
             val files = mediaCacheService.cachedFiles
             val playlists = mediaCacheService.discoveredPlaylists
             scanCache[key] = files to playlists
@@ -140,7 +158,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 selectedPlaylist = null,
                 playlistSongs = emptyList(),
                 isPlaylistLoading = false,
-                scanMessage = message
+                scanMessage = message,
+                scanProgress = null
             )
             metadataKey = null
         }
@@ -157,13 +176,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             selectedAlbum = if (tab == LibraryTab.Albums) _uiState.value.selectedAlbum else null,
             selectedGenre = if (tab == LibraryTab.Genres) _uiState.value.selectedGenre else null,
             selectedArtist = if (tab == LibraryTab.Artists) _uiState.value.selectedArtist else null,
-            filteredSongs = if (tab == LibraryTab.Albums || tab == LibraryTab.Genres || tab == LibraryTab.Artists) {
+            selectedDecade = if (tab == LibraryTab.Decades) _uiState.value.selectedDecade else null,
+            filteredSongs = if (
+                tab == LibraryTab.Albums ||
+                tab == LibraryTab.Genres ||
+                tab == LibraryTab.Artists ||
+                tab == LibraryTab.Decades
+            ) {
                 _uiState.value.filteredSongs
             } else {
                 emptyList()
             }
         )
-        if (tab == LibraryTab.Albums || tab == LibraryTab.Genres || tab == LibraryTab.Artists) {
+        if (
+            tab == LibraryTab.Albums ||
+            tab == LibraryTab.Genres ||
+            tab == LibraryTab.Artists ||
+            tab == LibraryTab.Decades
+        ) {
             ensureMetadataLoaded()
         }
     }
@@ -190,7 +220,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = _uiState.value.copy(
             selectedAlbum = null,
             selectedGenre = null,
-            selectedArtist = artist
+            selectedArtist = artist,
+            selectedDecade = null
+        )
+        applyFilteredSongs()
+    }
+
+    fun selectDecade(decade: String) {
+        _uiState.value = _uiState.value.copy(
+            selectedAlbum = null,
+            selectedGenre = null,
+            selectedArtist = null,
+            selectedDecade = decade
         )
         applyFilteredSongs()
     }
@@ -200,6 +241,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             selectedAlbum = null,
             selectedGenre = null,
             selectedArtist = null,
+            selectedDecade = null,
             filteredSongs = emptyList()
         )
     }
@@ -289,19 +331,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun ensureMetadataLoaded() {
         val uriKey = treeUri?.toString() ?: return
-        if (metadataKey == uriKey && mediaCacheService.hasMetadataIndexes()) return
+        if (metadataKey == uriKey && mediaCacheService.hasAlbumArtistIndexes()) return
 
         viewModelScope.launch(Dispatchers.IO) {
             _uiState.value = _uiState.value.copy(isMetadataLoading = true)
-            mediaCacheService.buildMetadataIndexes(getApplication())
+            mediaCacheService.buildAlbumArtistIndexesFromCache()
             val albums = mediaCacheService.albums()
-            val genres = mediaCacheService.genres()
             val artists = mediaCacheService.artists()
+            val genres = mediaCacheService.genres()
+            val decades = mediaCacheService.decades()
             metadataKey = uriKey
             _uiState.value = _uiState.value.copy(
                 albums = albums,
                 genres = genres,
                 artists = artists,
+                decades = decades,
                 isMetadataLoading = false
             )
             applyFilteredSongs()
@@ -317,6 +361,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 mediaCacheService.songsForGenre(current.selectedGenre)
             current.selectedArtist != null ->
                 mediaCacheService.songsForArtist(current.selectedArtist)
+            current.selectedDecade != null ->
+                mediaCacheService.songsForDecade(current.selectedDecade)
             else -> emptyList()
         }
         _uiState.value = current.copy(filteredSongs = filtered)

@@ -61,6 +61,7 @@ fun MainScreen(
     onAlbumSelected: (String) -> Unit,
     onGenreSelected: (String) -> Unit,
     onArtistSelected: (String) -> Unit,
+    onDecadeSelected: (String) -> Unit,
     onClearCategorySelection: () -> Unit,
     onPlaylistSelected: (PlaylistInfo) -> Unit,
     onPlaySongs: (List<MediaFileInfo>) -> Unit,
@@ -160,6 +161,14 @@ fun MainScreen(
                 CircularProgressIndicator(
                     modifier = Modifier.align(Alignment.CenterHorizontally)
                 )
+                uiState.scanProgress?.let { progress ->
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = progress,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.align(Alignment.CenterHorizontally)
+                    )
+                }
             }
 
             val tabs = LibraryTab.values().toList()
@@ -266,6 +275,28 @@ fun MainScreen(
                         isLoading = uiState.isMetadataLoading,
                         selectedLabel = uiState.selectedArtist,
                         onCategorySelected = onArtistSelected,
+                        onClearCategorySelection = onClearCategorySelection,
+                        songs = uiState.filteredSongs,
+                        isPlaying = uiState.isPlaying || uiState.isPlayingPlaylist,
+                        isPlayingPlaylist = uiState.isPlayingPlaylist,
+                        hasNext = uiState.hasNext,
+                        hasPrev = uiState.hasPrev,
+                        onPlay = { onPlaySongs(uiState.filteredSongs) },
+                        onShuffle = { onShuffleSongs(uiState.filteredSongs) },
+                        onStop = onStop,
+                        onNext = onNext,
+                        onPrev = onPrev,
+                        onFileClick = onFileClick,
+                        currentMediaId = uiState.currentMediaId
+                    )
+                }
+                LibraryTab.Decades -> {
+                    CategoryTabContent(
+                        title = "Decades",
+                        categories = uiState.decades,
+                        isLoading = uiState.isMetadataLoading,
+                        selectedLabel = uiState.selectedDecade,
+                        onCategorySelected = onDecadeSelected,
                         onClearCategorySelection = onClearCategorySelection,
                         songs = uiState.filteredSongs,
                         isPlaying = uiState.isPlaying || uiState.isPlayingPlaylist,
