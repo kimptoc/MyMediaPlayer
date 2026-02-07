@@ -18,6 +18,15 @@ data class MainUiState(
     val isScanning: Boolean = false,
     val scannedFiles: List<MediaFileInfo> = emptyList(),
     val discoveredPlaylists: List<PlaylistInfo> = emptyList(),
+    val albums: List<String> = emptyList(),
+    val genres: List<String> = emptyList(),
+    val artists: List<String> = emptyList(),
+    val selectedTab: LibraryTab = LibraryTab.Songs,
+    val selectedAlbum: String? = null,
+    val selectedGenre: String? = null,
+    val selectedArtist: String? = null,
+    val filteredSongs: List<MediaFileInfo> = emptyList(),
+    val isMetadataLoading: Boolean = false,
     val isPlaying: Boolean = false,
     val isPaused: Boolean = false,
     val currentTrackName: String? = null,
@@ -28,6 +37,14 @@ data class MainUiState(
     val queuePosition: String? = null
 )
 
+enum class LibraryTab(val label: String) {
+    Songs("Songs"),
+    Playlists("Playlists"),
+    Albums("Albums"),
+    Genres("Genres"),
+    Artists("Artists")
+}
+
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val mediaCacheService = MediaCacheService()
@@ -35,6 +52,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val scanCache =
         mutableMapOf<String, Pair<List<MediaFileInfo>, List<PlaylistInfo>>>()
     private var treeUri: Uri? = null
+    private var metadataKey: String? = null
 
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState: StateFlow<MainUiState> = _uiState
@@ -44,11 +62,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (!forceRescan) {
             val cached = scanCache[key]
             if (cached != null) {
+                mediaCacheService.clearCache()
+                cached.first.forEach { mediaCacheService.addFile(it) }
+                cached.second.forEach { mediaCacheService.addPlaylist(it) }
                 _uiState.value = _uiState.value.copy(
                     isScanning = false,
                     scannedFiles = cached.first,
-                    discoveredPlaylists = cached.second
+                    discoveredPlaylists = cached.second,
+                    albums = emptyList(),
+                    genres = emptyList(),
+                    artists = emptyList(),
+                    selectedAlbum = null,
+                    selectedGenre = null,
+                    selectedArtist = null,
+                    filteredSongs = emptyList(),
+                    isMetadataLoading = false
                 )
+                metadataKey = null
                 return
             }
         }
@@ -57,7 +87,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.value = _uiState.value.copy(
                 isScanning = true,
                 scannedFiles = emptyList(),
-                discoveredPlaylists = emptyList()
+                discoveredPlaylists = emptyList(),
+                albums = emptyList(),
+                genres = emptyList(),
+                artists = emptyList(),
+                selectedAlbum = null,
+                selectedGenre = null,
+                selectedArtist = null,
+                filteredSongs = emptyList(),
+                isMetadataLoading = false
             )
             mediaCacheService.scanDirectory(getApplication(), treeUri)
             val files = mediaCacheService.cachedFiles
@@ -68,11 +106,57 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 scannedFiles = files,
                 discoveredPlaylists = playlists
             )
+            metadataKey = null
         }
     }
 
     fun setTreeUri(uri: Uri) {
         treeUri = uri
+        metadataKey = null
+    }
+
+    fun selectTab(tab: LibraryTab) {
+        _uiState.value = _uiState.value.copy(
+            selectedTab = tab,
+            selectedAlbum = if (tab == LibraryTab.Albums) _uiState.value.selectedAlbum else null,
+            selectedGenre = if (tab == LibraryTab.Genres) _uiState.value.selectedGenre else null,
+            selectedArtist = if (tab == LibraryTab.Artists) _uiState.value.selectedArtist else null,
+            filteredSongs = if (tab == LibraryTab.Albums || tab == LibraryTab.Genres || tab == LibraryTab.Artists) {
+                _uiState.value.filteredSongs
+            } else {
+                emptyList()
+            }
+        )
+        if (tab == LibraryTab.Albums || tab == LibraryTab.Genres || tab == LibraryTab.Artists) {
+            ensureMetadataLoaded()
+        }
+    }
+
+    fun selectAlbum(album: String) {
+        _uiState.value = _uiState.value.copy(
+            selectedAlbum = album,
+            selectedGenre = null,
+            selectedArtist = null
+        )
+        applyFilteredSongs()
+    }
+
+    fun selectGenre(genre: String) {
+        _uiState.value = _uiState.value.copy(
+            selectedAlbum = null,
+            selectedGenre = genre,
+            selectedArtist = null
+        )
+        applyFilteredSongs()
+    }
+
+    fun selectArtist(artist: String) {
+        _uiState.value = _uiState.value.copy(
+            selectedAlbum = null,
+            selectedGenre = null,
+            selectedArtist = artist
+        )
+        applyFilteredSongs()
     }
 
     fun createRandomPlaylist() {
@@ -123,5 +207,40 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 null
             }
         )
+    }
+
+    private fun ensureMetadataLoaded() {
+        val uriKey = treeUri?.toString() ?: return
+        if (metadataKey == uriKey && mediaCacheService.hasMetadataIndexes()) return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            _uiState.value = _uiState.value.copy(isMetadataLoading = true)
+            mediaCacheService.buildMetadataIndexes(getApplication())
+            val albums = mediaCacheService.albums()
+            val genres = mediaCacheService.genres()
+            val artists = mediaCacheService.artists()
+            metadataKey = uriKey
+            _uiState.value = _uiState.value.copy(
+                albums = albums,
+                genres = genres,
+                artists = artists,
+                isMetadataLoading = false
+            )
+            applyFilteredSongs()
+        }
+    }
+
+    private fun applyFilteredSongs() {
+        val current = _uiState.value
+        val filtered = when {
+            current.selectedAlbum != null ->
+                mediaCacheService.songsForAlbum(current.selectedAlbum)
+            current.selectedGenre != null ->
+                mediaCacheService.songsForGenre(current.selectedGenre)
+            current.selectedArtist != null ->
+                mediaCacheService.songsForArtist(current.selectedArtist)
+            else -> emptyList()
+        }
+        _uiState.value = current.copy(filteredSongs = filtered)
     }
 }

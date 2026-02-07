@@ -18,6 +18,11 @@ class MediaCacheService {
     private val _discoveredPlaylists = mutableListOf<PlaylistInfo>()
     val discoveredPlaylists: List<PlaylistInfo> get() = _discoveredPlaylists.toList()
 
+    private val albumIndex = mutableMapOf<String, MutableList<MediaFileInfo>>()
+    private val genreIndex = mutableMapOf<String, MutableList<MediaFileInfo>>()
+    private val artistIndex = mutableMapOf<String, MutableList<MediaFileInfo>>()
+    private var metadataIndexed: Boolean = false
+
     fun scanDirectory(context: Context, treeUri: Uri) {
         clearCache()
         val rootDocumentId = DocumentsContract.getTreeDocumentId(treeUri)
@@ -27,6 +32,7 @@ class MediaCacheService {
     fun addFile(fileInfo: MediaFileInfo) {
         if (_cachedFiles.size < MAX_CACHE_SIZE) {
             _cachedFiles.add(fileInfo)
+            metadataIndexed = false
         }
     }
 
@@ -108,6 +114,7 @@ class MediaCacheService {
 
     fun clearFiles() {
         _cachedFiles.clear()
+        clearMetadataIndexes()
     }
 
     fun clearPlaylists() {
@@ -117,5 +124,45 @@ class MediaCacheService {
     fun clearCache() {
         _cachedFiles.clear()
         _discoveredPlaylists.clear()
+        clearMetadataIndexes()
+    }
+
+    fun buildMetadataIndexes(context: Context) {
+        clearMetadataIndexes()
+        for (file in _cachedFiles) {
+            val metadata = MediaMetadataHelper.extractMetadata(context, file.uriString)
+            val album = metadata?.album?.ifBlank { null } ?: "Unknown Album"
+            val artist = metadata?.artist?.ifBlank { null } ?: "Unknown Artist"
+            val genre = metadata?.genre?.ifBlank { null } ?: "Unknown Genre"
+
+            albumIndex.getOrPut(album) { mutableListOf() }.add(file)
+            artistIndex.getOrPut(artist) { mutableListOf() }.add(file)
+            genreIndex.getOrPut(genre) { mutableListOf() }.add(file)
+        }
+        metadataIndexed = true
+    }
+
+    fun hasMetadataIndexes(): Boolean = metadataIndexed
+
+    fun albums(): List<String> = albumIndex.keys.sorted()
+
+    fun genres(): List<String> = genreIndex.keys.sorted()
+
+    fun artists(): List<String> = artistIndex.keys.sorted()
+
+    fun songsForAlbum(album: String): List<MediaFileInfo> =
+        albumIndex[album]?.toList() ?: emptyList()
+
+    fun songsForGenre(genre: String): List<MediaFileInfo> =
+        genreIndex[genre]?.toList() ?: emptyList()
+
+    fun songsForArtist(artist: String): List<MediaFileInfo> =
+        artistIndex[artist]?.toList() ?: emptyList()
+
+    private fun clearMetadataIndexes() {
+        albumIndex.clear()
+        genreIndex.clear()
+        artistIndex.clear()
+        metadataIndexed = false
     }
 }

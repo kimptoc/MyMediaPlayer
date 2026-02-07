@@ -1,7 +1,6 @@
 package com.example.mymediaplayer
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -15,18 +14,25 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
@@ -46,9 +52,14 @@ fun MainScreen(
     onCreatePlaylist: () -> Unit,
     onPlaylistMessageDismissed: () -> Unit,
     onFolderMessageDismissed: () -> Unit,
+    onTabSelected: (LibraryTab) -> Unit,
+    onAlbumSelected: (String) -> Unit,
+    onGenreSelected: (String) -> Unit,
+    onArtistSelected: (String) -> Unit,
     onPlaylistClick: (PlaylistInfo) -> Unit
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
+    var menuExpanded by remember { mutableStateOf(false) }
 
     LaunchedEffect(uiState.playlistMessage) {
         val message = uiState.playlistMessage
@@ -68,7 +79,34 @@ fun MainScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("MyMediaPlayer") })
+            TopAppBar(
+                title = { Text("MyMediaPlayer") },
+                actions = {
+                    TextButton(onClick = { menuExpanded = true }) {
+                        Text("Menu")
+                    }
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Select Folder") },
+                            onClick = {
+                                menuExpanded = false
+                                onSelectFolder()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Create Playlist") },
+                            onClick = {
+                                menuExpanded = false
+                                onCreatePlaylist()
+                            },
+                            enabled = uiState.scannedFiles.isNotEmpty()
+                        )
+                    }
+                }
+            )
         },
         bottomBar = {
             if (uiState.currentTrackName != null) {
@@ -91,64 +129,181 @@ fun MainScreen(
                 .padding(padding)
                 .padding(16.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Button(
-                    onClick = onSelectFolder,
-                    enabled = !uiState.isScanning
-                ) {
-                    Text("Select Folder")
-                }
-
-                Button(
-                    onClick = onCreatePlaylist,
-                    enabled = uiState.scannedFiles.isNotEmpty()
-                ) {
-                    Text("Create Playlist")
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
             if (uiState.isScanning) {
                 CircularProgressIndicator(
                     modifier = Modifier.align(Alignment.CenterHorizontally)
                 )
             }
 
-            if (uiState.discoveredPlaylists.isNotEmpty()) {
-                Text(
-                    text = "${uiState.discoveredPlaylists.size} playlist(s) found",
-                    style = MaterialTheme.typography.titleMedium
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                uiState.discoveredPlaylists.forEach { playlist ->
-                    PlaylistCard(
-                        playlist = playlist,
-                        onClick = { onPlaylistClick(playlist) }
+            val tabs = LibraryTab.values().toList()
+            ScrollableTabRow(
+                selectedTabIndex = tabs.indexOf(uiState.selectedTab)
+            ) {
+                tabs.forEach { tab ->
+                    Tab(
+                        selected = uiState.selectedTab == tab,
+                        onClick = { onTabSelected(tab) },
+                        text = { Text(tab.label, maxLines = 1) }
                     )
                 }
-                Spacer(modifier = Modifier.height(12.dp))
             }
 
-            if (uiState.scannedFiles.isNotEmpty()) {
-                Text(
-                    text = "${uiState.scannedFiles.size} file(s) found",
-                    style = MaterialTheme.typography.titleMedium
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                LazyColumn {
-                    items(uiState.scannedFiles) { file ->
-                        FileCard(
-                            file = file,
-                            isCurrentTrack = file.uriString == uiState.currentMediaId,
-                            onClick = { onFileClick(file) }
+            Spacer(modifier = Modifier.height(12.dp))
+
+            when (uiState.selectedTab) {
+                LibraryTab.Songs -> {
+                    if (uiState.scannedFiles.isNotEmpty()) {
+                        Text(
+                            text = "${uiState.scannedFiles.size} file(s) found",
+                            style = MaterialTheme.typography.titleMedium
                         )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        LazyColumn {
+                            items(uiState.scannedFiles) { file ->
+                                FileCard(
+                                    file = file,
+                                    isCurrentTrack = file.uriString == uiState.currentMediaId,
+                                    onClick = { onFileClick(file) }
+                                )
+                            }
+                        }
+                    } else {
+                        Text("No songs found")
                     }
                 }
+                LibraryTab.Playlists -> {
+                    if (uiState.discoveredPlaylists.isNotEmpty()) {
+                        Text(
+                            text = "${uiState.discoveredPlaylists.size} playlist(s) found",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        LazyColumn {
+                            items(uiState.discoveredPlaylists) { playlist ->
+                                PlaylistCard(
+                                    playlist = playlist,
+                                    onClick = { onPlaylistClick(playlist) }
+                                )
+                            }
+                        }
+                    } else {
+                        Text("No playlists found")
+                    }
+                }
+                LibraryTab.Albums -> {
+                    CategoryTabContent(
+                        title = "Albums",
+                        categories = uiState.albums,
+                        isLoading = uiState.isMetadataLoading,
+                        selectedLabel = uiState.selectedAlbum,
+                        onCategorySelected = onAlbumSelected,
+                        songs = uiState.filteredSongs,
+                        onFileClick = onFileClick,
+                        currentMediaId = uiState.currentMediaId
+                    )
+                }
+                LibraryTab.Genres -> {
+                    CategoryTabContent(
+                        title = "Genres",
+                        categories = uiState.genres,
+                        isLoading = uiState.isMetadataLoading,
+                        selectedLabel = uiState.selectedGenre,
+                        onCategorySelected = onGenreSelected,
+                        songs = uiState.filteredSongs,
+                        onFileClick = onFileClick,
+                        currentMediaId = uiState.currentMediaId
+                    )
+                }
+                LibraryTab.Artists -> {
+                    CategoryTabContent(
+                        title = "Artists",
+                        categories = uiState.artists,
+                        isLoading = uiState.isMetadataLoading,
+                        selectedLabel = uiState.selectedArtist,
+                        onCategorySelected = onArtistSelected,
+                        songs = uiState.filteredSongs,
+                        onFileClick = onFileClick,
+                        currentMediaId = uiState.currentMediaId
+                    )
+                }
             }
+        }
+    }
+}
+
+@Composable
+private fun CategoryTabContent(
+    title: String,
+    categories: List<String>,
+    isLoading: Boolean,
+    selectedLabel: String?,
+    onCategorySelected: (String) -> Unit,
+    songs: List<MediaFileInfo>,
+    onFileClick: (MediaFileInfo) -> Unit,
+    currentMediaId: String?
+) {
+    if (isLoading) {
+        CircularProgressIndicator()
+        return
+    }
+
+    if (categories.isEmpty()) {
+        Text("No $title found")
+        return
+    }
+
+    LazyColumn {
+        items(categories) { category ->
+            CategoryCard(
+                title = category,
+                isSelected = category == selectedLabel,
+                onClick = { onCategorySelected(category) }
+            )
+        }
+
+        if (selectedLabel != null) {
+            item {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Songs in $selectedLabel",
+                    style = MaterialTheme.typography.titleSmall
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+            }
+            items(songs) { file ->
+                FileCard(
+                    file = file,
+                    isCurrentTrack = file.uriString == currentMediaId,
+                    onClick = { onFileClick(file) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CategoryCard(title: String, isSelected: Boolean, onClick: () -> Unit) {
+    val colors = if (isSelected) {
+        CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+    } else {
+        CardDefaults.cardColors()
+    }
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+            .clickable { onClick() },
+        colors = colors
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.weight(1f)
+            )
         }
     }
 }

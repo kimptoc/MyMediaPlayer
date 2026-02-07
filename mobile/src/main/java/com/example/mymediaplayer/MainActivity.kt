@@ -147,6 +147,10 @@ class MainActivity : ComponentActivity() {
                     onCreatePlaylist = { viewModel.createRandomPlaylist() },
                     onPlaylistMessageDismissed = { viewModel.clearPlaylistMessage() },
                     onFolderMessageDismissed = { viewModel.clearFolderMessage() },
+                    onTabSelected = { viewModel.selectTab(it) },
+                    onAlbumSelected = { viewModel.selectAlbum(it) },
+                    onGenreSelected = { viewModel.selectGenre(it) },
+                    onArtistSelected = { viewModel.selectArtist(it) },
                     onPlaylistClick = { playlist ->
                         sendFilesToServiceIfNeeded(uiState.value.scannedFiles)
                         sendPlaylistsToServiceIfNeeded(uiState.value.discoveredPlaylists)
