@@ -19,4 +19,5 @@ android {
 }
 dependencies {
     implementation libs.androidx.media
+    implementation libs.androidx.documentfile
 }
