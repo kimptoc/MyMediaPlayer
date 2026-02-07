@@ -15,10 +15,12 @@ class MediaCacheService {
     }
 
     private val _cachedFiles = mutableListOf<MediaFileInfo>()
-    val cachedFiles: List<MediaFileInfo> get() = _cachedFiles.toList()
+    val cachedFiles: List<MediaFileInfo>
+        get() = synchronized(cacheLock) { _cachedFiles.toList() }
 
     private val _discoveredPlaylists = mutableListOf<PlaylistInfo>()
-    val discoveredPlaylists: List<PlaylistInfo> get() = _discoveredPlaylists.toList()
+    val discoveredPlaylists: List<PlaylistInfo>
+        get() = synchronized(cacheLock) { _discoveredPlaylists.toList() }
 
     private val cacheLock = Any()
 
@@ -56,7 +58,9 @@ class MediaCacheService {
     }
 
     fun addPlaylist(playlistInfo: PlaylistInfo) {
-        _discoveredPlaylists.add(playlistInfo)
+        synchronized(cacheLock) {
+            _discoveredPlaylists.add(playlistInfo)
+        }
     }
 
     private fun walkTree(context: Context, treeUri: Uri, rootDocumentId: String) {
@@ -105,9 +109,9 @@ class MediaCacheService {
                     }
 
                     val lowerName = name.lowercase(Locale.US)
-                    if ((lowerName.endsWith(".mp3") || lowerName.endsWith(".m4a")) &&
-                        _cachedFiles.size < maxFileLimit
-                    ) {
+                    val shouldLoadFile = (lowerName.endsWith(".mp3") || lowerName.endsWith(".m4a")) &&
+                        synchronized(cacheLock) { _cachedFiles.size < maxFileLimit }
+                    if (shouldLoadFile) {
                         val uri = DocumentsContract.buildDocumentUriUsingTree(treeUri, childId)
                         val metadata = MediaMetadataHelper.extractMetadata(context, uri.toString())
                         val fallbackYear = lastModified?.let { millis ->
@@ -117,29 +121,38 @@ class MediaCacheService {
                         }
                         val yearValue = metadata?.year?.toIntOrNull() ?: fallbackYear
                         val durationMs = metadata?.durationMs?.toLongOrNull()
-                        _cachedFiles.add(
-                            MediaFileInfo(
-                                uriString = uri.toString(),
-                                displayName = name,
-                                sizeBytes = size,
-                                title = metadata?.title ?: name,
-                                artist = metadata?.artist,
-                                album = metadata?.album,
-                                durationMs = durationMs,
-                                year = yearValue
-                            )
-                        )
-                        songsFound += 1
+                        synchronized(cacheLock) {
+                            if (_cachedFiles.size < maxFileLimit) {
+                                _cachedFiles.add(
+                                    MediaFileInfo(
+                                        uriString = uri.toString(),
+                                        displayName = name,
+                                        sizeBytes = size,
+                                        title = metadata?.title ?: name,
+                                        artist = metadata?.artist,
+                                        album = metadata?.album,
+                                        durationMs = durationMs,
+                                        year = yearValue
+                                    )
+                                )
+                                metadataIndexed = false
+                                songsFound += 1
+                            }
+                        }
                     } else if (lowerName.endsWith(".m3u") &&
-                        _discoveredPlaylists.size < MAX_PLAYLIST_CACHE_SIZE
+                        synchronized(cacheLock) { _discoveredPlaylists.size < MAX_PLAYLIST_CACHE_SIZE }
                     ) {
                         val uri = DocumentsContract.buildDocumentUriUsingTree(treeUri, childId)
-                        _discoveredPlaylists.add(
-                            PlaylistInfo(
-                                uriString = uri.toString(),
-                                displayName = name
-                            )
-                        )
+                        synchronized(cacheLock) {
+                            if (_discoveredPlaylists.size < MAX_PLAYLIST_CACHE_SIZE) {
+                                _discoveredPlaylists.add(
+                                    PlaylistInfo(
+                                        uriString = uri.toString(),
+                                        displayName = name
+                                    )
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -147,9 +160,11 @@ class MediaCacheService {
     }
 
     private fun isSearchComplete(): Boolean {
-        val filesFull = _cachedFiles.size >= maxFileLimit
-        val playlistsFull = _discoveredPlaylists.size >= MAX_PLAYLIST_CACHE_SIZE
-        return filesFull && playlistsFull
+        synchronized(cacheLock) {
+            val filesFull = _cachedFiles.size >= maxFileLimit
+            val playlistsFull = _discoveredPlaylists.size >= MAX_PLAYLIST_CACHE_SIZE
+            return filesFull && playlistsFull
+        }
     }
 
     fun clearFiles() {
@@ -160,7 +175,9 @@ class MediaCacheService {
     }
 
     fun clearPlaylists() {
-        _discoveredPlaylists.clear()
+        synchronized(cacheLock) {
+            _discoveredPlaylists.clear()
+        }
     }
 
     fun clearCache() {
