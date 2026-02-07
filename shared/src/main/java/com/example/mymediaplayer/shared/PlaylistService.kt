@@ -24,7 +24,7 @@ class PlaylistService {
         return builder.toString()
     }
 
-    fun writePlaylist(context: Context, treeUri: Uri, files: List<MediaFileInfo>): String? {
+    fun writePlaylist(context: Context, treeUri: Uri, files: List<MediaFileInfo>): PlaylistInfo? {
         if (files.isEmpty()) return null
 
         val root = DocumentFile.fromTreeUri(context, treeUri) ?: return null
@@ -39,7 +39,10 @@ class PlaylistService {
             outputStream.flush()
         } ?: return null
 
-        return fileName
+        return PlaylistInfo(
+            uriString = target.uri.toString(),
+            displayName = fileName
+        )
     }
 
     fun readPlaylist(context: Context, playlistUri: Uri): List<MediaFileInfo> {
@@ -67,7 +70,8 @@ class PlaylistService {
                     MediaFileInfo(
                         uriString = trimmed,
                         displayName = name,
-                        sizeBytes = 0L
+                        sizeBytes = 0L,
+                        title = name
                     )
                 )
                 pendingTitle = null

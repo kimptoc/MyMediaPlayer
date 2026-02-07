@@ -144,7 +144,7 @@ class MainActivity : ComponentActivity() {
                     onNext = {
                         mediaController?.transportControls?.skipToNext()
                     },
-                    onCreatePlaylist = { viewModel.createRandomPlaylist() },
+                    onCreatePlaylist = { count -> viewModel.createRandomPlaylist(count) },
                     onPlaylistMessageDismissed = { viewModel.clearPlaylistMessage() },
                     onFolderMessageDismissed = { viewModel.clearFolderMessage() },
                     onTabSelected = { viewModel.selectTab(it) },

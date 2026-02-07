@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -26,13 +25,14 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
@@ -49,7 +49,7 @@ fun MainScreen(
     onPlayPause: () -> Unit,
     onStop: () -> Unit,
     onNext: () -> Unit,
-    onCreatePlaylist: () -> Unit,
+    onCreatePlaylist: (Int) -> Unit,
     onPlaylistMessageDismissed: () -> Unit,
     onFolderMessageDismissed: () -> Unit,
     onTabSelected: (LibraryTab) -> Unit,
@@ -60,6 +60,8 @@ fun MainScreen(
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     var menuExpanded by remember { mutableStateOf(false) }
+    var showPlaylistDialog by remember { mutableStateOf(false) }
+    var playlistCountText by remember { mutableStateOf("3") }
 
     LaunchedEffect(uiState.playlistMessage) {
         val message = uiState.playlistMessage
@@ -96,14 +98,15 @@ fun MainScreen(
                                 onSelectFolder()
                             }
                         )
-                        DropdownMenuItem(
-                            text = { Text("Create Playlist") },
-                            onClick = {
-                                menuExpanded = false
-                                onCreatePlaylist()
-                            },
-                            enabled = uiState.scannedFiles.isNotEmpty()
-                        )
+                    DropdownMenuItem(
+                        text = { Text("Create Playlist") },
+                        onClick = {
+                            menuExpanded = false
+                            playlistCountText = uiState.lastPlaylistCount.toString()
+                            showPlaylistDialog = true
+                        },
+                        enabled = uiState.scannedFiles.isNotEmpty()
+                    )
                     }
                 }
             )
@@ -228,6 +231,63 @@ fun MainScreen(
                 }
             }
         }
+    }
+
+    if (showPlaylistDialog) {
+        val maxCount = uiState.scannedFiles.size
+        val countValue = playlistCountText.toIntOrNull()
+        val isValid = countValue != null && countValue in 1..maxCount
+        val helperText = when {
+            maxCount == 0 -> "Scan a folder to enable playlists."
+            countValue == null -> "Enter a number between 1 and $maxCount."
+            countValue < 1 || countValue > maxCount -> "Enter a number between 1 and $maxCount."
+            else -> "OK"
+        }
+
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showPlaylistDialog = false },
+            title = { Text("Create Playlist") },
+            text = {
+                Column {
+                    Text("How many songs should be added?")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextField(
+                        value = playlistCountText,
+                        onValueChange = { playlistCountText = it },
+                        singleLine = true,
+                        placeholder = { Text("e.g. 3") }
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = helperText,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (isValid) {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        } else {
+                            MaterialTheme.colorScheme.error
+                        }
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (isValid && countValue != null) {
+                            showPlaylistDialog = false
+                            onCreatePlaylist(countValue)
+                        }
+                    },
+                    enabled = isValid
+                ) {
+                    Text("Create")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPlaylistDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 
@@ -400,13 +460,16 @@ fun FileCard(file: MediaFileInfo, isCurrentTrack: Boolean, onClick: () -> Unit) 
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text(
-                text = file.displayName,
+                text = file.title ?: file.displayName,
                 style = MaterialTheme.typography.bodyLarge
             )
-            Text(
-                text = formatFileSize(file.sizeBytes),
-                style = MaterialTheme.typography.bodySmall
-            )
+            val secondary = buildSongDetails(file)
+            if (secondary.isNotEmpty()) {
+                Text(
+                    text = secondary,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
         }
     }
 }
@@ -417,4 +480,21 @@ private fun formatFileSize(bytes: Long): String {
         bytes >= 1_024 -> "%.1f KB".format(bytes / 1_024.0)
         else -> "$bytes B"
     }
+}
+
+private fun buildSongDetails(file: MediaFileInfo): String {
+    val parts = mutableListOf<String>()
+    file.artist?.takeIf { it.isNotBlank() }?.let { parts.add(it) }
+    file.album?.takeIf { it.isNotBlank() }?.let { parts.add(it) }
+    file.durationMs?.let { parts.add(formatDuration(it)) }
+    file.year?.let { if (it > 0) parts.add(it.toString()) }
+    return parts.joinToString(" • ")
+}
+
+private fun formatDuration(durationMs: Long): String {
+    if (durationMs <= 0L) return ""
+    val totalSeconds = durationMs / 1000
+    val minutes = totalSeconds / 60
+    val seconds = totalSeconds % 60
+    return "%d:%02d".format(minutes, seconds)
 }

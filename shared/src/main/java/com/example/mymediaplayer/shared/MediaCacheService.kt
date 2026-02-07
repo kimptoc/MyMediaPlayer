@@ -3,6 +3,8 @@ package com.example.mymediaplayer.shared
 import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
+import java.time.Instant
+import java.time.ZoneId
 import java.util.Locale
 
 class MediaCacheService {
@@ -49,7 +51,8 @@ class MediaCacheService {
             DocumentsContract.Document.COLUMN_DOCUMENT_ID,
             DocumentsContract.Document.COLUMN_DISPLAY_NAME,
             DocumentsContract.Document.COLUMN_MIME_TYPE,
-            DocumentsContract.Document.COLUMN_SIZE
+            DocumentsContract.Document.COLUMN_SIZE,
+            DocumentsContract.Document.COLUMN_LAST_MODIFIED
         )
 
         while (toVisit.isNotEmpty()) {
@@ -64,6 +67,8 @@ class MediaCacheService {
                 val nameIndex = it.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
                 val mimeIndex = it.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
                 val sizeIndex = it.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_SIZE)
+                val modifiedIndex =
+                    it.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_LAST_MODIFIED)
 
                 while (it.moveToNext()) {
                     if (isSearchComplete()) return
@@ -72,6 +77,8 @@ class MediaCacheService {
                     val name = it.getString(nameIndex) ?: "Unknown"
                     val mimeType = it.getString(mimeIndex)
                     val size = if (it.isNull(sizeIndex)) 0L else it.getLong(sizeIndex)
+                    val lastModified =
+                        if (it.isNull(modifiedIndex)) null else it.getLong(modifiedIndex)
 
                     if (mimeType == DocumentsContract.Document.MIME_TYPE_DIR) {
                         toVisit.add(childId)
@@ -83,11 +90,24 @@ class MediaCacheService {
                         _cachedFiles.size < MAX_CACHE_SIZE
                     ) {
                         val uri = DocumentsContract.buildDocumentUriUsingTree(treeUri, childId)
+                        val metadata = MediaMetadataHelper.extractMetadata(context, uri.toString())
+                        val fallbackYear = lastModified?.let { millis ->
+                            Instant.ofEpochMilli(millis)
+                                .atZone(ZoneId.systemDefault())
+                                .year
+                        }
+                        val yearValue = metadata?.year?.toIntOrNull() ?: fallbackYear
+                        val durationMs = metadata?.durationMs?.toLongOrNull()
                         _cachedFiles.add(
                             MediaFileInfo(
                                 uriString = uri.toString(),
                                 displayName = name,
-                                sizeBytes = size
+                                sizeBytes = size,
+                                title = metadata?.title ?: name,
+                                artist = metadata?.artist,
+                                album = metadata?.album,
+                                durationMs = durationMs,
+                                year = yearValue
                             )
                         )
                     } else if (lowerName.endsWith(".m3u") &&

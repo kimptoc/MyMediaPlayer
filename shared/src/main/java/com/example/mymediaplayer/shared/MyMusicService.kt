@@ -163,7 +163,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
                             MediaFileInfo(
                                 uriString = uris[i],
                                 displayName = names[i],
-                                sizeBytes = sizes[i]
+                                sizeBytes = sizes[i],
+                                title = names[i]
                             )
                         )
                     }
@@ -611,7 +612,20 @@ class MyMusicService : MediaBrowserServiceCompat() {
     private fun updateMetadata(fileInfo: MediaFileInfo) {
         val metadata = MediaMetadataCompat.Builder()
             .putString(MediaMetadataCompat.METADATA_KEY_MEDIA_ID, fileInfo.uriString)
-            .putString(MediaMetadataCompat.METADATA_KEY_TITLE, fileInfo.displayName)
+            .putString(
+                MediaMetadataCompat.METADATA_KEY_TITLE,
+                fileInfo.title ?: fileInfo.displayName
+            )
+            .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, fileInfo.artist)
+            .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, fileInfo.album)
+            .putLong(
+                MediaMetadataCompat.METADATA_KEY_DURATION,
+                fileInfo.durationMs ?: 0L
+            )
+            .putLong(
+                MediaMetadataCompat.METADATA_KEY_YEAR,
+                (fileInfo.year ?: 0).toLong()
+            )
             .build()
         session.setMetadata(metadata)
     }

@@ -34,7 +34,8 @@ data class MainUiState(
     val playlistMessage: String? = null,
     val folderMessage: String? = null,
     val isPlayingPlaylist: Boolean = false,
-    val queuePosition: String? = null
+    val queuePosition: String? = null,
+    val lastPlaylistCount: Int = 3
 )
 
 enum class LibraryTab(val label: String) {
@@ -69,6 +70,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     isScanning = false,
                     scannedFiles = cached.first,
                     discoveredPlaylists = cached.second,
+                    lastPlaylistCount = _uiState.value.lastPlaylistCount,
                     albums = emptyList(),
                     genres = emptyList(),
                     artists = emptyList(),
@@ -88,6 +90,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 isScanning = true,
                 scannedFiles = emptyList(),
                 discoveredPlaylists = emptyList(),
+                lastPlaylistCount = _uiState.value.lastPlaylistCount,
                 albums = emptyList(),
                 genres = emptyList(),
                 artists = emptyList(),
@@ -104,7 +107,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.value = _uiState.value.copy(
                 isScanning = false,
                 scannedFiles = files,
-                discoveredPlaylists = playlists
+                discoveredPlaylists = playlists,
+                lastPlaylistCount = _uiState.value.lastPlaylistCount
             )
             metadataKey = null
         }
@@ -159,20 +163,32 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         applyFilteredSongs()
     }
 
-    fun createRandomPlaylist() {
+    fun createRandomPlaylist(count: Int) {
         val uri = treeUri ?: return
         val files = _uiState.value.scannedFiles
         if (files.isEmpty()) return
-        val selected = files.shuffled().take(3)
+        val safeCount = count.coerceIn(1, files.size)
+        val selected = files.shuffled().take(safeCount)
         viewModelScope.launch(Dispatchers.IO) {
             val result = playlistService.writePlaylist(getApplication(), uri, selected)
-            _uiState.value = _uiState.value.copy(
-                playlistMessage = if (result != null) {
-                    "Created $result"
-                } else {
-                    "Failed to create playlist"
+            if (result != null) {
+                val updatedPlaylists = _uiState.value.discoveredPlaylists + result
+                _uiState.value = _uiState.value.copy(
+                    discoveredPlaylists = updatedPlaylists,
+                    playlistMessage = "Created ${result.displayName}",
+                    lastPlaylistCount = safeCount
+                )
+                val key = uri.toString()
+                val existing = scanCache[key]
+                if (existing != null) {
+                    scanCache[key] = existing.first to updatedPlaylists
                 }
-            )
+            } else {
+                _uiState.value = _uiState.value.copy(
+                    playlistMessage = "Failed to create playlist",
+                    lastPlaylistCount = safeCount
+                )
+            }
         }
     }
 

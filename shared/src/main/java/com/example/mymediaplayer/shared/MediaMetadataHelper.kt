@@ -11,9 +11,12 @@ object MediaMetadataHelper {
         return try {
             retriever.setDataSource(context, Uri.parse(uriString))
             MediaMetadataInfo(
+                title = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE),
                 album = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM),
                 artist = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST),
-                genre = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_GENRE)
+                genre = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_GENRE),
+                year = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_YEAR),
+                durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
             )
         } catch (_: Exception) {
             null
@@ -27,7 +30,10 @@ object MediaMetadataHelper {
 }
 
 data class MediaMetadataInfo(
+    val title: String?,
     val album: String?,
     val artist: String?,
-    val genre: String?
+    val genre: String?,
+    val year: String?,
+    val durationMs: String?
 )
