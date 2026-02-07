@@ -61,6 +61,7 @@ fun MainScreen(
     onAlbumSelected: (String) -> Unit,
     onGenreSelected: (String) -> Unit,
     onArtistSelected: (String) -> Unit,
+    onClearCategorySelection: () -> Unit,
     onPlaylistSelected: (PlaylistInfo) -> Unit,
     onPlaySongs: (List<MediaFileInfo>) -> Unit,
     onShuffleSongs: (List<MediaFileInfo>) -> Unit,
@@ -221,6 +222,7 @@ fun MainScreen(
                         isLoading = uiState.isMetadataLoading,
                         selectedLabel = uiState.selectedAlbum,
                         onCategorySelected = onAlbumSelected,
+                        onClearCategorySelection = onClearCategorySelection,
                         songs = uiState.filteredSongs,
                         isPlaying = uiState.isPlaying || uiState.isPlayingPlaylist,
                         isPlayingPlaylist = uiState.isPlayingPlaylist,
@@ -242,6 +244,7 @@ fun MainScreen(
                         isLoading = uiState.isMetadataLoading,
                         selectedLabel = uiState.selectedGenre,
                         onCategorySelected = onGenreSelected,
+                        onClearCategorySelection = onClearCategorySelection,
                         songs = uiState.filteredSongs,
                         isPlaying = uiState.isPlaying || uiState.isPlayingPlaylist,
                         isPlayingPlaylist = uiState.isPlayingPlaylist,
@@ -263,6 +266,7 @@ fun MainScreen(
                         isLoading = uiState.isMetadataLoading,
                         selectedLabel = uiState.selectedArtist,
                         onCategorySelected = onArtistSelected,
+                        onClearCategorySelection = onClearCategorySelection,
                         songs = uiState.filteredSongs,
                         isPlaying = uiState.isPlaying || uiState.isPlayingPlaylist,
                         isPlayingPlaylist = uiState.isPlayingPlaylist,
@@ -320,9 +324,9 @@ fun MainScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        if (isValid && countValue != null) {
+                        if (isValid) {
                             showPlaylistDialog = false
-                            onCreatePlaylist(countValue)
+                            onCreatePlaylist(countValue!!)
                         }
                     },
                     enabled = isValid
@@ -375,9 +379,9 @@ fun MainScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        if (isValid && countValue != null) {
+                        if (isValid) {
                             showScanDialog = false
-                            onSelectFolderWithLimit(countValue)
+                            onSelectFolderWithLimit(countValue!!)
                         }
                     },
                     enabled = isValid
@@ -401,6 +405,7 @@ private fun CategoryTabContent(
     isLoading: Boolean,
     selectedLabel: String?,
     onCategorySelected: (String) -> Unit,
+    onClearCategorySelection: () -> Unit,
     songs: List<MediaFileInfo>,
     isPlaying: Boolean,
     isPlayingPlaylist: Boolean,
@@ -429,13 +434,17 @@ private fun CategoryTabContent(
             color = MaterialTheme.colorScheme.secondaryContainer,
             modifier = Modifier.fillMaxWidth()
         ) {
-            LazyColumn(
-                modifier = Modifier.padding(8.dp)
-            ) {
-                items(categories) { category ->
+            LazyColumn(modifier = Modifier.padding(8.dp)) {
+                val visibleCategories = if (selectedLabel == null) {
+                    categories
+                } else {
+                    categories.filter { it == selectedLabel }
+                }
+                items(visibleCategories) { category ->
                     CategoryCard(
                         title = category,
                         isSelected = category == selectedLabel,
+                        isCompact = selectedLabel != null,
                         onClick = { onCategorySelected(category) }
                     )
                 }
@@ -450,6 +459,10 @@ private fun CategoryTabContent(
         ) {
             Column(modifier = Modifier.padding(12.dp)) {
                 if (selectedLabel != null) {
+                    TextButton(onClick = onClearCategorySelection) {
+                        Text("Back to all $title")
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = "Songs in $selectedLabel",
                         style = MaterialTheme.typography.titleSmall
@@ -674,7 +687,12 @@ private fun PlaybackButtonsRow(
 }
 
 @Composable
-private fun CategoryCard(title: String, isSelected: Boolean, onClick: () -> Unit) {
+private fun CategoryCard(
+    title: String,
+    isSelected: Boolean,
+    isCompact: Boolean = false,
+    onClick: () -> Unit
+) {
     val colors = if (isSelected) {
         CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
     } else {
@@ -683,17 +701,21 @@ private fun CategoryCard(title: String, isSelected: Boolean, onClick: () -> Unit
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp)
+            .padding(vertical = if (isCompact) 2.dp else 4.dp)
             .clickable { onClick() },
         colors = colors
     ) {
         Row(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.padding(if (isCompact) 8.dp else 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.bodyLarge,
+                style = if (isCompact) {
+                    MaterialTheme.typography.bodyMedium
+                } else {
+                    MaterialTheme.typography.bodyLarge
+                },
                 modifier = Modifier.weight(1f)
             )
         }

@@ -893,22 +893,19 @@ class MyMusicService : MediaBrowserServiceCompat() {
     }
 
     private fun updateMetadata(fileInfo: MediaFileInfo) {
+        val runtimeMetadata = MediaMetadataHelper.extractMetadata(this, fileInfo.uriString)
+        val title = runtimeMetadata?.title ?: fileInfo.title ?: fileInfo.displayName
+        val artist = runtimeMetadata?.artist ?: fileInfo.artist
+        val album = runtimeMetadata?.album ?: fileInfo.album
+        val duration = runtimeMetadata?.durationMs?.toLongOrNull() ?: fileInfo.durationMs ?: 0L
+        val year = runtimeMetadata?.year?.toLongOrNull() ?: (fileInfo.year ?: 0).toLong()
         val metadata = MediaMetadataCompat.Builder()
             .putString(MediaMetadataCompat.METADATA_KEY_MEDIA_ID, fileInfo.uriString)
-            .putString(
-                MediaMetadataCompat.METADATA_KEY_TITLE,
-                fileInfo.title ?: fileInfo.displayName
-            )
-            .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, fileInfo.artist)
-            .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, fileInfo.album)
-            .putLong(
-                MediaMetadataCompat.METADATA_KEY_DURATION,
-                fileInfo.durationMs ?: 0L
-            )
-            .putLong(
-                MediaMetadataCompat.METADATA_KEY_YEAR,
-                (fileInfo.year ?: 0).toLong()
-            )
+            .putString(MediaMetadataCompat.METADATA_KEY_TITLE, title)
+            .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, artist)
+            .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, album)
+            .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, duration)
+            .putLong(MediaMetadataCompat.METADATA_KEY_YEAR, year)
             .build()
         session.setMetadata(metadata)
     }

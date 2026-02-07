@@ -195,6 +195,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         applyFilteredSongs()
     }
 
+    fun clearCategorySelection() {
+        _uiState.value = _uiState.value.copy(
+            selectedAlbum = null,
+            selectedGenre = null,
+            selectedArtist = null,
+            filteredSongs = emptyList()
+        )
+    }
+
     fun selectPlaylist(playlist: PlaylistInfo) {
         _uiState.value = _uiState.value.copy(
             selectedPlaylist = playlist,

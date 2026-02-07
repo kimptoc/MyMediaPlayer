@@ -162,6 +162,7 @@ class MainActivity : ComponentActivity() {
                     onAlbumSelected = { viewModel.selectAlbum(it) },
                     onGenreSelected = { viewModel.selectGenre(it) },
                     onArtistSelected = { viewModel.selectArtist(it) },
+                    onClearCategorySelection = { viewModel.clearCategorySelection() },
                     onPlaylistSelected = { viewModel.selectPlaylist(it) },
                     onPlaySongs = { songs ->
                         if (songs.isNotEmpty()) {
