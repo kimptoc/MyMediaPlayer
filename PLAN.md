@@ -993,3 +993,911 @@ Button(
 4. **Repeat**: Tap again — new file with different timestamp, potentially different random files
 5. **Few files**: With 1-2 files scanned, playlist created with 1-2 entries
 6. **No files**: With 0 files scanned, button is disabled
+
+---
+
+# Task 4: Play Playlists (Play, Pause, Stop, Next Track)
+
+## Overview
+
+Enable playlist playback on both Mobile and Android Auto. During directory scanning, discover `.m3u` files alongside `.mp3` files. Display discovered playlists in the mobile Compose UI. Tapping a playlist starts sequential playback through its tracks with auto-advance. Add a "Next" button to skip tracks. Restructure the MediaBrowser browse tree into "Songs" and "Playlists" categories for Android Auto. Pause, resume, and stop continue to work as in Task 2.
+
+## Current State (after Task 3)
+
+| File | Description |
+|---|---|
+| `shared/.../MyMusicService.kt` | `MediaBrowserServiceCompat` with single-track `MediaPlayer` playback, flat browse tree under `root` |
+| `shared/.../MediaCacheService.kt` | Scans SAF directories for `.mp3` files only, caches up to 20, `addFile()` |
+| `shared/.../MediaFileInfo.kt` | Data class: `uriString`, `displayName`, `sizeBytes` |
+| `shared/.../PlaylistService.kt` | `generateM3uContent()` + `writePlaylist()` — write-only, no reading |
+| `mobile/.../MainActivity.kt` | `ComponentActivity` with Compose, SAF picker, `MediaBrowserCompat` connection, sends files to service, playback + playlist creation callbacks |
+| `mobile/.../MainViewModel.kt` | `StateFlow<MainUiState>` with scanning + playback + playlist creation state |
+| `mobile/.../MainScreen.kt` | Scaffold with TopAppBar, "Select Folder" + "Create Playlist" buttons, LazyColumn of FileCards, PlaybackBar (Play/Pause + Stop), Snackbar |
+
+## Files to Create / Modify (in order)
+
+### Step 1. `shared/.../PlaylistInfo.kt` — NEW data class
+
+**New file:** `shared/src/main/java/com/example/mymediaplayer/shared/PlaylistInfo.kt`
+
+```kotlin
+package com.example.mymediaplayer.shared
+
+data class PlaylistInfo(
+    val uriString: String,      // Content URI of the .m3u file
+    val displayName: String     // Filename (e.g., "playlist_20250601_120000.m3u")
+)
+```
+
+**Why:** Separates playlist metadata from track metadata (`MediaFileInfo`). Used by the mobile UI to display discovered playlists and by the service for the browse tree and playback routing.
+
+---
+
+### Step 2. `shared/.../PlaylistService.kt` — Add M3U reading
+
+**What changes:**
+
+Add method to parse an M3U file from a SAF content URI:
+
+```kotlin
+fun readPlaylist(context: Context, playlistUri: Uri): List<MediaFileInfo> {
+    val tracks = mutableListOf<MediaFileInfo>()
+    val content = context.contentResolver.openInputStream(playlistUri)
+        ?.bufferedReader()
+        ?.readText() ?: return tracks
+
+    val lines = content.lines()
+    var pendingName: String? = null
+
+    for (line in lines) {
+        val trimmed = line.trim()
+        when {
+            trimmed.isEmpty() || trimmed == "#EXTM3U" -> continue
+            trimmed.startsWith("#EXTINF:") -> {
+                // Format: #EXTINF:-1,displayname
+                pendingName = trimmed.substringAfter(",", "").ifEmpty { null }
+            }
+            !trimmed.startsWith("#") -> {
+                // URI line
+                tracks.add(MediaFileInfo(
+                    uriString = trimmed,
+                    displayName = pendingName ?: "Unknown",
+                    sizeBytes = 0
+                ))
+                pendingName = null
+            }
+        }
+    }
+    return tracks
+}
+```
+
+**Key design details:**
+- Parses standard M3U format matching what `generateM3uContent()` writes
+- Extracts display names from `#EXTINF` lines, URIs from non-comment lines
+- `sizeBytes = 0` — M3U doesn't store file size; acceptable since playlist tracks display name only
+- Returns empty list on read failure (graceful degradation)
+
+**Why:** The service calls this when a playlist is selected for playback (from both Mobile tap and Android Auto browse).
+
+---
+
+### Step 3. `shared/.../MediaCacheService.kt` — Discover .m3u files + granular clear methods
+
+**What changes:**
+
+Add a second list for discovered playlists:
+
+```kotlin
+private val _discoveredPlaylists = mutableListOf<PlaylistInfo>()
+val discoveredPlaylists: List<PlaylistInfo> get() = _discoveredPlaylists.toList()
+```
+
+Add granular clear methods (needed because `SET_MEDIA_FILES` and `SET_PLAYLISTS` custom actions arrive independently):
+
+```kotlin
+fun clearFiles() {
+    _cachedFiles.clear()
+}
+
+fun clearPlaylists() {
+    _discoveredPlaylists.clear()
+}
+
+fun clearCache() {
+    clearFiles()
+    clearPlaylists()
+}
+```
+
+Add `addPlaylist()` method for service-side population:
+
+```kotlin
+fun addPlaylist(playlistInfo: PlaylistInfo) {
+    _discoveredPlaylists.add(playlistInfo)
+}
+```
+
+Update `walkTree()` to also collect `.m3u` files:
+
+```kotlin
+private fun walkTree(directory: DocumentFile) {
+    if (_cachedFiles.size >= MAX_CACHE_SIZE) return
+    for (file in directory.listFiles()) {
+        if (file.isDirectory) {
+            walkTree(file)
+        } else if (file.isFile) {
+            val name = file.name ?: continue
+            when {
+                name.endsWith(".mp3", ignoreCase = true) && _cachedFiles.size < MAX_CACHE_SIZE -> {
+                    _cachedFiles.add(
+                        MediaFileInfo(
+                            uriString = file.uri.toString(),
+                            displayName = name,
+                            sizeBytes = file.length()
+                        )
+                    )
+                }
+                name.endsWith(".m3u", ignoreCase = true) -> {
+                    _discoveredPlaylists.add(
+                        PlaylistInfo(
+                            uriString = file.uri.toString(),
+                            displayName = name
+                        )
+                    )
+                }
+            }
+        }
+    }
+}
+```
+
+**Why:** The scanner already traverses the SAF tree; collecting `.m3u` files costs negligible overhead. No cap on playlist count (lightweight metadata). Granular clear methods prevent `SET_MEDIA_FILES` from wiping playlist data and vice versa.
+
+---
+
+### Step 4. `shared/.../MyMusicService.kt` — Playlist queue, skip support, browse tree categories
+
+This is the largest change, broken into sub-steps.
+
+#### 4a. New constants and fields
+
+```kotlin
+companion object {
+    private const val ROOT_ID = "root"
+    private const val SONGS_ID = "songs"
+    private const val PLAYLISTS_ID = "playlists"
+    private const val PLAYLIST_PREFIX = "playlist:"
+    private const val ACTION_SET_MEDIA_FILES = "SET_MEDIA_FILES"
+    private const val ACTION_SET_PLAYLISTS = "SET_PLAYLISTS"
+    private const val EXTRA_URIS = "uris"
+    private const val EXTRA_NAMES = "names"
+    private const val EXTRA_SIZES = "sizes"
+    private const val EXTRA_PLAYLIST_URIS = "playlist_uris"
+    private const val EXTRA_PLAYLIST_NAMES = "playlist_names"
+}
+
+// Queue state
+private var playlistQueue: List<MediaFileInfo> = emptyList()
+private var currentQueueIndex: Int = -1
+private var currentPlaylistName: String? = null
+private val playlistService = PlaylistService()
+```
+
+#### 4b. Extract `playTrack(fileInfo: MediaFileInfo)` method
+
+Refactor the MediaPlayer setup code from the current `onPlayFromMediaId` into a reusable private method. The current body of `onPlayFromMediaId` (from `releaseMediaPlayer()` through the try/catch) moves here with one key change: the `setOnCompletionListener` now calls `onTrackCompleted()` instead of directly stopping.
+
+```kotlin
+private fun playTrack(fileInfo: MediaFileInfo) {
+    releaseMediaPlayer()
+    if (!requestAudioFocus()) {
+        updatePlaybackState(PlaybackStateCompat.STATE_ERROR)
+        return
+    }
+    currentFileInfo = fileInfo
+    currentMediaId = fileInfo.uriString
+    try {
+        val uri = Uri.parse(fileInfo.uriString)
+        mediaPlayer = MediaPlayer().apply {
+            setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .build()
+            )
+            setDataSource(this@MyMusicService, uri)
+            setOnPreparedListener {
+                start()
+                updateMetadata(fileInfo)
+                updatePlaybackState(PlaybackStateCompat.STATE_PLAYING)
+            }
+            setOnCompletionListener { onTrackCompleted() }  // KEY CHANGE
+            setOnErrorListener { _, _, _ ->
+                updatePlaybackState(PlaybackStateCompat.STATE_ERROR)
+                releaseMediaPlayer()
+                abandonAudioFocus()
+                true
+            }
+            prepareAsync()
+        }
+    } catch (e: Exception) {
+        updatePlaybackState(PlaybackStateCompat.STATE_ERROR)
+        releaseMediaPlayer()
+        abandonAudioFocus()
+    }
+}
+```
+
+**Why:** Both single-track play and playlist-track play need the same MediaPlayer setup. Extracting avoids duplication.
+
+#### 4c. New `onTrackCompleted()` — auto-advance logic
+
+```kotlin
+private fun onTrackCompleted() {
+    if (playlistQueue.isNotEmpty() && currentQueueIndex < playlistQueue.size - 1) {
+        // Auto-advance to next track in playlist
+        currentQueueIndex++
+        updateSessionQueue()
+        playTrack(playlistQueue[currentQueueIndex])
+    } else {
+        // Single track finished, or end of playlist — stop
+        playlistQueue = emptyList()
+        currentQueueIndex = -1
+        currentPlaylistName = null
+        session.setQueue(null)
+        session.setQueueTitle(null)
+        updatePlaybackState(PlaybackStateCompat.STATE_STOPPED)
+        releaseMediaPlayer()
+        abandonAudioFocus()
+    }
+}
+```
+
+**Why:** Central decision point: if there's a next track in the queue, advance; otherwise stop. Single-track playback has an empty queue, so it falls through to stop.
+
+#### 4d. Modify `onPlayFromMediaId` — route playlists vs. songs
+
+```kotlin
+override fun onPlayFromMediaId(mediaId: String?, extras: Bundle?) {
+    val resolvedMediaId = mediaId ?: return
+
+    if (resolvedMediaId.startsWith(PLAYLIST_PREFIX)) {
+        // --- Playlist playback ---
+        val playlistUriStr = resolvedMediaId.removePrefix(PLAYLIST_PREFIX)
+        val playlistUri = Uri.parse(playlistUriStr)
+        val tracks = playlistService.readPlaylist(this@MyMusicService, playlistUri)
+        if (tracks.isEmpty()) {
+            updatePlaybackState(PlaybackStateCompat.STATE_ERROR)
+            return
+        }
+
+        currentPlaylistName = mediaCacheService.discoveredPlaylists
+            .firstOrNull { it.uriString == playlistUriStr }
+            ?.displayName?.removeSuffix(".m3u") ?: "Playlist"
+
+        playlistQueue = tracks
+        currentQueueIndex = 0
+        updateSessionQueue()
+        playTrack(tracks[0])
+    } else {
+        // --- Single track playback (existing) --- clear any active playlist
+        playlistQueue = emptyList()
+        currentQueueIndex = -1
+        currentPlaylistName = null
+        session.setQueue(null)
+        session.setQueueTitle(null)
+
+        val fileInfo = mediaCacheService.cachedFiles.firstOrNull {
+            it.uriString == resolvedMediaId
+        } ?: run {
+            updatePlaybackState(PlaybackStateCompat.STATE_ERROR)
+            return
+        }
+        playTrack(fileInfo)
+    }
+}
+```
+
+**Key design detail:** Playlist mediaIds are prefixed with `playlist:` to distinguish from song URIs. Android Auto sends `onPlayFromMediaId` when the user taps a playable item in the browse tree, so both Mobile and Auto use the same code path.
+
+#### 4e. Add `onSkipToNext()` and `onSkipToPrevious()` callbacks
+
+```kotlin
+override fun onSkipToNext() {
+    if (playlistQueue.isEmpty() || currentQueueIndex >= playlistQueue.size - 1) return
+    currentQueueIndex++
+    updateSessionQueue()
+    playTrack(playlistQueue[currentQueueIndex])
+}
+
+override fun onSkipToPrevious() {
+    if (playlistQueue.isEmpty() || currentQueueIndex <= 0) return
+    currentQueueIndex--
+    updateSessionQueue()
+    playTrack(playlistQueue[currentQueueIndex])
+}
+```
+
+**Why:** `onSkipToNext` is the core Task 4 requirement. `onSkipToPrevious` is included for completeness — Android Auto shows both buttons when the actions are advertised, and the implementation is trivial.
+
+#### 4f. New `updateSessionQueue()` helper
+
+```kotlin
+private fun updateSessionQueue() {
+    if (playlistQueue.isEmpty()) {
+        session.setQueue(null)
+        session.setQueueTitle(null)
+        return
+    }
+    val queueItems = playlistQueue.mapIndexed { index, track ->
+        val desc = MediaDescriptionCompat.Builder()
+            .setMediaId(track.uriString)
+            .setTitle(track.displayName)
+            .build()
+        MediaSessionCompat.QueueItem(desc, index.toLong())
+    }
+    session.setQueue(queueItems)
+    session.setQueueTitle(currentPlaylistName)
+}
+```
+
+**Why:** Sets the MediaSession queue so Android Auto displays the track list and allows queue navigation. The active item is communicated via `playbackStateBuilder.setActiveQueueItemId()` in `updatePlaybackState()`.
+
+#### 4g. Update `updatePlaybackState()` — skip actions + active queue item
+
+```kotlin
+private fun updatePlaybackState(state: Int) {
+    val position = mediaPlayer?.currentPosition?.toLong() ?: 0L
+    val speed = if (state == PlaybackStateCompat.STATE_PLAYING) 1f else 0f
+
+    val hasQueue = playlistQueue.isNotEmpty()
+    val canSkipNext = hasQueue && currentQueueIndex < playlistQueue.size - 1
+    val canSkipPrev = hasQueue && currentQueueIndex > 0
+
+    val actions = when (state) {
+        PlaybackStateCompat.STATE_PLAYING -> {
+            var a = PlaybackStateCompat.ACTION_PAUSE or PlaybackStateCompat.ACTION_STOP
+            if (canSkipNext) a = a or PlaybackStateCompat.ACTION_SKIP_TO_NEXT
+            if (canSkipPrev) a = a or PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS
+            a
+        }
+        PlaybackStateCompat.STATE_PAUSED -> {
+            var a = PlaybackStateCompat.ACTION_PLAY or PlaybackStateCompat.ACTION_STOP
+            if (canSkipNext) a = a or PlaybackStateCompat.ACTION_SKIP_TO_NEXT
+            if (canSkipPrev) a = a or PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS
+            a
+        }
+        else -> {
+            PlaybackStateCompat.ACTION_PLAY or PlaybackStateCompat.ACTION_PLAY_FROM_MEDIA_ID
+        }
+    }
+
+    playbackStateBuilder
+        .setActions(actions)
+        .setState(state, position, speed, SystemClock.elapsedRealtime())
+
+    if (hasQueue) {
+        playbackStateBuilder.setActiveQueueItemId(currentQueueIndex.toLong())
+    } else {
+        playbackStateBuilder.setActiveQueueItemId(
+            MediaSessionCompat.QueueItem.UNKNOWN_ID.toLong()
+        )
+    }
+    session.setPlaybackState(playbackStateBuilder.build())
+}
+```
+
+**Why:** Advertises `ACTION_SKIP_TO_NEXT` / `ACTION_SKIP_TO_PREVIOUS` only when a playlist queue is active and there are tracks to skip to. Android Auto shows/hides skip buttons based on these actions. The `activeQueueItemId` highlights the current track in the queue display.
+
+#### 4h. Restructure `onLoadChildren()` — "Songs" + "Playlists" categories
+
+```kotlin
+override fun onLoadChildren(parentId: String, result: Result<MutableList<MediaItem>>) {
+    when (parentId) {
+        ROOT_ID -> {
+            val items = mutableListOf<MediaItem>()
+
+            val songsDesc = MediaDescriptionCompat.Builder()
+                .setMediaId(SONGS_ID)
+                .setTitle("Songs")
+                .build()
+            items.add(MediaItem(songsDesc, MediaItem.FLAG_BROWSABLE))
+
+            if (mediaCacheService.discoveredPlaylists.isNotEmpty()) {
+                val playlistsDesc = MediaDescriptionCompat.Builder()
+                    .setMediaId(PLAYLISTS_ID)
+                    .setTitle("Playlists")
+                    .build()
+                items.add(MediaItem(playlistsDesc, MediaItem.FLAG_BROWSABLE))
+            }
+
+            result.sendResult(items)
+        }
+        SONGS_ID -> {
+            val items = mediaCacheService.cachedFiles.map { fileInfo ->
+                val description = MediaDescriptionCompat.Builder()
+                    .setMediaId(fileInfo.uriString)
+                    .setTitle(fileInfo.displayName)
+                    .build()
+                MediaItem(description, MediaItem.FLAG_PLAYABLE)
+            }.toMutableList()
+            result.sendResult(items)
+        }
+        PLAYLISTS_ID -> {
+            val items = mediaCacheService.discoveredPlaylists.map { playlist ->
+                val description = MediaDescriptionCompat.Builder()
+                    .setMediaId(PLAYLIST_PREFIX + playlist.uriString)
+                    .setTitle(playlist.displayName.removeSuffix(".m3u"))
+                    .build()
+                MediaItem(description, MediaItem.FLAG_PLAYABLE)
+            }.toMutableList()
+            result.sendResult(items)
+        }
+        else -> result.sendResult(ArrayList())
+    }
+}
+```
+
+**Why:** Android Auto users need to browse into "Songs" or "Playlists". Each playlist is `FLAG_PLAYABLE` — tapping it triggers `onPlayFromMediaId("playlist:uri")`. The "Playlists" category only appears when playlists have been discovered.
+
+#### 4i. Add `SET_PLAYLISTS` custom action handler
+
+Expand existing `onCustomAction`:
+
+```kotlin
+override fun onCustomAction(action: String?, extras: Bundle?) {
+    when (action) {
+        ACTION_SET_MEDIA_FILES -> {
+            if (extras == null) return
+            val uris = extras.getStringArrayList(EXTRA_URIS) ?: return
+            val names = extras.getStringArrayList(EXTRA_NAMES) ?: return
+            val sizes = extras.getLongArray(EXTRA_SIZES) ?: return
+
+            mediaCacheService.clearFiles()   // WAS: clearCache()
+            val count = minOf(uris.size, names.size, sizes.size)
+            for (i in 0 until count) {
+                mediaCacheService.addFile(
+                    MediaFileInfo(
+                        uriString = uris[i],
+                        displayName = names[i],
+                        sizeBytes = sizes[i]
+                    )
+                )
+            }
+            notifyChildrenChanged(ROOT_ID)
+            notifyChildrenChanged(SONGS_ID)
+        }
+        ACTION_SET_PLAYLISTS -> {
+            if (extras == null) return
+            val playlistUris = extras.getStringArrayList(EXTRA_PLAYLIST_URIS) ?: return
+            val playlistNames = extras.getStringArrayList(EXTRA_PLAYLIST_NAMES) ?: return
+
+            mediaCacheService.clearPlaylists()
+            val count = minOf(playlistUris.size, playlistNames.size)
+            for (i in 0 until count) {
+                mediaCacheService.addPlaylist(
+                    PlaylistInfo(
+                        uriString = playlistUris[i],
+                        displayName = playlistNames[i]
+                    )
+                )
+            }
+            notifyChildrenChanged(ROOT_ID)
+            notifyChildrenChanged(PLAYLISTS_ID)
+        }
+    }
+}
+```
+
+**Important fix:** The existing `SET_MEDIA_FILES` handler changes from `mediaCacheService.clearCache()` to `mediaCacheService.clearFiles()` so it doesn't wipe playlist data. The two custom actions arrive independently.
+
+#### 4j. Update `handleStop()` — clear playlist queue
+
+```kotlin
+private fun handleStop() {
+    releaseMediaPlayer()
+    abandonAudioFocus()
+    playlistQueue = emptyList()
+    currentQueueIndex = -1
+    currentPlaylistName = null
+    session.setQueue(null)
+    session.setQueueTitle(null)
+    updatePlaybackState(PlaybackStateCompat.STATE_STOPPED)
+}
+```
+
+**Why:** Stopping clears the playlist queue so the user returns to a clean state.
+
+---
+
+### Step 5. `mobile/.../MainViewModel.kt` — Playlist UI state
+
+**What changes:**
+
+Expand `MainUiState`:
+
+```kotlin
+data class MainUiState(
+    val isScanning: Boolean = false,
+    val scannedFiles: List<MediaFileInfo> = emptyList(),
+    val discoveredPlaylists: List<PlaylistInfo> = emptyList(),
+    val isPlaying: Boolean = false,
+    val isPaused: Boolean = false,
+    val currentTrackName: String? = null,
+    val currentMediaId: String? = null,
+    val playlistMessage: String? = null,
+    val isPlayingPlaylist: Boolean = false,
+    val queuePosition: String? = null
+)
+```
+
+Update `onDirectorySelected()` to include playlists:
+
+```kotlin
+fun onDirectorySelected(treeUri: Uri) {
+    viewModelScope.launch(Dispatchers.IO) {
+        _uiState.value = _uiState.value.copy(
+            isScanning = true,
+            scannedFiles = emptyList(),
+            discoveredPlaylists = emptyList()
+        )
+        mediaCacheService.scanDirectory(getApplication(), treeUri)
+        _uiState.value = _uiState.value.copy(
+            isScanning = false,
+            scannedFiles = mediaCacheService.cachedFiles,
+            discoveredPlaylists = mediaCacheService.discoveredPlaylists
+        )
+    }
+}
+```
+
+Add method to receive queue state from controller callback:
+
+```kotlin
+fun updateQueueState(queueTitle: String?, queueSize: Int, activeIndex: Int) {
+    _uiState.value = _uiState.value.copy(
+        isPlayingPlaylist = queueTitle != null,
+        queuePosition = if (queueTitle != null && queueSize > 0) {
+            "${activeIndex + 1}/$queueSize"
+        } else null
+    )
+}
+```
+
+**Why:** `discoveredPlaylists` feeds the playlist section in the Compose UI. `isPlayingPlaylist` + `queuePosition` drive the "Next" button visibility and track position display in the PlaybackBar.
+
+---
+
+### Step 6. `mobile/.../MainScreen.kt` — Playlist section + Next button
+
+**What changes:**
+
+Update `MainScreen` signature — add `onNext` and `onPlaylistClick` callbacks:
+
+```kotlin
+fun MainScreen(
+    uiState: MainUiState,
+    onSelectFolder: () -> Unit,
+    onFileClick: (MediaFileInfo) -> Unit,
+    onPlayPause: () -> Unit,
+    onStop: () -> Unit,
+    onNext: () -> Unit,
+    onCreatePlaylist: () -> Unit,
+    onPlaylistMessageDismissed: () -> Unit,
+    onPlaylistClick: (PlaylistInfo) -> Unit
+)
+```
+
+Add playlists section in the content Column (between file count and LazyColumn):
+
+```kotlin
+if (uiState.discoveredPlaylists.isNotEmpty()) {
+    Text(
+        text = "${uiState.discoveredPlaylists.size} playlist(s) found",
+        style = MaterialTheme.typography.titleMedium
+    )
+    Spacer(modifier = Modifier.height(4.dp))
+    uiState.discoveredPlaylists.forEach { playlist ->
+        PlaylistCard(
+            playlist = playlist,
+            onClick = { onPlaylistClick(playlist) }
+        )
+    }
+    Spacer(modifier = Modifier.height(12.dp))
+}
+```
+
+New `PlaylistCard` composable (visually distinct from `FileCard` via `secondaryContainer` color):
+
+```kotlin
+@Composable
+fun PlaylistCard(playlist: PlaylistInfo, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+            .clickable { onClick() },
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer
+        )
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = playlist.displayName.removeSuffix(".m3u"),
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = "Playlist",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSecondaryContainer
+            )
+        }
+    }
+}
+```
+
+Update `PlaybackBar` — add `onNext` callback, queue position, and "Next" button:
+
+```kotlin
+@Composable
+fun PlaybackBar(
+    trackName: String,
+    isPlaying: Boolean,
+    isPlayingPlaylist: Boolean,
+    queuePosition: String?,
+    onPlayPause: () -> Unit,
+    onStop: () -> Unit,
+    onNext: () -> Unit
+) {
+    Surface(tonalElevation = 3.dp, modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = trackName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (queuePosition != null) {
+                    Text(
+                        text = "Track $queuePosition",
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
+            }
+            TextButton(onClick = onPlayPause) {
+                Text(if (isPlaying) "Pause" else "Play")
+            }
+            if (isPlayingPlaylist) {
+                TextButton(onClick = onNext) {
+                    Text("Next")
+                }
+            }
+            TextButton(onClick = onStop) {
+                Text("Stop")
+            }
+        }
+    }
+}
+```
+
+Update the `bottomBar` lambda in `Scaffold` to pass the new parameters.
+
+**Why:** Playlists are visually separated from songs (different card color + "Playlist" label). The "Next" button only appears during playlist playback. Track position (e.g., "Track 2/5") provides context.
+
+---
+
+### Step 7. `mobile/.../MainActivity.kt` — Wire playlist callbacks + queue state
+
+**What changes:**
+
+Add a field to track last-sent playlist URIs:
+
+```kotlin
+private var lastSentPlaylistUris: List<String>? = null
+```
+
+Update controller callback — add queue change handlers:
+
+```kotlin
+private val controllerCallback = object : MediaControllerCompat.Callback() {
+    override fun onPlaybackStateChanged(state: PlaybackStateCompat?) {
+        lastPlaybackState = state
+        pushPlaybackState()
+        pushQueueState()
+    }
+    override fun onMetadataChanged(metadata: MediaMetadataCompat?) {
+        lastMetadata = metadata
+        pushPlaybackState()
+    }
+    override fun onQueueChanged(queue: MutableList<MediaSessionCompat.QueueItem>?) {
+        pushQueueState()
+    }
+    override fun onQueueTitleChanged(title: CharSequence?) {
+        pushQueueState()
+    }
+}
+```
+
+New `pushQueueState()` method:
+
+```kotlin
+private fun pushQueueState() {
+    val controller = mediaController ?: return
+    val queueTitle = controller.queueTitle?.toString()
+    val queueSize = controller.queue?.size ?: 0
+    val activeIndex = lastPlaybackState?.activeQueueItemId?.toInt() ?: -1
+    viewModel.updateQueueState(queueTitle, queueSize, activeIndex)
+}
+```
+
+Extend the `lifecycleScope.launch` collector to also send playlists:
+
+```kotlin
+lifecycleScope.launch {
+    viewModel.uiState.collect { state ->
+        if (state.scannedFiles.isNotEmpty()) {
+            sendFilesToServiceIfNeeded(state.scannedFiles)
+        }
+        if (state.discoveredPlaylists.isNotEmpty()) {
+            sendPlaylistsToServiceIfNeeded(state.discoveredPlaylists)
+        }
+    }
+}
+```
+
+New `sendPlaylistsToServiceIfNeeded()`:
+
+```kotlin
+private fun sendPlaylistsToServiceIfNeeded(playlists: List<PlaylistInfo>) {
+    val controller = mediaController ?: return
+    val uris = playlists.map { it.uriString }
+    if (uris == lastSentPlaylistUris) return
+    val names = playlists.map { it.displayName }
+    val bundle = Bundle().apply {
+        putStringArrayList("playlist_uris", ArrayList(uris))
+        putStringArrayList("playlist_names", ArrayList(names))
+    }
+    controller.transportControls.sendCustomAction("SET_PLAYLISTS", bundle)
+    lastSentPlaylistUris = uris
+}
+```
+
+Pass new callbacks to `MainScreen`:
+
+```kotlin
+MainScreen(
+    // ... existing callbacks ...
+    onNext = { mediaController?.transportControls?.skipToNext() },
+    onPlaylistClick = { playlist ->
+        sendFilesToServiceIfNeeded(uiState.value.scannedFiles)
+        sendPlaylistsToServiceIfNeeded(uiState.value.discoveredPlaylists)
+        mediaController?.transportControls?.playFromMediaId(
+            "playlist:" + playlist.uriString, null
+        )
+    }
+)
+```
+
+**Why:** `sendPlaylistsToServiceIfNeeded` follows the same deduplication pattern as `sendFilesToServiceIfNeeded`. Queue state changes from the controller callback flow through to the ViewModel for Compose observation. The `onPlaylistClick` ensures files and playlists are synced to the service before requesting playback.
+
+---
+
+## Architecture Diagram (after Task 4)
+
+```
++-------------------------------------------------------------------+
+|  mobile module                                                     |
+|                                                                    |
+|  MainActivity (ComponentActivity)                                  |
+|    +-- MediaBrowserCompat -> MyMusicService                        |
+|    +-- MediaControllerCompat -> transport controls                 |
+|    +-- Controller callback:                                        |
+|    |     onPlaybackStateChanged -> pushPlaybackState + pushQueue   |
+|    |     onMetadataChanged -> pushPlaybackState                    |
+|    |     onQueueChanged / onQueueTitleChanged -> pushQueueState    |
+|    +-- sendFilesToServiceIfNeeded() via SET_MEDIA_FILES            |
+|    +-- sendPlaylistsToServiceIfNeeded() via SET_PLAYLISTS          |
+|                                                                    |
+|  MainViewModel (AndroidViewModel)                                  |
+|    +-- mediaCacheService -> scanDirectory (mp3 + m3u)              |
+|    +-- uiState: StateFlow<MainUiState>                             |
+|    |     scannedFiles, discoveredPlaylists,                        |
+|    |     isPlaying, isPaused, currentTrackName,                    |
+|    |     isPlayingPlaylist, queuePosition                          |
+|    +-- onDirectorySelected(uri)                                    |
+|    +-- updatePlaybackState(state, mediaId, trackName)              |
+|    +-- updateQueueState(queueTitle, queueSize, activeIndex)        |
+|    +-- createRandomPlaylist()                                      |
+|                                                                    |
+|  MainScreen (Composable)                                           |
+|    +-- Scaffold + TopAppBar                                        |
+|    +-- "Select Folder" + "Create Playlist" buttons                 |
+|    +-- Discovered playlists: PlaylistCard (secondaryContainer)     |
+|    +-- LazyColumn of tappable FileCards (highlight current)        |
+|    +-- PlaybackBar: track name, queue position,                    |
+|    |     Play/Pause, Next (playlist only), Stop                    |
+|    +-- SnackbarHost for playlist creation feedback                 |
++-------------------------------------------------------------------+
+|  shared module                                                     |
+|                                                                    |
+|  MyMusicService (MediaBrowserServiceCompat)                        |
+|    +-- MediaPlayer for playback                                    |
+|    +-- playTrack(fileInfo) — reusable MediaPlayer setup            |
+|    +-- Playlist queue: playlistQueue, currentQueueIndex            |
+|    +-- onTrackCompleted() — auto-advance or stop                   |
+|    +-- onPlayFromMediaId() — routes "playlist:..." vs song URI     |
+|    +-- onSkipToNext() / onSkipToPrevious()                         |
+|    +-- updateSessionQueue() — sets session queue for Auto          |
+|    +-- onLoadChildren():                                           |
+|    |     root -> [Songs (browsable), Playlists (browsable)]        |
+|    |     songs -> [track1, track2, ...] (playable)                 |
+|    |     playlists -> [playlist1, playlist2, ...] (playable)       |
+|    +-- SET_MEDIA_FILES custom action (clearFiles only)             |
+|    +-- SET_PLAYLISTS custom action (clearPlaylists only)           |
+|                                                                    |
+|  MediaCacheService                                                 |
+|    +-- scanDirectory() — scans .mp3 + .m3u files                   |
+|    +-- cachedFiles, discoveredPlaylists                            |
+|    +-- clearFiles(), clearPlaylists(), clearCache()                |
+|    +-- addFile(), addPlaylist()                                    |
+|                                                                    |
+|  PlaylistService                                                   |
+|    +-- generateM3uContent() — write M3U (Task 3)                  |
+|    +-- writePlaylist() — save M3U to SAF (Task 3)                 |
+|    +-- readPlaylist() — parse M3U from SAF URI (NEW)              |
+|                                                                    |
+|  PlaylistInfo (data class) — NEW                                   |
+|    +-- uriString: String (content URI of .m3u file)               |
+|    +-- displayName: String (filename)                              |
+|                                                                    |
+|  MediaFileInfo (data class) — unchanged                            |
++-------------------------------------------------------------------+
+```
+
+## Key Design Decisions
+
+| Decision | Rationale |
+|---|---|
+| **`playlist:` prefix on mediaId** | Clean routing in `onPlayFromMediaId` — distinguishes playlist requests from song requests without extra APIs |
+| **Playlist queue in service** | Standard MediaSession queue (`session.setQueue()`) — Android Auto automatically displays queue UI and skip buttons |
+| **`playTrack()` extraction** | Avoids duplicating MediaPlayer setup between single-track and playlist playback code paths |
+| **Auto-advance via `onTrackCompleted()`** | Central decision point — queue present = advance, queue empty = stop. Clean separation of concerns |
+| **`onSkipToPrevious()` included** | Trivial to add alongside `onSkipToNext`; Android Auto expects both when either is advertised |
+| **Granular `clearFiles()` / `clearPlaylists()`** | The two custom actions (`SET_MEDIA_FILES`, `SET_PLAYLISTS`) arrive independently; clearing all data on either would lose the other's state |
+| **Browse tree: root → Songs / Playlists** | Standard Android Auto pattern for media apps with multiple content types; each category is browsable |
+| **`PlaylistInfo` as separate data class** | Playlist metadata (URI + name) is structurally different from track metadata (URI + name + size); avoids confusion |
+| **`readPlaylist()` returns `List<MediaFileInfo>`** | Parsed M3U tracks map directly to MediaFileInfo for playback; `sizeBytes = 0` is acceptable |
+| **No build or manifest changes** | All new code uses existing dependencies (`DocumentFile`, `MediaBrowserServiceCompat`, Compose). No new permissions needed — SAF read grant covers M3U file reading |
+
+## Risks & Mitigations
+
+| Risk | Impact | Mitigation |
+|---|---|---|
+| M3U track URIs invalid (file moved/deleted) | Track fails to play, error state | `setOnErrorListener` catches it; could enhance `onTrackCompleted` to skip errored tracks in future |
+| Large playlists (many tracks) | Queue UI slow on Android Auto | Unlikely in practice (Task 3 creates 3-track playlists); no artificial cap needed |
+| Playlist created in Task 3 not visible until re-scan | Confusing UX | After "Create Playlist", user must re-scan folder to see new playlist. Acceptable for Task 4 scope; could auto-add to `discoveredPlaylists` as enhancement |
+| `readPlaylist()` called on main thread in `onPlayFromMediaId` | ANR risk for large M3U files | M3U files are tiny (3 entries from Task 3); no risk in practice. Could wrap in coroutine if needed later |
+| `SET_PLAYLISTS` arrives before `SET_MEDIA_FILES` | Playlists visible but songs not yet browsable | Both are sent in same `collect` block; timing is close. Browse tree handles empty songs gracefully |
+
+## Verification Steps
+
+1. **Build**: `./gradlew :shared:build && ./gradlew :mobile:build`
+2. **Discover playlists**: Deploy, scan folder containing `.mp3` files and previously created `.m3u` playlists. Verify playlists appear in a separate section with distinct styling.
+3. **Play playlist**: Tap a playlist card. First track starts playing. PlaybackBar shows track name, "Track 1/3", and "Next" button.
+4. **Auto-advance**: Let first track finish. Second track starts automatically. PlaybackBar updates to "Track 2/3".
+5. **Next**: Tap "Next" button. Skips to next track. Position updates.
+6. **End of playlist**: Let last track finish (or skip to last then let it finish). Playback stops, PlaybackBar disappears, queue clears.
+7. **Pause/Resume during playlist**: Tap Pause — pauses. Tap Play — resumes same track at same position. Queue position unchanged.
+8. **Stop during playlist**: Tap Stop — stops, bar disappears, queue clears. Tapping playlist again starts from track 1.
+9. **Single track still works**: Tap an individual song file. Plays without "Next" button or queue position. No auto-advance.
+10. **Create then play**: Tap "Create Playlist", re-scan folder, new playlist appears, tap to play it.
+11. **Android Auto** (if available): Browse tree shows "Songs" and "Playlists" categories. Navigate to Playlists, tap one — plays with queue. Skip forward/back buttons appear on playback screen.

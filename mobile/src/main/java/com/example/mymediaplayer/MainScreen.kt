@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.mymediaplayer.shared.MediaFileInfo
+import com.example.mymediaplayer.shared.PlaylistInfo
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -41,8 +42,10 @@ fun MainScreen(
     onFileClick: (MediaFileInfo) -> Unit,
     onPlayPause: () -> Unit,
     onStop: () -> Unit,
+    onNext: () -> Unit,
     onCreatePlaylist: () -> Unit,
-    onPlaylistMessageDismissed: () -> Unit
+    onPlaylistMessageDismissed: () -> Unit,
+    onPlaylistClick: (PlaylistInfo) -> Unit
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -61,8 +64,11 @@ fun MainScreen(
                 PlaybackBar(
                     trackName = uiState.currentTrackName,
                     isPlaying = uiState.isPlaying,
+                    isPlayingPlaylist = uiState.isPlayingPlaylist,
+                    queuePosition = uiState.queuePosition,
                     onPlayPause = onPlayPause,
-                    onStop = onStop
+                    onStop = onStop,
+                    onNext = onNext
                 )
             }
         },
@@ -101,6 +107,21 @@ fun MainScreen(
                 )
             }
 
+            if (uiState.discoveredPlaylists.isNotEmpty()) {
+                Text(
+                    text = "${uiState.discoveredPlaylists.size} playlist(s) found",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                uiState.discoveredPlaylists.forEach { playlist ->
+                    PlaylistCard(
+                        playlist = playlist,
+                        onClick = { onPlaylistClick(playlist) }
+                    )
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
             if (uiState.scannedFiles.isNotEmpty()) {
                 Text(
                     text = "${uiState.scannedFiles.size} file(s) found",
@@ -125,8 +146,11 @@ fun MainScreen(
 fun PlaybackBar(
     trackName: String,
     isPlaying: Boolean,
+    isPlayingPlaylist: Boolean,
+    queuePosition: String?,
     onPlayPause: () -> Unit,
-    onStop: () -> Unit
+    onStop: () -> Unit,
+    onNext: () -> Unit
 ) {
     Surface(tonalElevation = 3.dp, modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -135,19 +159,60 @@ fun PlaybackBar(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = trackName,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.weight(1f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = trackName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (queuePosition != null) {
+                    Text(
+                        text = "Track $queuePosition",
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
+            }
             TextButton(onClick = onPlayPause) {
                 Text(if (isPlaying) "Pause" else "Play")
+            }
+            if (isPlayingPlaylist) {
+                TextButton(onClick = onNext) {
+                    Text("Next")
+                }
             }
             TextButton(onClick = onStop) {
                 Text("Stop")
             }
+        }
+    }
+}
+
+@Composable
+fun PlaylistCard(playlist: PlaylistInfo, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+            .clickable { onClick() },
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer
+        )
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = playlist.displayName.removeSuffix(".m3u"),
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = "Playlist",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSecondaryContainer
+            )
         }
     }
 }

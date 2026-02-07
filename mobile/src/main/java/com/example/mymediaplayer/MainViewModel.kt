@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.mymediaplayer.shared.MediaCacheService
 import com.example.mymediaplayer.shared.MediaFileInfo
+import com.example.mymediaplayer.shared.PlaylistInfo
 import com.example.mymediaplayer.shared.PlaylistService
 import android.support.v4.media.session.PlaybackStateCompat
 import kotlinx.coroutines.Dispatchers
@@ -16,11 +17,14 @@ import kotlinx.coroutines.launch
 data class MainUiState(
     val isScanning: Boolean = false,
     val scannedFiles: List<MediaFileInfo> = emptyList(),
+    val discoveredPlaylists: List<PlaylistInfo> = emptyList(),
     val isPlaying: Boolean = false,
     val isPaused: Boolean = false,
     val currentTrackName: String? = null,
     val currentMediaId: String? = null,
-    val playlistMessage: String? = null
+    val playlistMessage: String? = null,
+    val isPlayingPlaylist: Boolean = false,
+    val queuePosition: String? = null
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -36,12 +40,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch(Dispatchers.IO) {
             _uiState.value = _uiState.value.copy(
                 isScanning = true,
-                scannedFiles = emptyList()
+                scannedFiles = emptyList(),
+                discoveredPlaylists = emptyList()
             )
             mediaCacheService.scanDirectory(getApplication(), treeUri)
             _uiState.value = _uiState.value.copy(
                 isScanning = false,
-                scannedFiles = mediaCacheService.cachedFiles
+                scannedFiles = mediaCacheService.cachedFiles,
+                discoveredPlaylists = mediaCacheService.discoveredPlaylists
             )
         }
     }
@@ -78,6 +84,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             isPaused = (state == PlaybackStateCompat.STATE_PAUSED),
             currentTrackName = if (state == PlaybackStateCompat.STATE_STOPPED) null else trackName,
             currentMediaId = if (state == PlaybackStateCompat.STATE_STOPPED) null else mediaId
+        )
+    }
+
+    fun updateQueueState(queueTitle: String?, queueSize: Int, activeIndex: Int) {
+        _uiState.value = _uiState.value.copy(
+            isPlayingPlaylist = queueTitle != null,
+            queuePosition = if (queueTitle != null && queueSize > 0 && activeIndex >= 0) {
+                "${activeIndex + 1}/$queueSize"
+            } else {
+                null
+            }
         )
     }
 }
