@@ -13,6 +13,9 @@
 - Task 5 - search option
 - Task 6 - manual playlist creation - create, name, ability to add to playlist from any list/song view.
 - Task 7 - playlist deletion
+
+- Task 8 - an autopopulated recently added playlist
+- Task 9 - is there a number of plays meta data item?
 ---
 
 # Task 1: Directory Scanner with Compose UI

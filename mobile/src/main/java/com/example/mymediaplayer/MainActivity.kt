@@ -172,6 +172,8 @@ class MainActivity : ComponentActivity() {
                     onSearchQueryChanged = { viewModel.updateSearchQuery(it) },
                     onClearCategorySelection = { viewModel.clearCategorySelection() },
                     onPlaylistSelected = { viewModel.selectPlaylist(it) },
+                    onClearPlaylistSelection = { viewModel.clearSelectedPlaylist() },
+                    onDeletePlaylist = { playlist -> viewModel.deletePlaylist(playlist) },
                     onPlaySongs = { songs ->
                         if (songs.isNotEmpty()) {
                             sendFilesToServiceIfNeeded(uiState.value.scannedFiles)
@@ -197,6 +199,16 @@ class MainActivity : ComponentActivity() {
                     onShuffleSearchResults = { songs ->
                         playSearchResults(songs, shuffle = true)
                     },
+                    onAddToManualPlaylist = { file ->
+                        viewModel.addToManualPlaylist(file)
+                    },
+                    onAddToExistingPlaylist = { playlist, file ->
+                        viewModel.addSongToExistingPlaylist(playlist, file)
+                    },
+                    onCreateManualPlaylist = { name ->
+                        viewModel.createManualPlaylist(name)
+                    },
+                    onClearManualPlaylist = { viewModel.clearManualPlaylist() },
                     onPlayPlaylist = { playlist ->
                         sendFilesToServiceIfNeeded(uiState.value.scannedFiles)
                         sendPlaylistsToServiceIfNeeded(uiState.value.discoveredPlaylists)

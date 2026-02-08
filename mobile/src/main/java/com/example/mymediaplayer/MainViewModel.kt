@@ -33,6 +33,7 @@ data class MainUiState(
     val isPaused: Boolean = false,
     val searchQuery: String = "",
     val searchResults: List<MediaFileInfo> = emptyList(),
+    val manualPlaylistSongs: List<MediaFileInfo> = emptyList(),
     val currentTrackName: String? = null,
     val currentMediaId: String? = null,
     val playlistMessage: String? = null,
@@ -107,7 +108,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     searchResults = applySearchResults(
                         cached.first,
                         _uiState.value.searchQuery
-                    )
+                    ),
+                    manualPlaylistSongs = emptyList()
                 )
                 metadataKey = null
                 return
@@ -144,7 +146,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         searchResults = applySearchResults(
                             persisted.files,
                             _uiState.value.searchQuery
-                        )
+                        ),
+                        manualPlaylistSongs = emptyList()
                     )
                     metadataKey = null
                     return@launch
@@ -206,7 +209,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 searchResults = applySearchResults(
                     files,
                     _uiState.value.searchQuery
-                )
+                ),
+                manualPlaylistSongs = emptyList()
             )
             metadataKey = null
         }
@@ -303,6 +307,126 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
+    fun addToManualPlaylist(file: MediaFileInfo) {
+        val current = _uiState.value
+        if (current.manualPlaylistSongs.any { it.uriString == file.uriString }) return
+        _uiState.value = current.copy(
+            manualPlaylistSongs = current.manualPlaylistSongs + file
+        )
+    }
+
+    fun clearManualPlaylist() {
+        _uiState.value = _uiState.value.copy(manualPlaylistSongs = emptyList())
+    }
+
+    fun createManualPlaylist(name: String) {
+        val uri = treeUri
+        val current = _uiState.value
+        if (uri == null) {
+            _uiState.value = current.copy(playlistMessage = "Select a folder first.")
+            return
+        }
+        if (current.manualPlaylistSongs.isEmpty()) {
+            _uiState.value = current.copy(playlistMessage = "Add songs first.")
+            return
+        }
+        val result = playlistService.writePlaylistWithName(
+            getApplication(),
+            uri,
+            current.manualPlaylistSongs,
+            name
+        )
+        if (result != null) {
+            val updatedPlaylists = current.discoveredPlaylists + result
+            val key = treeUri?.let { "${it}|${current.lastScanLimit}" }
+            if (key != null) {
+                val cached = scanCache[key]
+                if (cached != null) {
+                    scanCache[key] = cached.first to (cached.second + result)
+                }
+            }
+            mediaCacheService.addPlaylist(result)
+            _uiState.value = current.copy(
+                discoveredPlaylists = updatedPlaylists,
+                playlistMessage = "Created ${result.displayName}",
+                manualPlaylistSongs = emptyList()
+            )
+            treeUri?.let { tree ->
+                val limit = current.lastScanLimit
+                viewModelScope.launch(Dispatchers.IO) {
+                    mediaCacheService.persistCache(getApplication(), tree, limit)
+                }
+            }
+        } else {
+            _uiState.value = current.copy(playlistMessage = "Failed to create playlist")
+        }
+    }
+
+    fun addSongToExistingPlaylist(playlist: PlaylistInfo, file: MediaFileInfo) {
+        val uri = Uri.parse(playlist.uriString)
+        val success = playlistService.appendToPlaylist(getApplication(), uri, listOf(file))
+        val current = _uiState.value
+        if (success) {
+            val updatedSongs = if (current.selectedPlaylist?.uriString == playlist.uriString) {
+                current.playlistSongs + file
+            } else {
+                current.playlistSongs
+            }
+            _uiState.value = current.copy(
+                playlistSongs = updatedSongs,
+                playlistMessage = "Added to ${playlist.displayName.removeSuffix(".m3u")}"
+            )
+        } else {
+            _uiState.value = current.copy(playlistMessage = "Failed to update playlist")
+        }
+    }
+
+    fun deletePlaylist(playlist: PlaylistInfo) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val uri = Uri.parse(playlist.uriString)
+            val success = playlistService.deletePlaylist(
+                getApplication(),
+                uri,
+                playlist.displayName,
+                treeUri
+            )
+            val current = _uiState.value
+            if (success) {
+                val updatedPlaylists = current.discoveredPlaylists.filterNot {
+                    it.uriString == playlist.uriString
+                }
+                val key = treeUri?.let { "${it}|${current.lastScanLimit}" }
+                if (key != null) {
+                    val cached = scanCache[key]
+                    if (cached != null) {
+                        scanCache[key] = cached.first to updatedPlaylists
+                    }
+                }
+                mediaCacheService.removePlaylistByUri(playlist.uriString)
+                _uiState.value = current.copy(
+                    discoveredPlaylists = updatedPlaylists,
+                    selectedPlaylist = if (current.selectedPlaylist?.uriString == playlist.uriString) {
+                        null
+                    } else {
+                        current.selectedPlaylist
+                    },
+                    playlistSongs = if (current.selectedPlaylist?.uriString == playlist.uriString) {
+                        emptyList()
+                    } else {
+                        current.playlistSongs
+                    },
+                    playlistMessage = "Deleted ${playlist.displayName.removeSuffix(".m3u")}"
+                )
+                treeUri?.let { tree ->
+                    val limit = current.lastScanLimit
+                    mediaCacheService.persistCache(getApplication(), tree, limit)
+                }
+            } else {
+                _uiState.value = current.copy(playlistMessage = "Failed to delete playlist")
+            }
+        }
+    }
+
     fun selectPlaylist(playlist: PlaylistInfo) {
         _uiState.value = _uiState.value.copy(
             selectedPlaylist = playlist,
@@ -311,11 +435,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
         viewModelScope.launch(Dispatchers.IO) {
             val songs = playlistService.readPlaylist(getApplication(), Uri.parse(playlist.uriString))
+            val byUri = _uiState.value.scannedFiles.associateBy { it.uriString }
+            val enriched = songs.map { song -> byUri[song.uriString] ?: song }
             _uiState.value = _uiState.value.copy(
-                playlistSongs = songs,
+                playlistSongs = enriched,
                 isPlaylistLoading = false
             )
         }
+    }
+
+    fun clearSelectedPlaylist() {
+        _uiState.value = _uiState.value.copy(
+            selectedPlaylist = null,
+            playlistSongs = emptyList(),
+            isPlaylistLoading = false
+        )
     }
 
     fun createRandomPlaylist(count: Int) {

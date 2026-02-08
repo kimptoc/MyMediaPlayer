@@ -154,6 +154,12 @@ class MediaCacheService {
         }
     }
 
+    fun removePlaylistByUri(uriString: String) {
+        synchronized(cacheLock) {
+            _discoveredPlaylists.removeAll { it.uriString == uriString }
+        }
+    }
+
     private fun walkTree(
         context: Context,
         treeUri: Uri,

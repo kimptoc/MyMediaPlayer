@@ -68,12 +68,18 @@ fun MainScreen(
     onSearchQueryChanged: (String) -> Unit,
     onClearCategorySelection: () -> Unit,
     onPlaylistSelected: (PlaylistInfo) -> Unit,
+    onClearPlaylistSelection: () -> Unit,
+    onDeletePlaylist: (PlaylistInfo) -> Unit,
     onPlaySongs: (List<MediaFileInfo>) -> Unit,
     onShuffleSongs: (List<MediaFileInfo>) -> Unit,
     onPlaySearchResults: (List<MediaFileInfo>) -> Unit,
     onShuffleSearchResults: (List<MediaFileInfo>) -> Unit,
     onPlayPlaylist: (PlaylistInfo) -> Unit,
-    onShufflePlaylistSongs: (List<MediaFileInfo>) -> Unit
+    onShufflePlaylistSongs: (List<MediaFileInfo>) -> Unit,
+    onAddToManualPlaylist: (MediaFileInfo) -> Unit,
+    onAddToExistingPlaylist: (PlaylistInfo, MediaFileInfo) -> Unit,
+    onCreateManualPlaylist: (String) -> Unit,
+    onClearManualPlaylist: () -> Unit
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     var menuExpanded by remember { mutableStateOf(false) }
@@ -81,6 +87,12 @@ fun MainScreen(
     var playlistCountText by remember { mutableStateOf("3") }
     var showScanDialog by remember { mutableStateOf(false) }
     var scanCountText by remember { mutableStateOf(uiState.lastScanLimit.toString()) }
+    var showManualPlaylistDialog by remember { mutableStateOf(false) }
+    var manualPlaylistNameText by remember { mutableStateOf("") }
+    var showAddToPlaylistDialog by remember { mutableStateOf(false) }
+    var pendingAddFile by remember { mutableStateOf<MediaFileInfo?>(null) }
+    var showDeletePlaylistDialog by remember { mutableStateOf(false) }
+    var pendingDeletePlaylist by remember { mutableStateOf<PlaylistInfo?>(null) }
 
     LaunchedEffect(uiState.playlistMessage) {
         val message = uiState.playlistMessage
@@ -203,11 +215,46 @@ fun MainScreen(
                         onNext = onNext,
                         onPrev = onPrev,
                         onFileClick = onFileClick,
+                        onAddToPlaylist = {
+                            pendingAddFile = it
+                            showAddToPlaylistDialog = true
+                        },
                         currentMediaId = uiState.currentMediaId
                     )
                 }
                 Spacer(modifier = Modifier.height(8.dp))
             }
+
+            if (uiState.manualPlaylistSongs.isNotEmpty()) {
+                Surface(
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "New playlist: ${uiState.manualPlaylistSongs.size} song(s)",
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(onClick = { showManualPlaylistDialog = true }) {
+                            Text("Create")
+                        }
+                        TextButton(onClick = onClearManualPlaylist) {
+                            Text("Clear")
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
+            val albumCounts = remember(uiState.scannedFiles) { buildAlbumCounts(uiState.scannedFiles) }
+            val artistCounts = remember(uiState.scannedFiles) { buildArtistCounts(uiState.scannedFiles) }
+            val genreCounts = remember(uiState.scannedFiles) { buildGenreCounts(uiState.scannedFiles) }
+            val decadeCounts = remember(uiState.scannedFiles) { buildDecadeCounts(uiState.scannedFiles) }
 
             val tabs = LibraryTab.values().toList()
             ScrollableTabRow(
@@ -239,6 +286,10 @@ fun MainScreen(
                         onNext = onNext,
                         onPrev = onPrev,
                         onFileClick = onFileClick,
+                        onAddToPlaylist = {
+                            pendingAddFile = it
+                            showAddToPlaylistDialog = true
+                        },
                         currentMediaId = uiState.currentMediaId
                     )
                 }
@@ -253,12 +304,21 @@ fun MainScreen(
                         hasNext = uiState.hasNext,
                         hasPrev = uiState.hasPrev,
                         onPlaylistSelected = onPlaylistSelected,
+                        onClearPlaylistSelection = onClearPlaylistSelection,
+                        onRequestDeletePlaylist = {
+                            pendingDeletePlaylist = it
+                            showDeletePlaylistDialog = true
+                        },
                         onPlayPlaylist = onPlayPlaylist,
                         onShufflePlaylistSongs = onShufflePlaylistSongs,
                         onStop = onStop,
                         onNext = onNext,
                         onPrev = onPrev,
                         onFileClick = onFileClick,
+                        onAddToPlaylist = {
+                            pendingAddFile = it
+                            showAddToPlaylistDialog = true
+                        },
                         currentMediaId = uiState.currentMediaId
                     )
                 }
@@ -266,6 +326,7 @@ fun MainScreen(
                     CategoryTabContent(
                         title = "Albums",
                         categories = uiState.albums,
+                        categoryCounts = albumCounts,
                         isLoading = uiState.isMetadataLoading,
                         selectedLabel = uiState.selectedAlbum,
                         onCategorySelected = onAlbumSelected,
@@ -281,6 +342,10 @@ fun MainScreen(
                         onNext = onNext,
                         onPrev = onPrev,
                         onFileClick = onFileClick,
+                        onAddToPlaylist = {
+                            pendingAddFile = it
+                            showAddToPlaylistDialog = true
+                        },
                         currentMediaId = uiState.currentMediaId
                     )
                 }
@@ -288,11 +353,12 @@ fun MainScreen(
                     CategoryTabContent(
                         title = "Genres",
                         categories = uiState.genres,
+                        categoryCounts = genreCounts,
                         isLoading = uiState.isMetadataLoading,
                         selectedLabel = uiState.selectedGenre,
                         onCategorySelected = onGenreSelected,
                         onClearCategorySelection = onClearCategorySelection,
-                        enableAlphaIndex = true,
+                        enableAlphaIndex = false,
                         songs = uiState.filteredSongs,
                         isPlaying = uiState.isPlaying || uiState.isPlayingPlaylist,
                         isPlayingPlaylist = uiState.isPlayingPlaylist,
@@ -304,6 +370,10 @@ fun MainScreen(
                         onNext = onNext,
                         onPrev = onPrev,
                         onFileClick = onFileClick,
+                        onAddToPlaylist = {
+                            pendingAddFile = it
+                            showAddToPlaylistDialog = true
+                        },
                         currentMediaId = uiState.currentMediaId
                     )
                 }
@@ -311,6 +381,7 @@ fun MainScreen(
                     CategoryTabContent(
                         title = "Artists",
                         categories = uiState.artists,
+                        categoryCounts = artistCounts,
                         isLoading = uiState.isMetadataLoading,
                         selectedLabel = uiState.selectedArtist,
                         onCategorySelected = onArtistSelected,
@@ -327,6 +398,10 @@ fun MainScreen(
                         onNext = onNext,
                         onPrev = onPrev,
                         onFileClick = onFileClick,
+                        onAddToPlaylist = {
+                            pendingAddFile = it
+                            showAddToPlaylistDialog = true
+                        },
                         currentMediaId = uiState.currentMediaId
                     )
                 }
@@ -334,6 +409,7 @@ fun MainScreen(
                     CategoryTabContent(
                         title = "Decades",
                         categories = uiState.decades,
+                        categoryCounts = decadeCounts,
                         isLoading = uiState.isMetadataLoading,
                         selectedLabel = uiState.selectedDecade,
                         onCategorySelected = onDecadeSelected,
@@ -349,6 +425,10 @@ fun MainScreen(
                         onNext = onNext,
                         onPrev = onPrev,
                         onFileClick = onFileClick,
+                        onAddToPlaylist = {
+                            pendingAddFile = it
+                            showAddToPlaylistDialog = true
+                        },
                         currentMediaId = uiState.currentMediaId
                     )
                 }
@@ -467,12 +547,125 @@ fun MainScreen(
             }
         )
     }
+
+    if (showManualPlaylistDialog) {
+        val nameTrimmed = manualPlaylistNameText.trim()
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showManualPlaylistDialog = false },
+            title = { Text("New playlist") },
+            text = {
+                Column {
+                    Text("New playlist name")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextField(
+                        value = manualPlaylistNameText,
+                        onValueChange = { manualPlaylistNameText = it },
+                        singleLine = true,
+                        placeholder = { Text("e.g. Road Trip") }
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (nameTrimmed.isNotEmpty()) {
+                            showManualPlaylistDialog = false
+                            onCreateManualPlaylist(nameTrimmed)
+                            manualPlaylistNameText = ""
+                        }
+                    },
+                    enabled = nameTrimmed.isNotEmpty()
+                ) {
+                    Text("Create")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showManualPlaylistDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showAddToPlaylistDialog) {
+        val file = pendingAddFile
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showAddToPlaylistDialog = false },
+            title = { Text("Add to playlist") },
+            text = {
+                Column {
+                    Text("Choose a playlist for ${file?.title ?: file?.displayName ?: "this song"}")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextButton(
+                        onClick = {
+                            if (file != null) onAddToManualPlaylist(file)
+                            showAddToPlaylistDialog = false
+                        }
+                    ) {
+                        Text("New playlist")
+                    }
+                    if (uiState.discoveredPlaylists.isEmpty()) {
+                        Text(
+                            text = "No existing playlists",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    } else {
+                        uiState.discoveredPlaylists.forEach { playlist ->
+                            TextButton(
+                                onClick = {
+                                    if (file != null) onAddToExistingPlaylist(playlist, file)
+                                    showAddToPlaylistDialog = false
+                                }
+                            ) {
+                                Text(playlist.displayName.removeSuffix(".m3u"))
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showAddToPlaylistDialog = false }) {
+                    Text("Close")
+                }
+            }
+        )
+    }
+
+    if (showDeletePlaylistDialog) {
+        val target = pendingDeletePlaylist
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showDeletePlaylistDialog = false },
+            title = { Text("Delete playlist") },
+            text = {
+                Text(
+                    "Delete ${target?.displayName?.removeSuffix(".m3u") ?: "this playlist"}?"
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (target != null) onDeletePlaylist(target)
+                        showDeletePlaylistDialog = false
+                    }
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeletePlaylistDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 }
 
 @Composable
 private fun CategoryTabContent(
     title: String,
     categories: List<String>,
+    categoryCounts: Map<String, Int>,
     isLoading: Boolean,
     selectedLabel: String?,
     onCategorySelected: (String) -> Unit,
@@ -489,6 +682,7 @@ private fun CategoryTabContent(
     onNext: () -> Unit,
     onPrev: () -> Unit,
     onFileClick: (MediaFileInfo) -> Unit,
+    onAddToPlaylist: (MediaFileInfo) -> Unit,
     currentMediaId: String?
 ) {
     if (isLoading) {
@@ -556,8 +750,11 @@ private fun CategoryTabContent(
                     }
                 }
                 items(visibleCategories) { category ->
+                    val displayTitle = categoryCounts[category]?.let { count ->
+                        "$category ($count)"
+                    } ?: category
                     CategoryCard(
-                        title = category,
+                        title = displayTitle,
                         isSelected = category == selectedLabel,
                         isCompact = selectedLabel != null,
                         onClick = { onCategorySelected(category) }
@@ -604,7 +801,8 @@ private fun CategoryTabContent(
                                 FileCard(
                                     file = file,
                                     isCurrentTrack = file.uriString == currentMediaId,
-                                    onClick = { onFileClick(file) }
+                                    onClick = { onFileClick(file) },
+                                    onAddToPlaylist = { onAddToPlaylist(file) }
                                 )
                             }
                         }
@@ -615,6 +813,32 @@ private fun CategoryTabContent(
             }
         }
     }
+}
+
+private fun buildAlbumCounts(files: List<MediaFileInfo>): Map<String, Int> =
+    files.groupingBy { file ->
+        file.album?.ifBlank { null } ?: "Unknown Album"
+    }.eachCount()
+
+private fun buildArtistCounts(files: List<MediaFileInfo>): Map<String, Int> =
+    files.groupingBy { file ->
+        file.artist?.ifBlank { null } ?: "Unknown Artist"
+    }.eachCount()
+
+private fun buildGenreCounts(files: List<MediaFileInfo>): Map<String, Int> =
+    files.groupingBy { file ->
+        file.genre?.ifBlank { null } ?: "Other"
+    }.eachCount()
+
+private fun buildDecadeCounts(files: List<MediaFileInfo>): Map<String, Int> =
+    files.groupingBy { file ->
+        decadeLabelForYear(file.year)
+    }.eachCount()
+
+private fun decadeLabelForYear(year: Int?): String {
+    if (year == null || year <= 0) return "Unknown Decade"
+    val decade = (year / 10) * 10
+    return "${decade}s"
 }
 
 @Composable
@@ -631,6 +855,7 @@ private fun SongsListSection(
     onNext: () -> Unit,
     onPrev: () -> Unit,
     onFileClick: (MediaFileInfo) -> Unit,
+    onAddToPlaylist: (MediaFileInfo) -> Unit,
     currentMediaId: String?
 ) {
     if (songs.isEmpty()) {
@@ -660,7 +885,8 @@ private fun SongsListSection(
             FileCard(
                 file = file,
                 isCurrentTrack = file.uriString == currentMediaId,
-                onClick = { onFileClick(file) }
+                onClick = { onFileClick(file) },
+                onAddToPlaylist = { onAddToPlaylist(file) }
             )
         }
     }
@@ -677,12 +903,15 @@ private fun PlaylistsSection(
     hasNext: Boolean,
     hasPrev: Boolean,
     onPlaylistSelected: (PlaylistInfo) -> Unit,
+    onClearPlaylistSelection: () -> Unit,
+    onRequestDeletePlaylist: (PlaylistInfo) -> Unit,
     onPlayPlaylist: (PlaylistInfo) -> Unit,
     onShufflePlaylistSongs: (List<MediaFileInfo>) -> Unit,
     onStop: () -> Unit,
     onNext: () -> Unit,
     onPrev: () -> Unit,
     onFileClick: (MediaFileInfo) -> Unit,
+    onAddToPlaylist: (MediaFileInfo) -> Unit,
     currentMediaId: String?
 ) {
     if (playlists.isEmpty()) {
@@ -695,9 +924,16 @@ private fun PlaylistsSection(
         modifier = Modifier.fillMaxWidth()
     ) {
         LazyColumn(modifier = Modifier.padding(8.dp)) {
-            items(playlists) { playlist ->
+            val visiblePlaylists = if (selectedPlaylist == null) {
+                playlists
+            } else {
+                playlists.filter { it.uriString == selectedPlaylist.uriString }
+            }
+            items(visiblePlaylists) { playlist ->
                 PlaylistCard(
                     playlist = playlist,
+                    isCompact = selectedPlaylist != null,
+                    onDelete = { onRequestDeletePlaylist(playlist) },
                     onClick = { onPlaylistSelected(playlist) }
                 )
             }
@@ -715,6 +951,11 @@ private fun PlaylistsSection(
                 Text("Select a playlist to view songs")
                 return@Column
             }
+
+            TextButton(onClick = onClearPlaylistSelection) {
+                Text("Back to all playlists")
+            }
+            Spacer(modifier = Modifier.height(4.dp))
 
             Text(
                 text = selectedPlaylist.displayName.removeSuffix(".m3u"),
@@ -749,7 +990,8 @@ private fun PlaylistsSection(
                         FileCard(
                             file = file,
                             isCurrentTrack = file.uriString == currentMediaId,
-                            onClick = { onFileClick(file) }
+                            onClick = { onFileClick(file) },
+                            onAddToPlaylist = { onAddToPlaylist(file) }
                         )
                     }
                 }
@@ -894,36 +1136,48 @@ fun PlaybackBar(
 }
 
 @Composable
-fun PlaylistCard(playlist: PlaylistInfo, onClick: () -> Unit) {
+fun PlaylistCard(
+    playlist: PlaylistInfo,
+    isCompact: Boolean = false,
+    onDelete: () -> Unit,
+    onClick: () -> Unit
+) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp)
+            .padding(vertical = if (isCompact) 2.dp else 4.dp)
             .clickable { onClick() },
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.secondaryContainer
         )
     ) {
         Row(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.padding(if (isCompact) 8.dp else 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = playlist.displayName.removeSuffix(".m3u"),
-                style = MaterialTheme.typography.bodyLarge,
+                style = if (isCompact) {
+                    MaterialTheme.typography.bodyMedium
+                } else {
+                    MaterialTheme.typography.bodyLarge
+                },
                 modifier = Modifier.weight(1f)
             )
-            Text(
-                text = "Playlist",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSecondaryContainer
-            )
+            TextButton(onClick = onDelete) {
+                Text("Delete")
+            }
         }
     }
 }
 
 @Composable
-fun FileCard(file: MediaFileInfo, isCurrentTrack: Boolean, onClick: () -> Unit) {
+fun FileCard(
+    file: MediaFileInfo,
+    isCurrentTrack: Boolean,
+    onClick: () -> Unit,
+    onAddToPlaylist: (() -> Unit)? = null
+) {
     val colors = if (isCurrentTrack) {
         CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
     } else {
@@ -948,6 +1202,17 @@ fun FileCard(file: MediaFileInfo, isCurrentTrack: Boolean, onClick: () -> Unit) 
                     text = secondary,
                     style = MaterialTheme.typography.bodySmall
                 )
+            }
+            if (onAddToPlaylist != null) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onAddToPlaylist) {
+                        Text("Add")
+                    }
+                }
             }
         }
     }
