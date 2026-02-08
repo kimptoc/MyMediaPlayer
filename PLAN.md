@@ -9,6 +9,10 @@
 - **Task 3** — Mobile: Create playlists (random 3 files, m3u format)
 - **Task 4** — Mobile + Android Auto: Play playlists (play, pause, stop, next track)
 
+- Task 4.5 - support for other file formats - aac, flac, ogg, opus, wav
+- Task 5 - search option
+- Task 6 - manual playlist creation - create, name, ability to add to playlist from any list/song view.
+- Task 7 - playlist deletion
 ---
 
 # Task 1: Directory Scanner with Compose UI

@@ -205,7 +205,17 @@ class MediaCacheService {
                     }
 
                     val lowerName = name.lowercase(Locale.US)
-                    val shouldLoadFile = (lowerName.endsWith(".mp3") || lowerName.endsWith(".m4a")) &&
+                    val isAudio = lowerName.endsWith(".mp3") ||
+                        lowerName.endsWith(".m4a") ||
+                        lowerName.endsWith(".aac") ||
+                        lowerName.endsWith(".flac") ||
+                        lowerName.endsWith(".ogg") ||
+                        lowerName.endsWith(".opus") ||
+                        lowerName.endsWith(".wav") ||
+                        lowerName.endsWith(".m4b") ||
+                        lowerName.endsWith(".aiff") ||
+                        lowerName.endsWith(".aif")
+                    val shouldLoadFile = isAudio &&
                         synchronized(cacheLock) { _cachedFiles.size < maxFileLimit }
                     if (shouldLoadFile) {
                         val uri = DocumentsContract.buildDocumentUriUsingTree(treeUri, childId)
