@@ -7,6 +7,12 @@ import java.time.Instant
 import java.time.ZoneId
 import java.util.Locale
 
+data class PersistedCache(
+    val files: List<MediaFileInfo>,
+    val playlists: List<PlaylistInfo>,
+    val scannedAt: Long
+)
+
 class MediaCacheService {
 
     companion object {
@@ -60,6 +66,77 @@ class MediaCacheService {
             foldersScanned = foldersScanned,
             songsFound = songsFound
         )
+    }
+
+    fun loadPersistedCache(
+        context: Context,
+        treeUri: Uri,
+        maxFiles: Int
+    ): PersistedCache? {
+        val db = MediaCacheDatabase.getInstance(context)
+        val dao = db.cacheDao()
+        val state = dao.getScanState() ?: return null
+        if (state.treeUri != treeUri.toString() || state.scanLimit != maxFiles) {
+            return null
+        }
+        val files = dao.getAllFiles().map {
+            MediaFileInfo(
+                uriString = it.uriString,
+                displayName = it.displayName,
+                sizeBytes = it.sizeBytes,
+                title = it.title,
+                artist = it.artist,
+                album = it.album,
+                genre = it.genre,
+                durationMs = it.durationMs,
+                year = it.year
+            )
+        }
+        val playlists = dao.getAllPlaylists().map {
+            PlaylistInfo(
+                uriString = it.uriString,
+                displayName = it.displayName
+            )
+        }
+        synchronized(cacheLock) {
+            _cachedFiles.clear()
+            _cachedFiles.addAll(files)
+            _discoveredPlaylists.clear()
+            _discoveredPlaylists.addAll(playlists)
+            metadataIndexed = false
+            albumArtistIndexed = false
+        }
+        return PersistedCache(files, playlists, state.scannedAt)
+    }
+
+    fun persistCache(context: Context, treeUri: Uri, maxFiles: Int) {
+        val db = MediaCacheDatabase.getInstance(context)
+        val dao = db.cacheDao()
+        val files = synchronized(cacheLock) { _cachedFiles.toList() }.map {
+            MediaFileEntity(
+                uriString = it.uriString,
+                displayName = it.displayName,
+                sizeBytes = it.sizeBytes,
+                title = it.title,
+                artist = it.artist,
+                album = it.album,
+                genre = it.genre,
+                durationMs = it.durationMs,
+                year = it.year
+            )
+        }
+        val playlists = synchronized(cacheLock) { _discoveredPlaylists.toList() }.map {
+            PlaylistEntity(
+                uriString = it.uriString,
+                displayName = it.displayName
+            )
+        }
+        val state = ScanStateEntity(
+            treeUri = treeUri.toString(),
+            scanLimit = maxFiles,
+            scannedAt = System.currentTimeMillis()
+        )
+        dao.replaceCache(files, playlists, state)
     }
 
     fun addFile(fileInfo: MediaFileInfo) {

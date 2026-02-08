@@ -9,7 +9,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Button
@@ -35,6 +37,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -254,6 +257,7 @@ fun MainScreen(
                         selectedLabel = uiState.selectedGenre,
                         onCategorySelected = onGenreSelected,
                         onClearCategorySelection = onClearCategorySelection,
+                        enableAlphaIndex = true,
                         songs = uiState.filteredSongs,
                         isPlaying = uiState.isPlaying || uiState.isPlayingPlaylist,
                         isPlayingPlaylist = uiState.isPlayingPlaylist,
@@ -276,6 +280,7 @@ fun MainScreen(
                         selectedLabel = uiState.selectedArtist,
                         onCategorySelected = onArtistSelected,
                         onClearCategorySelection = onClearCategorySelection,
+                        enableAlphaIndex = true,
                         songs = uiState.filteredSongs,
                         isPlaying = uiState.isPlaying || uiState.isPlayingPlaylist,
                         isPlayingPlaylist = uiState.isPlayingPlaylist,
@@ -437,6 +442,7 @@ private fun CategoryTabContent(
     selectedLabel: String?,
     onCategorySelected: (String) -> Unit,
     onClearCategorySelection: () -> Unit,
+    enableAlphaIndex: Boolean = false,
     songs: List<MediaFileInfo>,
     isPlaying: Boolean,
     isPlayingPlaylist: Boolean,
@@ -460,16 +466,59 @@ private fun CategoryTabContent(
         return
     }
 
+    val letters = if (enableAlphaIndex) {
+        categories.mapNotNull {
+            it.trim().firstOrNull()?.uppercaseChar()?.takeIf { c -> c in 'A'..'Z' }?.toString()
+        }.distinct().sorted()
+    } else {
+        emptyList()
+    }
+    var selectedLetter by rememberSaveable(title) { mutableStateOf<String?>(null) }
+
     Column {
         Surface(
             color = MaterialTheme.colorScheme.secondaryContainer,
             modifier = Modifier.fillMaxWidth()
         ) {
             LazyColumn(modifier = Modifier.padding(8.dp)) {
-                val visibleCategories = if (selectedLabel == null) {
+                val filteredCategories = if (selectedLetter == null) {
                     categories
                 } else {
-                    categories.filter { it == selectedLabel }
+                    categories.filter {
+                        it.trim().firstOrNull()?.uppercaseChar()?.toString() == selectedLetter
+                    }
+                }
+                val visibleCategories = if (selectedLabel == null) {
+                    filteredCategories
+                } else {
+                    filteredCategories.filter { it == selectedLabel }
+                }
+                if (selectedLabel == null && enableAlphaIndex && letters.isNotEmpty()) {
+                    item {
+                        LazyRow(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            item {
+                                TextButton(
+                                    onClick = { selectedLetter = null },
+                                    modifier = Modifier.wrapContentWidth()
+                                ) {
+                                    Text("All")
+                                }
+                            }
+                            items(letters) { letter ->
+                                TextButton(
+                                    onClick = { selectedLetter = letter },
+                                    modifier = Modifier.wrapContentWidth()
+                                ) {
+                                    Text(letter)
+                                }
+                            }
+                        }
+                    }
                 }
                 items(visibleCategories) { category ->
                     CategoryCard(

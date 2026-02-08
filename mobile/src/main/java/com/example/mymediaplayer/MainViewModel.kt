@@ -109,6 +109,37 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         viewModelScope.launch(Dispatchers.IO) {
+            if (!forceRescan) {
+                val persisted =
+                    mediaCacheService.loadPersistedCache(getApplication(), treeUri, maxFiles)
+                if (persisted != null) {
+                    scanCache[key] = persisted.files to persisted.playlists
+                    _uiState.value = _uiState.value.copy(
+                        isScanning = false,
+                        scannedFiles = persisted.files,
+                        discoveredPlaylists = persisted.playlists,
+                        lastScanLimit = maxFiles,
+                        lastPlaylistCount = _uiState.value.lastPlaylistCount,
+                        selectedPlaylist = null,
+                        playlistSongs = emptyList(),
+                        isPlaylistLoading = false,
+                        albums = emptyList(),
+                        genres = emptyList(),
+                        artists = emptyList(),
+                        decades = emptyList(),
+                        selectedAlbum = null,
+                        selectedGenre = null,
+                        selectedArtist = null,
+                        selectedDecade = null,
+                        filteredSongs = emptyList(),
+                        isMetadataLoading = false,
+                        scanMessage = null,
+                        scanProgress = null
+                    )
+                    metadataKey = null
+                    return@launch
+                }
+            }
             _uiState.value = _uiState.value.copy(
                 isScanning = true,
                 scannedFiles = emptyList(),
@@ -137,12 +168,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 maxFiles
             ) { songsFound, foldersScanned ->
                 _uiState.value = _uiState.value.copy(
-                    scanProgress = "Scanning… $songsFound songs • $foldersScanned folders"
+                    scanProgress = "Scanning… $songsFound songs • $foldersScanned folders",
+                    scannedFiles = mediaCacheService.cachedFiles
                 )
             }
             val files = mediaCacheService.cachedFiles
             val playlists = mediaCacheService.discoveredPlaylists
             scanCache[key] = files to playlists
+            mediaCacheService.persistCache(getApplication(), treeUri, maxFiles)
             val seconds = stats.durationMs / 1000.0
             val message = "Scan complete in %.1fs • Folders: %d • Songs: %d".format(
                 seconds,

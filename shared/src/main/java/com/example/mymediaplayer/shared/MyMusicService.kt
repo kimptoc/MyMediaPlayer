@@ -11,6 +11,7 @@ import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Bundle
 import android.os.SystemClock
+import android.util.Log
 import android.support.v4.media.MediaBrowserCompat.MediaItem
 import android.support.v4.media.MediaDescriptionCompat
 import android.support.v4.media.MediaMetadataCompat
@@ -25,6 +26,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
     companion object {
         private const val ROOT_ID = "root"
         private const val SONGS_ID = "songs"
+        private const val SONGS_ALL_ID = "songs_all"
         private const val PLAYLISTS_ID = "playlists"
         private const val ALBUMS_ID = "albums"
         private const val GENRES_ID = "genres"
@@ -36,6 +38,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
         private const val GENRE_PREFIX = "genre:"
         private const val ARTIST_PREFIX = "artist:"
         private const val DECADE_PREFIX = "decade:"
+        private const val ARTIST_LETTER_PREFIX = "artist_letter:"
+        private const val GENRE_LETTER_PREFIX = "genre_letter:"
         private const val ACTION_PLAY_ALL_PREFIX = "action:play_all:"
         private const val ACTION_SHUFFLE_PREFIX = "action:shuffle:"
         private const val PREFS_NAME = "mymediaplayer_prefs"
@@ -206,6 +210,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
             val parentId = lastBrowseParentId
             val listFromParent = when {
                 parentId == SONGS_ID -> mediaCacheService.cachedFiles
+                parentId == SONGS_ALL_ID -> mediaCacheService.cachedFiles
                 parentId != null && parentId.startsWith(ALBUM_PREFIX) -> {
                     ensureMetadataIndexes()
                     val album = Uri.decode(parentId.removePrefix(ALBUM_PREFIX))
@@ -244,7 +249,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     currentPlaylistName = null
                 } else {
                     currentPlaylistName = when {
-                        parentId == SONGS_ID || listFromParent.isEmpty() -> "All Songs"
+                        parentId == SONGS_ID || parentId == SONGS_ALL_ID || listFromParent.isEmpty() -> "All Songs"
                         parentId?.startsWith(ALBUM_PREFIX) == true ->
                             Uri.decode(parentId.removePrefix(ALBUM_PREFIX))
                         parentId?.startsWith(GENRE_PREFIX) == true ->
@@ -406,6 +411,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
     }
 
     private fun buildMediaItems(parentId: String): MutableList<MediaItem> {
+        val start = SystemClock.elapsedRealtime()
         if (parentId.startsWith(PLAYLIST_PREFIX)) {
             val playlistUri = Uri.decode(parentId.removePrefix(PLAYLIST_PREFIX))
             val songs = playlistService.readPlaylist(this, Uri.parse(playlistUri))
@@ -549,6 +555,20 @@ class MyMusicService : MediaBrowserServiceCompat() {
             }
             return items
         }
+        if (parentId.startsWith(ARTIST_LETTER_PREFIX)) {
+            ensureMetadataIndexes()
+            val letter = Uri.decode(parentId.removePrefix(ARTIST_LETTER_PREFIX))
+            val artists = filterByLetter(mediaCacheService.artists(), letter)
+            val items = mutableListOf<MediaItem>()
+            items += artists.map { artist ->
+                val description = MediaDescriptionCompat.Builder()
+                    .setMediaId(ARTIST_PREFIX + Uri.encode(artist))
+                    .setTitle(artist)
+                    .build()
+                MediaItem(description, MediaItem.FLAG_BROWSABLE)
+            }
+            return items
+        }
         if (parentId.startsWith(DECADE_PREFIX)) {
             ensureMetadataIndexes()
             val decade = Uri.decode(parentId.removePrefix(DECADE_PREFIX))
@@ -585,8 +605,22 @@ class MyMusicService : MediaBrowserServiceCompat() {
             }
             return items
         }
+        if (parentId.startsWith(GENRE_LETTER_PREFIX)) {
+            ensureMetadataIndexes()
+            val letter = Uri.decode(parentId.removePrefix(GENRE_LETTER_PREFIX))
+            val genres = filterByLetter(mediaCacheService.genres(), letter)
+            val items = mutableListOf<MediaItem>()
+            items += genres.map { genre ->
+                val description = MediaDescriptionCompat.Builder()
+                    .setMediaId(GENRE_PREFIX + Uri.encode(genre))
+                    .setTitle(genre)
+                    .build()
+                MediaItem(description, MediaItem.FLAG_BROWSABLE)
+            }
+            return items
+        }
 
-        return when (parentId) {
+        val items = when (parentId) {
             ROOT_ID -> {
                 val items = mutableListOf<MediaItem>()
                 val songsDesc = MediaDescriptionCompat.Builder()
@@ -665,16 +699,30 @@ class MyMusicService : MediaBrowserServiceCompat() {
                             MediaItem.FLAG_PLAYABLE
                         )
                     )
+                    items.add(
+                        MediaItem(
+                            MediaDescriptionCompat.Builder()
+                                .setMediaId(SONGS_ALL_ID)
+                                .setTitle("Browse All Songs")
+                                .build(),
+                            MediaItem.FLAG_BROWSABLE
+                        )
+                    )
                 }
+                items
+        }
+            SONGS_ALL_ID -> {
+                val items = mutableListOf<MediaItem>()
                 items += mediaCacheService.cachedFiles.map { fileInfo ->
                     val description = MediaDescriptionCompat.Builder()
                         .setMediaId(fileInfo.uriString)
                         .setTitle(fileInfo.title ?: fileInfo.displayName)
+                        .setSubtitle(fileInfo.artist)
                         .build()
                     MediaItem(description, MediaItem.FLAG_PLAYABLE)
                 }
                 items
-        }
+            }
             PLAYLISTS_ID -> {
                 val items = mutableListOf<MediaItem>()
                 if (mediaCacheService.discoveredPlaylists.isNotEmpty()) {
@@ -718,20 +766,22 @@ class MyMusicService : MediaBrowserServiceCompat() {
             }
             GENRES_ID -> {
                 ensureMetadataIndexes()
-                mediaCacheService.genres().map { genre ->
+                val letters = buildLetterBuckets(mediaCacheService.genres())
+                letters.map { letter ->
                     val description = MediaDescriptionCompat.Builder()
-                        .setMediaId(GENRE_PREFIX + Uri.encode(genre))
-                        .setTitle(genre)
+                        .setMediaId(GENRE_LETTER_PREFIX + Uri.encode(letter))
+                        .setTitle(letter)
                         .build()
                     MediaItem(description, MediaItem.FLAG_BROWSABLE)
                 }.toMutableList()
             }
             ARTISTS_ID -> {
                 ensureMetadataIndexes()
-                mediaCacheService.artists().map { artist ->
+                val letters = buildLetterBuckets(mediaCacheService.artists())
+                letters.map { letter ->
                     val description = MediaDescriptionCompat.Builder()
-                        .setMediaId(ARTIST_PREFIX + Uri.encode(artist))
-                        .setTitle(artist)
+                        .setMediaId(ARTIST_LETTER_PREFIX + Uri.encode(letter))
+                        .setTitle(letter)
                         .build()
                     MediaItem(description, MediaItem.FLAG_BROWSABLE)
                 }.toMutableList()
@@ -748,6 +798,39 @@ class MyMusicService : MediaBrowserServiceCompat() {
             }
             else -> mutableListOf()
         }
+        val elapsed = SystemClock.elapsedRealtime() - start
+        Log.d("MyMusicService", "buildMediaItems($parentId) -> ${items.size} in ${elapsed}ms")
+        return items
+    }
+
+    private fun buildLetterBuckets(values: List<String>): List<String> {
+        val letters = mutableSetOf<String>()
+        var hasOther = false
+        for (value in values) {
+            val first = value.trim().firstOrNull()?.uppercaseChar()
+            if (first != null && first in 'A'..'Z') {
+                letters.add(first.toString())
+            } else {
+                hasOther = true
+            }
+        }
+        val result = letters.toMutableList()
+        result.sort()
+        if (hasOther) result.add("#")
+        return result
+    }
+
+    private fun filterByLetter(values: List<String>, letter: String): List<String> {
+        if (letter == "#") {
+            return values.filter {
+                val first = it.trim().firstOrNull()?.uppercaseChar()
+                first == null || first !in 'A'..'Z'
+            }.sorted()
+        }
+        val target = letter.firstOrNull()?.uppercaseChar() ?: return emptyList()
+        return values.filter {
+            it.trim().firstOrNull()?.uppercaseChar() == target
+        }.sorted()
     }
 
     private fun loadCachedTreeIfAvailable() {
@@ -762,10 +845,30 @@ class MyMusicService : MediaBrowserServiceCompat() {
         if (!hasPermission) return
 
         Thread {
+            val persisted = mediaCacheService.loadPersistedCache(this, uri, limit)
+            if (persisted != null) {
+                mediaCacheService.buildAlbumArtistIndexesFromCache()
+                deliverPendingResults()
+                notifyChildrenChanged(ROOT_ID)
+                notifyChildrenChanged(SONGS_ID)
+                notifyChildrenChanged(PLAYLISTS_ID)
+                notifyChildrenChanged(ALBUMS_ID)
+                notifyChildrenChanged(GENRES_ID)
+                notifyChildrenChanged(ARTISTS_ID)
+                notifyChildrenChanged(DECADES_ID)
+                return@Thread
+            }
             isScanning = true
             try {
-                mediaCacheService.scanDirectory(this, uri, limit)
+                var lastNotify = 0
+                mediaCacheService.scanDirectory(this, uri, limit) { songsFound, _ ->
+                    if (songsFound - lastNotify >= 200) {
+                        lastNotify = songsFound
+                        notifyChildrenChanged(SONGS_ALL_ID)
+                    }
+                }
                 mediaCacheService.buildAlbumArtistIndexesFromCache()
+                mediaCacheService.persistCache(this, uri, limit)
             } finally {
                 isScanning = false
                 deliverPendingResults()
@@ -797,9 +900,11 @@ class MyMusicService : MediaBrowserServiceCompat() {
     }
 
     private fun ensureMetadataIndexes() {
-        if (!mediaCacheService.hasAlbumArtistIndexes()) {
-            mediaCacheService.buildAlbumArtistIndexesFromCache()
-        }
+        if (mediaCacheService.hasAlbumArtistIndexes()) return
+        val start = SystemClock.elapsedRealtime()
+        mediaCacheService.buildAlbumArtistIndexesFromCache()
+        val elapsed = SystemClock.elapsedRealtime() - start
+        Log.d("MyMusicService", "buildAlbumArtistIndexesFromCache() in ${elapsed}ms")
     }
 
     private fun playTrack(fileInfo: MediaFileInfo) {
