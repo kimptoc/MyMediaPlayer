@@ -3,9 +3,15 @@ package com.example.mymediaplayer.shared
 import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.isActive
 import java.time.Instant
 import java.time.ZoneId
 import java.util.Locale
+import kotlin.coroutines.coroutineContext
 
 data class PersistedCache(
     val files: List<MediaFileInfo>,
@@ -19,6 +25,8 @@ class MediaCacheService {
         const val MAX_CACHE_SIZE = 20
         const val MAX_PLAYLIST_CACHE_SIZE = 20
         private const val UNKNOWN_DECADE = "Unknown Decade"
+        private const val METADATA_BATCH_SIZE = 50
+        private const val METADATA_PARALLELISM = 4
     }
 
     private val _cachedFiles = mutableListOf<MediaFileInfo>()
@@ -35,13 +43,12 @@ class MediaCacheService {
     private val genreIndex = mutableMapOf<String, MutableList<MediaFileInfo>>()
     private val artistIndex = mutableMapOf<String, MutableList<MediaFileInfo>>()
     private val decadeIndex = mutableMapOf<String, MutableList<MediaFileInfo>>()
-    private var metadataIndexed: Boolean = false
     private var albumArtistIndexed: Boolean = false
     private var maxFileLimit: Int = MAX_CACHE_SIZE
     private var foldersScanned: Int = 0
     private var songsFound: Int = 0
 
-    fun scanDirectory(
+    suspend fun scanDirectory(
         context: Context,
         treeUri: Uri,
         maxFiles: Int = MAX_CACHE_SIZE,
@@ -52,14 +59,55 @@ class MediaCacheService {
         foldersScanned = 0
         songsFound = 0
         val startTime = android.os.SystemClock.elapsedRealtime()
-        var lastReported = 0
         val rootDocumentId = DocumentsContract.getTreeDocumentId(treeUri)
-        walkTree(context, treeUri, rootDocumentId) {
-            if (onProgress != null && songsFound - lastReported >= 100) {
-                lastReported = songsFound
-                onProgress(songsFound, foldersScanned)
+
+        // Phase 1: Walk tree to collect file candidates (fast - content provider queries only)
+        val candidates = mutableListOf<FileCandidate>()
+        val parentContext = coroutineContext
+        val shouldContinue: () -> Boolean = { parentContext.isActive }
+        walkTree(context, treeUri, rootDocumentId, candidates, shouldContinue)
+        onProgress?.invoke(candidates.size, foldersScanned)
+
+        // Phase 2: Extract metadata in parallel batches
+        val metadataDispatcher = Dispatchers.IO.limitedParallelism(METADATA_PARALLELISM)
+        var processed = 0
+        for (batch in candidates.chunked(METADATA_BATCH_SIZE)) {
+            val results = coroutineScope {
+                batch.map { candidate ->
+                    async(metadataDispatcher) {
+                        val metadata = MediaMetadataHelper.extractMetadata(context, candidate.uri.toString())
+                        val fallbackYear = candidate.lastModified?.let { millis ->
+                            Instant.ofEpochMilli(millis)
+                                .atZone(ZoneId.systemDefault())
+                                .year
+                        }
+                        val yearValue = metadata?.year?.toIntOrNull() ?: fallbackYear
+                        val durationMs = metadata?.durationMs?.toLongOrNull()
+                        MediaFileInfo(
+                            uriString = candidate.uri.toString(),
+                            displayName = candidate.name,
+                            sizeBytes = candidate.size,
+                            title = metadata?.title ?: candidate.name,
+                            artist = metadata?.artist,
+                            album = metadata?.album,
+                            genre = normalizeGenre(metadata?.genre),
+                            durationMs = durationMs,
+                            year = yearValue
+                        )
+                    }
+                }.awaitAll()
+            }
+            synchronized(cacheLock) {
+                _cachedFiles.addAll(results)
+                albumArtistIndexed = false
+            }
+            for (result in results) {
+                processed += 1
+                songsFound = processed
+                onProgress?.invoke(songsFound, foldersScanned)
             }
         }
+
         val durationMs = android.os.SystemClock.elapsedRealtime() - startTime
         return ScanStats(
             durationMs = durationMs,
@@ -103,7 +151,6 @@ class MediaCacheService {
             _cachedFiles.addAll(files)
             _discoveredPlaylists.clear()
             _discoveredPlaylists.addAll(playlists)
-            metadataIndexed = false
             albumArtistIndexed = false
         }
         return PersistedCache(files, playlists, state.scannedAt)
@@ -143,7 +190,7 @@ class MediaCacheService {
         synchronized(cacheLock) {
             if (_cachedFiles.size < MAX_CACHE_SIZE) {
                 _cachedFiles.add(fileInfo)
-                metadataIndexed = false
+                albumArtistIndexed = false
             }
         }
     }
@@ -160,11 +207,19 @@ class MediaCacheService {
         }
     }
 
+    private data class FileCandidate(
+        val uri: Uri,
+        val name: String,
+        val size: Long,
+        val lastModified: Long?
+    )
+
     private fun walkTree(
         context: Context,
         treeUri: Uri,
         rootDocumentId: String,
-        onProgress: (() -> Unit)? = null
+        candidates: MutableList<FileCandidate>,
+        shouldContinue: () -> Boolean
     ) {
         val contentResolver = context.contentResolver
         val toVisit = ArrayDeque<String>()
@@ -180,7 +235,8 @@ class MediaCacheService {
         )
 
         while (toVisit.isNotEmpty()) {
-            if (isSearchComplete()) return
+            if (!shouldContinue()) return
+            if (candidates.size >= maxFileLimit) return
 
             val documentId = toVisit.removeFirst()
             val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, documentId)
@@ -194,8 +250,9 @@ class MediaCacheService {
                 val modifiedIndex =
                     it.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_LAST_MODIFIED)
 
-                while (it.moveToNext()) {
-                    if (isSearchComplete()) return
+            while (it.moveToNext()) {
+                if (!shouldContinue()) return
+                if (candidates.size >= maxFileLimit) return
 
                     val childId = it.getString(idIndex)
                     val name = it.getString(nameIndex) ?: "Unknown"
@@ -221,38 +278,9 @@ class MediaCacheService {
                         lowerName.endsWith(".m4b") ||
                         lowerName.endsWith(".aiff") ||
                         lowerName.endsWith(".aif")
-                    val shouldLoadFile = isAudio &&
-                        synchronized(cacheLock) { _cachedFiles.size < maxFileLimit }
-                    if (shouldLoadFile) {
+                    if (isAudio) {
                         val uri = DocumentsContract.buildDocumentUriUsingTree(treeUri, childId)
-                        val metadata = MediaMetadataHelper.extractMetadata(context, uri.toString())
-                        val fallbackYear = lastModified?.let { millis ->
-                            Instant.ofEpochMilli(millis)
-                                .atZone(ZoneId.systemDefault())
-                                .year
-                        }
-                        val yearValue = metadata?.year?.toIntOrNull() ?: fallbackYear
-                        val durationMs = metadata?.durationMs?.toLongOrNull()
-                        synchronized(cacheLock) {
-                            if (_cachedFiles.size < maxFileLimit) {
-                        _cachedFiles.add(
-                            MediaFileInfo(
-                                uriString = uri.toString(),
-                                displayName = name,
-                                sizeBytes = size,
-                                title = metadata?.title ?: name,
-                                artist = metadata?.artist,
-                                album = metadata?.album,
-                                genre = normalizeGenre(metadata?.genre),
-                                durationMs = durationMs,
-                                year = yearValue
-                            )
-                        )
-                                metadataIndexed = false
-                                songsFound += 1
-                                onProgress?.invoke()
-                            }
-                        }
+                        candidates.add(FileCandidate(uri, name, size, lastModified))
                     } else if (lowerName.endsWith(".m3u") &&
                         synchronized(cacheLock) { _discoveredPlaylists.size < MAX_PLAYLIST_CACHE_SIZE }
                     ) {
@@ -270,12 +298,6 @@ class MediaCacheService {
                     }
                 }
             }
-        }
-    }
-
-    private fun isSearchComplete(): Boolean {
-        synchronized(cacheLock) {
-            return _cachedFiles.size >= maxFileLimit
         }
     }
 
@@ -299,27 +321,6 @@ class MediaCacheService {
             clearMetadataIndexes()
         }
     }
-
-    fun buildMetadataIndexes(context: Context) {
-        clearMetadataIndexes()
-        val snapshot = synchronized(cacheLock) { _cachedFiles.toList() }
-        for (file in snapshot) {
-            val metadata = MediaMetadataHelper.extractMetadata(context, file.uriString)
-            val album = metadata?.album?.ifBlank { null } ?: "Unknown Album"
-            val artist = metadata?.artist?.ifBlank { null } ?: "Unknown Artist"
-            val genre = normalizeGenre(metadata?.genre)
-            val decade = decadeLabel(metadata?.year?.toIntOrNull() ?: file.year)
-
-            albumIndex.getOrPut(album) { mutableListOf() }.add(file)
-            artistIndex.getOrPut(artist) { mutableListOf() }.add(file)
-            genreIndex.getOrPut(genre) { mutableListOf() }.add(file)
-            decadeIndex.getOrPut(decade) { mutableListOf() }.add(file)
-        }
-        metadataIndexed = true
-        albumArtistIndexed = true
-    }
-
-    fun hasMetadataIndexes(): Boolean = metadataIndexed
 
     fun hasAlbumArtistIndexes(): Boolean = albumArtistIndexed
 
@@ -388,7 +389,6 @@ class MediaCacheService {
         genreIndex.clear()
         artistIndex.clear()
         decadeIndex.clear()
-        metadataIndexed = false
         albumArtistIndexed = false
     }
 

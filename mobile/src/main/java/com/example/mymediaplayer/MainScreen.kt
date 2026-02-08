@@ -86,7 +86,7 @@ fun MainScreen(
     var showPlaylistDialog by remember { mutableStateOf(false) }
     var playlistCountText by remember { mutableStateOf("3") }
     var showScanDialog by remember { mutableStateOf(false) }
-    var scanCountText by remember { mutableStateOf(uiState.lastScanLimit.toString()) }
+    var scanCountText by remember { mutableStateOf(uiState.scan.lastScanLimit.toString()) }
     var showManualPlaylistDialog by remember { mutableStateOf(false) }
     var manualPlaylistNameText by remember { mutableStateOf("") }
     var showAddToPlaylistDialog by remember { mutableStateOf(false) }
@@ -94,24 +94,24 @@ fun MainScreen(
     var showDeletePlaylistDialog by remember { mutableStateOf(false) }
     var pendingDeletePlaylist by remember { mutableStateOf<PlaylistInfo?>(null) }
 
-    LaunchedEffect(uiState.playlistMessage) {
-        val message = uiState.playlistMessage
+    LaunchedEffect(uiState.playlist.playlistMessage) {
+        val message = uiState.playlist.playlistMessage
         if (message != null) {
             snackbarHostState.showSnackbar(message)
             onPlaylistMessageDismissed()
         }
     }
 
-    LaunchedEffect(uiState.folderMessage) {
-        val message = uiState.folderMessage
+    LaunchedEffect(uiState.scan.folderMessage) {
+        val message = uiState.scan.folderMessage
         if (message != null) {
             snackbarHostState.showSnackbar(message)
             onFolderMessageDismissed()
         }
     }
 
-    LaunchedEffect(uiState.scanMessage) {
-        val message = uiState.scanMessage
+    LaunchedEffect(uiState.scan.scanMessage) {
+        val message = uiState.scan.scanMessage
         if (message != null) {
             snackbarHostState.showSnackbar(message)
             onScanMessageDismissed()
@@ -134,7 +134,7 @@ fun MainScreen(
                         text = { Text("Select Folder") },
                         onClick = {
                             menuExpanded = false
-                            scanCountText = uiState.lastScanLimit.toString()
+                            scanCountText = uiState.scan.lastScanLimit.toString()
                             showScanDialog = true
                         }
                     )
@@ -142,28 +142,28 @@ fun MainScreen(
                         text = { Text("Create Playlist") },
                         onClick = {
                             menuExpanded = false
-                            playlistCountText = uiState.lastPlaylistCount.toString()
+                            playlistCountText = uiState.playlist.lastPlaylistCount.toString()
                             showPlaylistDialog = true
                         },
-                        enabled = uiState.scannedFiles.isNotEmpty()
+                        enabled = uiState.scan.scannedFiles.isNotEmpty()
                     )
                     }
                 }
             )
         },
         bottomBar = {
-            if (uiState.currentTrackName != null) {
+            if (uiState.playback.currentTrackName != null) {
                 PlaybackBar(
-                    trackName = uiState.currentTrackName,
-                    isPlaying = uiState.isPlaying,
-                    isPlayingPlaylist = uiState.isPlayingPlaylist,
-                    queuePosition = uiState.queuePosition,
+                    trackName = uiState.playback.currentTrackName,
+                    isPlaying = uiState.playback.isPlaying,
+                    isPlayingPlaylist = uiState.playback.isPlayingPlaylist,
+                    queuePosition = uiState.playback.queuePosition,
                     onPlayPause = onPlayPause,
                     onStop = onStop,
                     onNext = onNext,
                     onPrev = onPrev,
-                    hasNext = uiState.hasNext,
-                    hasPrev = uiState.hasPrev
+                    hasNext = uiState.playback.hasNext,
+                    hasPrev = uiState.playback.hasPrev
                 )
             }
         },
@@ -175,11 +175,11 @@ fun MainScreen(
                 .padding(padding)
                 .padding(16.dp)
         ) {
-            if (uiState.isScanning) {
+            if (uiState.scan.isScanning) {
                 CircularProgressIndicator(
                     modifier = Modifier.align(Alignment.CenterHorizontally)
                 )
-                uiState.scanProgress?.let { progress ->
+                uiState.scan.scanProgress?.let { progress ->
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = progress,
@@ -190,27 +190,27 @@ fun MainScreen(
             }
 
             TextField(
-                value = uiState.searchQuery,
+                value = uiState.search.searchQuery,
                 onValueChange = onSearchQueryChanged,
                 placeholder = { Text("Search title, artist, album, genre") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
 
-            if (uiState.searchQuery.isNotBlank()) {
+            if (uiState.search.searchQuery.isNotBlank()) {
                 Spacer(modifier = Modifier.height(8.dp))
-                if (uiState.searchResults.isEmpty()) {
-                    Text("No results for \"${uiState.searchQuery}\"")
+                if (uiState.search.searchResults.isEmpty()) {
+                    Text("No results for \"${uiState.search.searchQuery}\"")
                 } else {
                     SongsListSection(
-                        title = "Search Results (${uiState.searchResults.size})",
-                        songs = uiState.searchResults,
-                        isPlaying = uiState.isPlaying || uiState.isPlayingPlaylist,
-                        isPlayingPlaylist = uiState.isPlayingPlaylist,
-                        hasNext = uiState.hasNext,
-                        hasPrev = uiState.hasPrev,
-                        onPlay = { onPlaySearchResults(uiState.searchResults) },
-                        onShuffle = { onShuffleSearchResults(uiState.searchResults) },
+                        title = "Search Results (${uiState.search.searchResults.size})",
+                        songs = uiState.search.searchResults,
+                        isPlaying = uiState.playback.isPlaying || uiState.playback.isPlayingPlaylist,
+                        isPlayingPlaylist = uiState.playback.isPlayingPlaylist,
+                        hasNext = uiState.playback.hasNext,
+                        hasPrev = uiState.playback.hasPrev,
+                        onPlay = { onPlaySearchResults(uiState.search.searchResults) },
+                        onShuffle = { onShuffleSearchResults(uiState.search.searchResults) },
                         onStop = onStop,
                         onNext = onNext,
                         onPrev = onPrev,
@@ -219,13 +219,13 @@ fun MainScreen(
                             pendingAddFile = it
                             showAddToPlaylistDialog = true
                         },
-                        currentMediaId = uiState.currentMediaId
+                        currentMediaId = uiState.playback.currentMediaId
                     )
                 }
                 Spacer(modifier = Modifier.height(8.dp))
             }
 
-            if (uiState.manualPlaylistSongs.isNotEmpty()) {
+            if (uiState.playlist.manualPlaylistSongs.isNotEmpty()) {
                 Surface(
                     color = MaterialTheme.colorScheme.secondaryContainer,
                     modifier = Modifier.fillMaxWidth()
@@ -236,7 +236,7 @@ fun MainScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
-                            text = "New playlist: ${uiState.manualPlaylistSongs.size} song(s)",
+                            text = "New playlist: ${uiState.playlist.manualPlaylistSongs.size} song(s)",
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.weight(1f)
                         )
@@ -251,18 +251,18 @@ fun MainScreen(
                 Spacer(modifier = Modifier.height(8.dp))
             }
 
-            val albumCounts = remember(uiState.scannedFiles) { buildAlbumCounts(uiState.scannedFiles) }
-            val artistCounts = remember(uiState.scannedFiles) { buildArtistCounts(uiState.scannedFiles) }
-            val genreCounts = remember(uiState.scannedFiles) { buildGenreCounts(uiState.scannedFiles) }
-            val decadeCounts = remember(uiState.scannedFiles) { buildDecadeCounts(uiState.scannedFiles) }
+            val albumCounts = remember(uiState.scan.scannedFiles) { buildAlbumCounts(uiState.scan.scannedFiles) }
+            val artistCounts = remember(uiState.scan.scannedFiles) { buildArtistCounts(uiState.scan.scannedFiles) }
+            val genreCounts = remember(uiState.scan.scannedFiles) { buildGenreCounts(uiState.scan.scannedFiles) }
+            val decadeCounts = remember(uiState.scan.scannedFiles) { buildDecadeCounts(uiState.scan.scannedFiles) }
 
             val tabs = LibraryTab.values().toList()
             ScrollableTabRow(
-                selectedTabIndex = tabs.indexOf(uiState.selectedTab)
+                selectedTabIndex = tabs.indexOf(uiState.library.selectedTab)
             ) {
                 tabs.forEach { tab ->
                     Tab(
-                        selected = uiState.selectedTab == tab,
+                        selected = uiState.library.selectedTab == tab,
                         onClick = { onTabSelected(tab) },
                         text = { Text(tab.label, maxLines = 1) }
                     )
@@ -271,17 +271,17 @@ fun MainScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            when (uiState.selectedTab) {
+            when (uiState.library.selectedTab) {
                 LibraryTab.Songs -> {
                     SongsListSection(
-                        title = "${uiState.scannedFiles.size} file(s) found",
-                        songs = uiState.scannedFiles,
-                        isPlaying = uiState.isPlaying || uiState.isPlayingPlaylist,
-                        isPlayingPlaylist = uiState.isPlayingPlaylist,
-                        hasNext = uiState.hasNext,
-                        hasPrev = uiState.hasPrev,
-                        onPlay = { onPlaySongs(uiState.scannedFiles) },
-                        onShuffle = { onShuffleSongs(uiState.scannedFiles) },
+                        title = "${uiState.scan.scannedFiles.size} file(s) found",
+                        songs = uiState.scan.scannedFiles,
+                        isPlaying = uiState.playback.isPlaying || uiState.playback.isPlayingPlaylist,
+                        isPlayingPlaylist = uiState.playback.isPlayingPlaylist,
+                        hasNext = uiState.playback.hasNext,
+                        hasPrev = uiState.playback.hasPrev,
+                        onPlay = { onPlaySongs(uiState.scan.scannedFiles) },
+                        onShuffle = { onShuffleSongs(uiState.scan.scannedFiles) },
                         onStop = onStop,
                         onNext = onNext,
                         onPrev = onPrev,
@@ -290,19 +290,19 @@ fun MainScreen(
                             pendingAddFile = it
                             showAddToPlaylistDialog = true
                         },
-                        currentMediaId = uiState.currentMediaId
+                        currentMediaId = uiState.playback.currentMediaId
                     )
                 }
                 LibraryTab.Playlists -> {
                     PlaylistsSection(
-                        playlists = uiState.discoveredPlaylists,
-                        selectedPlaylist = uiState.selectedPlaylist,
-                        playlistSongs = uiState.playlistSongs,
-                        isLoading = uiState.isPlaylistLoading,
-                        isPlaying = uiState.isPlaying || uiState.isPlayingPlaylist,
-                        isPlayingPlaylist = uiState.isPlayingPlaylist,
-                        hasNext = uiState.hasNext,
-                        hasPrev = uiState.hasPrev,
+                        playlists = uiState.scan.discoveredPlaylists,
+                        selectedPlaylist = uiState.playlist.selectedPlaylist,
+                        playlistSongs = uiState.playlist.playlistSongs,
+                        isLoading = uiState.playlist.isPlaylistLoading,
+                        isPlaying = uiState.playback.isPlaying || uiState.playback.isPlayingPlaylist,
+                        isPlayingPlaylist = uiState.playback.isPlayingPlaylist,
+                        hasNext = uiState.playback.hasNext,
+                        hasPrev = uiState.playback.hasPrev,
                         onPlaylistSelected = onPlaylistSelected,
                         onClearPlaylistSelection = onClearPlaylistSelection,
                         onRequestDeletePlaylist = {
@@ -319,25 +319,25 @@ fun MainScreen(
                             pendingAddFile = it
                             showAddToPlaylistDialog = true
                         },
-                        currentMediaId = uiState.currentMediaId
+                        currentMediaId = uiState.playback.currentMediaId
                     )
                 }
                 LibraryTab.Albums -> {
                     CategoryTabContent(
                         title = "Albums",
-                        categories = uiState.albums,
+                        categories = uiState.library.albums,
                         categoryCounts = albumCounts,
-                        isLoading = uiState.isMetadataLoading,
-                        selectedLabel = uiState.selectedAlbum,
+                        isLoading = uiState.library.isMetadataLoading,
+                        selectedLabel = uiState.library.selectedAlbum,
                         onCategorySelected = onAlbumSelected,
                         onClearCategorySelection = onClearCategorySelection,
-                        songs = uiState.filteredSongs,
-                        isPlaying = uiState.isPlaying || uiState.isPlayingPlaylist,
-                        isPlayingPlaylist = uiState.isPlayingPlaylist,
-                        hasNext = uiState.hasNext,
-                        hasPrev = uiState.hasPrev,
-                        onPlay = { onPlaySongs(uiState.filteredSongs) },
-                        onShuffle = { onShuffleSongs(uiState.filteredSongs) },
+                        songs = uiState.library.filteredSongs,
+                        isPlaying = uiState.playback.isPlaying || uiState.playback.isPlayingPlaylist,
+                        isPlayingPlaylist = uiState.playback.isPlayingPlaylist,
+                        hasNext = uiState.playback.hasNext,
+                        hasPrev = uiState.playback.hasPrev,
+                        onPlay = { onPlaySongs(uiState.library.filteredSongs) },
+                        onShuffle = { onShuffleSongs(uiState.library.filteredSongs) },
                         onStop = onStop,
                         onNext = onNext,
                         onPrev = onPrev,
@@ -346,26 +346,26 @@ fun MainScreen(
                             pendingAddFile = it
                             showAddToPlaylistDialog = true
                         },
-                        currentMediaId = uiState.currentMediaId
+                        currentMediaId = uiState.playback.currentMediaId
                     )
                 }
                 LibraryTab.Genres -> {
                     CategoryTabContent(
                         title = "Genres",
-                        categories = uiState.genres,
+                        categories = uiState.library.genres,
                         categoryCounts = genreCounts,
-                        isLoading = uiState.isMetadataLoading,
-                        selectedLabel = uiState.selectedGenre,
+                        isLoading = uiState.library.isMetadataLoading,
+                        selectedLabel = uiState.library.selectedGenre,
                         onCategorySelected = onGenreSelected,
                         onClearCategorySelection = onClearCategorySelection,
                         enableAlphaIndex = false,
-                        songs = uiState.filteredSongs,
-                        isPlaying = uiState.isPlaying || uiState.isPlayingPlaylist,
-                        isPlayingPlaylist = uiState.isPlayingPlaylist,
-                        hasNext = uiState.hasNext,
-                        hasPrev = uiState.hasPrev,
-                        onPlay = { onPlaySongs(uiState.filteredSongs) },
-                        onShuffle = { onShuffleSongs(uiState.filteredSongs) },
+                        songs = uiState.library.filteredSongs,
+                        isPlaying = uiState.playback.isPlaying || uiState.playback.isPlayingPlaylist,
+                        isPlayingPlaylist = uiState.playback.isPlayingPlaylist,
+                        hasNext = uiState.playback.hasNext,
+                        hasPrev = uiState.playback.hasPrev,
+                        onPlay = { onPlaySongs(uiState.library.filteredSongs) },
+                        onShuffle = { onShuffleSongs(uiState.library.filteredSongs) },
                         onStop = onStop,
                         onNext = onNext,
                         onPrev = onPrev,
@@ -374,26 +374,26 @@ fun MainScreen(
                             pendingAddFile = it
                             showAddToPlaylistDialog = true
                         },
-                        currentMediaId = uiState.currentMediaId
+                        currentMediaId = uiState.playback.currentMediaId
                     )
                 }
                 LibraryTab.Artists -> {
                     CategoryTabContent(
                         title = "Artists",
-                        categories = uiState.artists,
+                        categories = uiState.library.artists,
                         categoryCounts = artistCounts,
-                        isLoading = uiState.isMetadataLoading,
-                        selectedLabel = uiState.selectedArtist,
+                        isLoading = uiState.library.isMetadataLoading,
+                        selectedLabel = uiState.library.selectedArtist,
                         onCategorySelected = onArtistSelected,
                         onClearCategorySelection = onClearCategorySelection,
                         enableAlphaIndex = true,
-                        songs = uiState.filteredSongs,
-                        isPlaying = uiState.isPlaying || uiState.isPlayingPlaylist,
-                        isPlayingPlaylist = uiState.isPlayingPlaylist,
-                        hasNext = uiState.hasNext,
-                        hasPrev = uiState.hasPrev,
-                        onPlay = { onPlaySongs(uiState.filteredSongs) },
-                        onShuffle = { onShuffleSongs(uiState.filteredSongs) },
+                        songs = uiState.library.filteredSongs,
+                        isPlaying = uiState.playback.isPlaying || uiState.playback.isPlayingPlaylist,
+                        isPlayingPlaylist = uiState.playback.isPlayingPlaylist,
+                        hasNext = uiState.playback.hasNext,
+                        hasPrev = uiState.playback.hasPrev,
+                        onPlay = { onPlaySongs(uiState.library.filteredSongs) },
+                        onShuffle = { onShuffleSongs(uiState.library.filteredSongs) },
                         onStop = onStop,
                         onNext = onNext,
                         onPrev = onPrev,
@@ -402,25 +402,25 @@ fun MainScreen(
                             pendingAddFile = it
                             showAddToPlaylistDialog = true
                         },
-                        currentMediaId = uiState.currentMediaId
+                        currentMediaId = uiState.playback.currentMediaId
                     )
                 }
                 LibraryTab.Decades -> {
                     CategoryTabContent(
                         title = "Decades",
-                        categories = uiState.decades,
+                        categories = uiState.library.decades,
                         categoryCounts = decadeCounts,
-                        isLoading = uiState.isMetadataLoading,
-                        selectedLabel = uiState.selectedDecade,
+                        isLoading = uiState.library.isMetadataLoading,
+                        selectedLabel = uiState.library.selectedDecade,
                         onCategorySelected = onDecadeSelected,
                         onClearCategorySelection = onClearCategorySelection,
-                        songs = uiState.filteredSongs,
-                        isPlaying = uiState.isPlaying || uiState.isPlayingPlaylist,
-                        isPlayingPlaylist = uiState.isPlayingPlaylist,
-                        hasNext = uiState.hasNext,
-                        hasPrev = uiState.hasPrev,
-                        onPlay = { onPlaySongs(uiState.filteredSongs) },
-                        onShuffle = { onShuffleSongs(uiState.filteredSongs) },
+                        songs = uiState.library.filteredSongs,
+                        isPlaying = uiState.playback.isPlaying || uiState.playback.isPlayingPlaylist,
+                        isPlayingPlaylist = uiState.playback.isPlayingPlaylist,
+                        hasNext = uiState.playback.hasNext,
+                        hasPrev = uiState.playback.hasPrev,
+                        onPlay = { onPlaySongs(uiState.library.filteredSongs) },
+                        onShuffle = { onShuffleSongs(uiState.library.filteredSongs) },
                         onStop = onStop,
                         onNext = onNext,
                         onPrev = onPrev,
@@ -429,7 +429,7 @@ fun MainScreen(
                             pendingAddFile = it
                             showAddToPlaylistDialog = true
                         },
-                        currentMediaId = uiState.currentMediaId
+                        currentMediaId = uiState.playback.currentMediaId
                     )
                 }
             }
@@ -437,7 +437,7 @@ fun MainScreen(
     }
 
     if (showPlaylistDialog) {
-        val maxCount = uiState.scannedFiles.size
+        val maxCount = uiState.scan.scannedFiles.size
         val countValue = playlistCountText.toIntOrNull()
         val isValid = countValue != null && countValue in 1..maxCount
         val helperText = when {
@@ -604,13 +604,13 @@ fun MainScreen(
                     ) {
                         Text("New playlist")
                     }
-                    if (uiState.discoveredPlaylists.isEmpty()) {
+                    if (uiState.scan.discoveredPlaylists.isEmpty()) {
                         Text(
                             text = "No existing playlists",
                             style = MaterialTheme.typography.bodySmall
                         )
                     } else {
-                        uiState.discoveredPlaylists.forEach { playlist ->
+                        uiState.scan.discoveredPlaylists.forEach { playlist ->
                             TextButton(
                                 onClick = {
                                     if (file != null) onAddToExistingPlaylist(playlist, file)

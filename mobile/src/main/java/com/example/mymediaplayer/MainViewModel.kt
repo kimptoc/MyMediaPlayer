@@ -14,41 +14,61 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
-data class MainUiState(
+data class ScanState(
     val isScanning: Boolean = false,
     val scannedFiles: List<MediaFileInfo> = emptyList(),
     val discoveredPlaylists: List<PlaylistInfo> = emptyList(),
-    val albums: List<String> = emptyList(),
-    val genres: List<String> = emptyList(),
-    val artists: List<String> = emptyList(),
-    val decades: List<String> = emptyList(),
+    val scanMessage: String? = null,
+    val scanProgress: String? = null,
+    val lastScanLimit: Int = MediaCacheService.MAX_CACHE_SIZE,
+    val folderMessage: String? = null
+)
+
+data class PlaybackState(
+    val isPlaying: Boolean = false,
+    val isPaused: Boolean = false,
+    val currentTrackName: String? = null,
+    val currentMediaId: String? = null,
+    val isPlayingPlaylist: Boolean = false,
+    val queuePosition: String? = null,
+    val hasNext: Boolean = false,
+    val hasPrev: Boolean = false
+)
+
+data class LibraryState(
     val selectedTab: LibraryTab = LibraryTab.Songs,
     val selectedAlbum: String? = null,
     val selectedGenre: String? = null,
     val selectedArtist: String? = null,
     val selectedDecade: String? = null,
     val filteredSongs: List<MediaFileInfo> = emptyList(),
-    val isMetadataLoading: Boolean = false,
-    val isPlaying: Boolean = false,
-    val isPaused: Boolean = false,
+    val albums: List<String> = emptyList(),
+    val genres: List<String> = emptyList(),
+    val artists: List<String> = emptyList(),
+    val decades: List<String> = emptyList(),
+    val isMetadataLoading: Boolean = false
+)
+
+data class SearchState(
     val searchQuery: String = "",
-    val searchResults: List<MediaFileInfo> = emptyList(),
-    val manualPlaylistSongs: List<MediaFileInfo> = emptyList(),
-    val currentTrackName: String? = null,
-    val currentMediaId: String? = null,
-    val playlistMessage: String? = null,
-    val folderMessage: String? = null,
-    val scanMessage: String? = null,
-    val scanProgress: String? = null,
+    val searchResults: List<MediaFileInfo> = emptyList()
+)
+
+data class PlaylistMgmtState(
     val selectedPlaylist: PlaylistInfo? = null,
     val playlistSongs: List<MediaFileInfo> = emptyList(),
     val isPlaylistLoading: Boolean = false,
-    val isPlayingPlaylist: Boolean = false,
-    val queuePosition: String? = null,
     val lastPlaylistCount: Int = 3,
-    val lastScanLimit: Int = MediaCacheService.MAX_CACHE_SIZE,
-    val hasNext: Boolean = false,
-    val hasPrev: Boolean = false
+    val manualPlaylistSongs: List<MediaFileInfo> = emptyList(),
+    val playlistMessage: String? = null
+)
+
+data class MainUiState(
+    val scan: ScanState = ScanState(),
+    val playback: PlaybackState = PlaybackState(),
+    val library: LibraryState = LibraryState(),
+    val search: SearchState = SearchState(),
+    val playlist: PlaylistMgmtState = PlaylistMgmtState()
 )
 
 enum class LibraryTab(val label: String) {
@@ -72,6 +92,42 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState: StateFlow<MainUiState> = _uiState
 
+    override fun onCleared() {
+        super.onCleared()
+        mediaCacheService.clearCache()
+        scanCache.clear()
+    }
+
+    internal fun resetAfterScan(
+        files: List<MediaFileInfo>,
+        playlists: List<PlaylistInfo>,
+        maxFiles: Int,
+        scanMessage: String? = null,
+        scanProgress: String? = null
+    ): MainUiState {
+        val current = _uiState.value
+        return current.copy(
+            scan = current.scan.copy(
+                isScanning = false,
+                scannedFiles = files,
+                discoveredPlaylists = playlists,
+                lastScanLimit = maxFiles,
+                scanMessage = scanMessage,
+                scanProgress = scanProgress
+            ),
+            library = LibraryState(),
+            playlist = current.playlist.copy(
+                selectedPlaylist = null,
+                playlistSongs = emptyList(),
+                isPlaylistLoading = false,
+                manualPlaylistSongs = emptyList()
+            ),
+            search = current.search.copy(
+                searchResults = applySearchResults(files, current.search.searchQuery)
+            )
+        )
+    }
+
     fun onDirectorySelected(
         treeUri: Uri,
         maxFiles: Int,
@@ -84,33 +140,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 mediaCacheService.clearCache()
                 cached.first.forEach { mediaCacheService.addFile(it) }
                 cached.second.forEach { mediaCacheService.addPlaylist(it) }
-                _uiState.value = _uiState.value.copy(
-                    isScanning = false,
-                    scannedFiles = cached.first,
-                    discoveredPlaylists = cached.second,
-                    lastScanLimit = maxFiles,
-                    lastPlaylistCount = _uiState.value.lastPlaylistCount,
-                    selectedPlaylist = null,
-                    playlistSongs = emptyList(),
-                    isPlaylistLoading = false,
-                    albums = emptyList(),
-                    genres = emptyList(),
-                    artists = emptyList(),
-                    decades = emptyList(),
-                    selectedAlbum = null,
-                    selectedGenre = null,
-                    selectedArtist = null,
-                    selectedDecade = null,
-                    filteredSongs = emptyList(),
-                    isMetadataLoading = false,
-                    scanMessage = null,
-                    scanProgress = null,
-                    searchResults = applySearchResults(
-                        cached.first,
-                        _uiState.value.searchQuery
-                    ),
-                    manualPlaylistSongs = emptyList()
-                )
+                _uiState.value = resetAfterScan(cached.first, cached.second, maxFiles)
                 metadataKey = null
                 return
             }
@@ -122,67 +152,39 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     mediaCacheService.loadPersistedCache(getApplication(), treeUri, maxFiles)
                 if (persisted != null) {
                     scanCache[key] = persisted.files to persisted.playlists
-                    _uiState.value = _uiState.value.copy(
-                        isScanning = false,
-                        scannedFiles = persisted.files,
-                        discoveredPlaylists = persisted.playlists,
-                        lastScanLimit = maxFiles,
-                        lastPlaylistCount = _uiState.value.lastPlaylistCount,
-                        selectedPlaylist = null,
-                        playlistSongs = emptyList(),
-                        isPlaylistLoading = false,
-                        albums = emptyList(),
-                        genres = emptyList(),
-                        artists = emptyList(),
-                        decades = emptyList(),
-                        selectedAlbum = null,
-                        selectedGenre = null,
-                        selectedArtist = null,
-                        selectedDecade = null,
-                        filteredSongs = emptyList(),
-                        isMetadataLoading = false,
-                        scanMessage = null,
-                        scanProgress = null,
-                        searchResults = applySearchResults(
-                            persisted.files,
-                            _uiState.value.searchQuery
-                        ),
-                        manualPlaylistSongs = emptyList()
-                    )
+                    _uiState.value = resetAfterScan(persisted.files, persisted.playlists, maxFiles)
                     metadataKey = null
                     return@launch
                 }
             }
-            _uiState.value = _uiState.value.copy(
-                isScanning = true,
-                scannedFiles = emptyList(),
-                discoveredPlaylists = emptyList(),
-                lastScanLimit = maxFiles,
-                lastPlaylistCount = _uiState.value.lastPlaylistCount,
-                selectedPlaylist = null,
-                playlistSongs = emptyList(),
-                isPlaylistLoading = false,
-                albums = emptyList(),
-                genres = emptyList(),
-                artists = emptyList(),
-                decades = emptyList(),
-                selectedAlbum = null,
-                selectedGenre = null,
-                selectedArtist = null,
-                selectedDecade = null,
-                filteredSongs = emptyList(),
-                isMetadataLoading = false,
-                scanMessage = null,
-                scanProgress = "Scanning… 0 songs"
+            val current = _uiState.value
+            _uiState.value = current.copy(
+                scan = current.scan.copy(
+                    isScanning = true,
+                    scannedFiles = emptyList(),
+                    discoveredPlaylists = emptyList(),
+                    lastScanLimit = maxFiles,
+                    scanMessage = null,
+                    scanProgress = "Scanning… 0 songs"
+                ),
+                library = LibraryState(),
+                playlist = current.playlist.copy(
+                    selectedPlaylist = null,
+                    playlistSongs = emptyList(),
+                    isPlaylistLoading = false
+                )
             )
             val stats = mediaCacheService.scanDirectory(
                 getApplication(),
                 treeUri,
                 maxFiles
             ) { songsFound, foldersScanned ->
-                _uiState.value = _uiState.value.copy(
-                    scanProgress = "Scanning… $songsFound songs • $foldersScanned folders",
-                    scannedFiles = mediaCacheService.cachedFiles
+                val cur = _uiState.value
+                _uiState.value = cur.copy(
+                    scan = cur.scan.copy(
+                        scanProgress = "Scanning… $songsFound songs • $foldersScanned folders",
+                        scannedFiles = mediaCacheService.cachedFiles
+                    )
                 )
             }
             val files = mediaCacheService.cachedFiles
@@ -195,23 +197,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 stats.foldersScanned,
                 stats.songsFound
             )
-            _uiState.value = _uiState.value.copy(
-                isScanning = false,
-                scannedFiles = files,
-                discoveredPlaylists = playlists,
-                lastPlaylistCount = _uiState.value.lastPlaylistCount,
-                lastScanLimit = maxFiles,
-                selectedPlaylist = null,
-                playlistSongs = emptyList(),
-                isPlaylistLoading = false,
-                scanMessage = message,
-                scanProgress = null,
-                searchResults = applySearchResults(
-                    files,
-                    _uiState.value.searchQuery
-                ),
-                manualPlaylistSongs = emptyList()
-            )
+            _uiState.value = resetAfterScan(files, playlists, maxFiles, scanMessage = message)
             metadataKey = null
         }
     }
@@ -222,22 +208,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun selectTab(tab: LibraryTab) {
-        _uiState.value = _uiState.value.copy(
-            selectedTab = tab,
-            selectedAlbum = if (tab == LibraryTab.Albums) _uiState.value.selectedAlbum else null,
-            selectedGenre = if (tab == LibraryTab.Genres) _uiState.value.selectedGenre else null,
-            selectedArtist = if (tab == LibraryTab.Artists) _uiState.value.selectedArtist else null,
-            selectedDecade = if (tab == LibraryTab.Decades) _uiState.value.selectedDecade else null,
-            filteredSongs = if (
-                tab == LibraryTab.Albums ||
-                tab == LibraryTab.Genres ||
-                tab == LibraryTab.Artists ||
-                tab == LibraryTab.Decades
-            ) {
-                _uiState.value.filteredSongs
-            } else {
-                emptyList()
-            }
+        val current = _uiState.value
+        val lib = current.library
+        _uiState.value = current.copy(
+            library = lib.copy(
+                selectedTab = tab,
+                selectedAlbum = if (tab == LibraryTab.Albums) lib.selectedAlbum else null,
+                selectedGenre = if (tab == LibraryTab.Genres) lib.selectedGenre else null,
+                selectedArtist = if (tab == LibraryTab.Artists) lib.selectedArtist else null,
+                selectedDecade = if (tab == LibraryTab.Decades) lib.selectedDecade else null,
+                filteredSongs = if (
+                    tab == LibraryTab.Albums ||
+                    tab == LibraryTab.Genres ||
+                    tab == LibraryTab.Artists ||
+                    tab == LibraryTab.Decades
+                ) {
+                    lib.filteredSongs
+                } else {
+                    emptyList()
+                }
+            )
         )
         if (
             tab == LibraryTab.Albums ||
@@ -250,95 +240,121 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun selectAlbum(album: String) {
-        _uiState.value = _uiState.value.copy(
-            selectedAlbum = album,
-            selectedGenre = null,
-            selectedArtist = null
+        val current = _uiState.value
+        _uiState.value = current.copy(
+            library = current.library.copy(
+                selectedAlbum = album,
+                selectedGenre = null,
+                selectedArtist = null
+            )
         )
         applyFilteredSongs()
     }
 
     fun selectGenre(genre: String) {
-        _uiState.value = _uiState.value.copy(
-            selectedAlbum = null,
-            selectedGenre = genre,
-            selectedArtist = null
+        val current = _uiState.value
+        _uiState.value = current.copy(
+            library = current.library.copy(
+                selectedAlbum = null,
+                selectedGenre = genre,
+                selectedArtist = null
+            )
         )
         applyFilteredSongs()
     }
 
     fun selectArtist(artist: String) {
-        _uiState.value = _uiState.value.copy(
-            selectedAlbum = null,
-            selectedGenre = null,
-            selectedArtist = artist,
-            selectedDecade = null
+        val current = _uiState.value
+        _uiState.value = current.copy(
+            library = current.library.copy(
+                selectedAlbum = null,
+                selectedGenre = null,
+                selectedArtist = artist,
+                selectedDecade = null
+            )
         )
         applyFilteredSongs()
     }
 
     fun selectDecade(decade: String) {
-        _uiState.value = _uiState.value.copy(
-            selectedAlbum = null,
-            selectedGenre = null,
-            selectedArtist = null,
-            selectedDecade = decade
+        val current = _uiState.value
+        _uiState.value = current.copy(
+            library = current.library.copy(
+                selectedAlbum = null,
+                selectedGenre = null,
+                selectedArtist = null,
+                selectedDecade = decade
+            )
         )
         applyFilteredSongs()
     }
 
     fun clearCategorySelection() {
-        _uiState.value = _uiState.value.copy(
-            selectedAlbum = null,
-            selectedGenre = null,
-            selectedArtist = null,
-            selectedDecade = null,
-            filteredSongs = emptyList()
+        val current = _uiState.value
+        _uiState.value = current.copy(
+            library = current.library.copy(
+                selectedAlbum = null,
+                selectedGenre = null,
+                selectedArtist = null,
+                selectedDecade = null,
+                filteredSongs = emptyList()
+            )
         )
     }
 
     fun updateSearchQuery(query: String) {
         val current = _uiState.value
         val trimmed = query.trim()
-        val results = applySearchResults(current.scannedFiles, trimmed)
+        val results = applySearchResults(current.scan.scannedFiles, trimmed)
         _uiState.value = current.copy(
-            searchQuery = trimmed,
-            searchResults = results
+            search = current.search.copy(
+                searchQuery = trimmed,
+                searchResults = results
+            )
         )
     }
 
     fun addToManualPlaylist(file: MediaFileInfo) {
         val current = _uiState.value
-        if (current.manualPlaylistSongs.any { it.uriString == file.uriString }) return
+        if (current.playlist.manualPlaylistSongs.any { it.uriString == file.uriString }) return
         _uiState.value = current.copy(
-            manualPlaylistSongs = current.manualPlaylistSongs + file
+            playlist = current.playlist.copy(
+                manualPlaylistSongs = current.playlist.manualPlaylistSongs + file
+            )
         )
     }
 
     fun clearManualPlaylist() {
-        _uiState.value = _uiState.value.copy(manualPlaylistSongs = emptyList())
+        val current = _uiState.value
+        _uiState.value = current.copy(
+            playlist = current.playlist.copy(manualPlaylistSongs = emptyList())
+        )
     }
 
     fun createManualPlaylist(name: String) {
         val uri = treeUri
         val current = _uiState.value
         if (uri == null) {
-            _uiState.value = current.copy(playlistMessage = "Select a folder first.")
+            _uiState.value = current.copy(
+                playlist = current.playlist.copy(playlistMessage = "Select a folder first.")
+            )
             return
         }
-        if (current.manualPlaylistSongs.isEmpty()) {
-            _uiState.value = current.copy(playlistMessage = "Add songs first.")
+        if (current.playlist.manualPlaylistSongs.isEmpty()) {
+            _uiState.value = current.copy(
+                playlist = current.playlist.copy(playlistMessage = "Add songs first.")
+            )
             return
         }
         val result = playlistService.writePlaylistWithName(
             getApplication(),
             uri,
-            current.manualPlaylistSongs,
+            current.playlist.manualPlaylistSongs,
             name
         )
         if (result != null) {
-            val updatedPlaylists = current.discoveredPlaylists + result
-            val key = treeUri?.let { "${it}|${current.lastScanLimit}" }
+            val updatedPlaylists = current.scan.discoveredPlaylists + result
+            val key = treeUri?.let { "${it}|${current.scan.lastScanLimit}" }
             if (key != null) {
                 val cached = scanCache[key]
                 if (cached != null) {
@@ -347,18 +363,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             mediaCacheService.addPlaylist(result)
             _uiState.value = current.copy(
-                discoveredPlaylists = updatedPlaylists,
-                playlistMessage = "Created ${result.displayName}",
-                manualPlaylistSongs = emptyList()
+                scan = current.scan.copy(discoveredPlaylists = updatedPlaylists),
+                playlist = current.playlist.copy(
+                    playlistMessage = "Created ${result.displayName}",
+                    manualPlaylistSongs = emptyList()
+                )
             )
             treeUri?.let { tree ->
-                val limit = current.lastScanLimit
+                val limit = current.scan.lastScanLimit
                 viewModelScope.launch(Dispatchers.IO) {
                     mediaCacheService.persistCache(getApplication(), tree, limit)
                 }
             }
         } else {
-            _uiState.value = current.copy(playlistMessage = "Failed to create playlist")
+            _uiState.value = current.copy(
+                playlist = current.playlist.copy(playlistMessage = "Failed to create playlist")
+            )
         }
     }
 
@@ -367,17 +387,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val success = playlistService.appendToPlaylist(getApplication(), uri, listOf(file))
         val current = _uiState.value
         if (success) {
-            val updatedSongs = if (current.selectedPlaylist?.uriString == playlist.uriString) {
-                current.playlistSongs + file
+            val updatedSongs = if (current.playlist.selectedPlaylist?.uriString == playlist.uriString) {
+                current.playlist.playlistSongs + file
             } else {
-                current.playlistSongs
+                current.playlist.playlistSongs
             }
             _uiState.value = current.copy(
-                playlistSongs = updatedSongs,
-                playlistMessage = "Added to ${playlist.displayName.removeSuffix(".m3u")}"
+                playlist = current.playlist.copy(
+                    playlistSongs = updatedSongs,
+                    playlistMessage = "Added to ${playlist.displayName.removeSuffix(".m3u")}"
+                )
             )
         } else {
-            _uiState.value = current.copy(playlistMessage = "Failed to update playlist")
+            _uiState.value = current.copy(
+                playlist = current.playlist.copy(playlistMessage = "Failed to update playlist")
+            )
         }
     }
 
@@ -392,10 +416,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             )
             val current = _uiState.value
             if (success) {
-                val updatedPlaylists = current.discoveredPlaylists.filterNot {
+                val updatedPlaylists = current.scan.discoveredPlaylists.filterNot {
                     it.uriString == playlist.uriString
                 }
-                val key = treeUri?.let { "${it}|${current.lastScanLimit}" }
+                val key = treeUri?.let { "${it}|${current.scan.lastScanLimit}" }
                 if (key != null) {
                     val cached = scanCache[key]
                     if (cached != null) {
@@ -404,68 +428,84 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 mediaCacheService.removePlaylistByUri(playlist.uriString)
                 _uiState.value = current.copy(
-                    discoveredPlaylists = updatedPlaylists,
-                    selectedPlaylist = if (current.selectedPlaylist?.uriString == playlist.uriString) {
-                        null
-                    } else {
-                        current.selectedPlaylist
-                    },
-                    playlistSongs = if (current.selectedPlaylist?.uriString == playlist.uriString) {
-                        emptyList()
-                    } else {
-                        current.playlistSongs
-                    },
-                    playlistMessage = "Deleted ${playlist.displayName.removeSuffix(".m3u")}"
+                    scan = current.scan.copy(discoveredPlaylists = updatedPlaylists),
+                    playlist = current.playlist.copy(
+                        selectedPlaylist = if (current.playlist.selectedPlaylist?.uriString == playlist.uriString) {
+                            null
+                        } else {
+                            current.playlist.selectedPlaylist
+                        },
+                        playlistSongs = if (current.playlist.selectedPlaylist?.uriString == playlist.uriString) {
+                            emptyList()
+                        } else {
+                            current.playlist.playlistSongs
+                        },
+                        playlistMessage = "Deleted ${playlist.displayName.removeSuffix(".m3u")}"
+                    )
                 )
                 treeUri?.let { tree ->
-                    val limit = current.lastScanLimit
+                    val limit = current.scan.lastScanLimit
                     mediaCacheService.persistCache(getApplication(), tree, limit)
                 }
             } else {
-                _uiState.value = current.copy(playlistMessage = "Failed to delete playlist")
+                _uiState.value = current.copy(
+                    playlist = current.playlist.copy(playlistMessage = "Failed to delete playlist")
+                )
             }
         }
     }
 
     fun selectPlaylist(playlist: PlaylistInfo) {
-        _uiState.value = _uiState.value.copy(
-            selectedPlaylist = playlist,
-            playlistSongs = emptyList(),
-            isPlaylistLoading = true
+        val current = _uiState.value
+        _uiState.value = current.copy(
+            playlist = current.playlist.copy(
+                selectedPlaylist = playlist,
+                playlistSongs = emptyList(),
+                isPlaylistLoading = true
+            )
         )
         viewModelScope.launch(Dispatchers.IO) {
             val songs = playlistService.readPlaylist(getApplication(), Uri.parse(playlist.uriString))
-            val byUri = _uiState.value.scannedFiles.associateBy { it.uriString }
+            val cur = _uiState.value
+            val byUri = cur.scan.scannedFiles.associateBy { it.uriString }
             val enriched = songs.map { song -> byUri[song.uriString] ?: song }
-            _uiState.value = _uiState.value.copy(
-                playlistSongs = enriched,
-                isPlaylistLoading = false
+            _uiState.value = cur.copy(
+                playlist = cur.playlist.copy(
+                    playlistSongs = enriched,
+                    isPlaylistLoading = false
+                )
             )
         }
     }
 
     fun clearSelectedPlaylist() {
-        _uiState.value = _uiState.value.copy(
-            selectedPlaylist = null,
-            playlistSongs = emptyList(),
-            isPlaylistLoading = false
+        val current = _uiState.value
+        _uiState.value = current.copy(
+            playlist = current.playlist.copy(
+                selectedPlaylist = null,
+                playlistSongs = emptyList(),
+                isPlaylistLoading = false
+            )
         )
     }
 
     fun createRandomPlaylist(count: Int) {
         val uri = treeUri ?: return
-        val files = _uiState.value.scannedFiles
+        val files = _uiState.value.scan.scannedFiles
         if (files.isEmpty()) return
         val safeCount = count.coerceIn(1, files.size)
         val selected = files.shuffled().take(safeCount)
         viewModelScope.launch(Dispatchers.IO) {
             val result = playlistService.writePlaylist(getApplication(), uri, selected)
+            val current = _uiState.value
             if (result != null) {
-                val updatedPlaylists = _uiState.value.discoveredPlaylists + result
-                _uiState.value = _uiState.value.copy(
-                    discoveredPlaylists = updatedPlaylists,
-                    playlistMessage = "Created ${result.displayName}",
-                    lastPlaylistCount = safeCount
+                val updatedPlaylists = current.scan.discoveredPlaylists + result
+                _uiState.value = current.copy(
+                    scan = current.scan.copy(discoveredPlaylists = updatedPlaylists),
+                    playlist = current.playlist.copy(
+                        playlistMessage = "Created ${result.displayName}",
+                        lastPlaylistCount = safeCount
+                    )
                 )
                 val key = uri.toString()
                 val existing = scanCache[key]
@@ -473,50 +513,69 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     scanCache[key] = existing.first to updatedPlaylists
                 }
             } else {
-                _uiState.value = _uiState.value.copy(
-                    playlistMessage = "Failed to create playlist",
-                    lastPlaylistCount = safeCount
+                _uiState.value = current.copy(
+                    playlist = current.playlist.copy(
+                        playlistMessage = "Failed to create playlist",
+                        lastPlaylistCount = safeCount
+                    )
                 )
             }
         }
     }
 
     fun clearPlaylistMessage() {
-        _uiState.value = _uiState.value.copy(playlistMessage = null)
+        val current = _uiState.value
+        _uiState.value = current.copy(
+            playlist = current.playlist.copy(playlistMessage = null)
+        )
     }
 
     fun setFolderMessage(message: String) {
-        _uiState.value = _uiState.value.copy(folderMessage = message)
+        val current = _uiState.value
+        _uiState.value = current.copy(
+            scan = current.scan.copy(folderMessage = message)
+        )
     }
 
     fun clearFolderMessage() {
-        _uiState.value = _uiState.value.copy(folderMessage = null)
+        val current = _uiState.value
+        _uiState.value = current.copy(
+            scan = current.scan.copy(folderMessage = null)
+        )
     }
 
     fun clearScanMessage() {
-        _uiState.value = _uiState.value.copy(scanMessage = null)
+        val current = _uiState.value
+        _uiState.value = current.copy(
+            scan = current.scan.copy(scanMessage = null)
+        )
     }
 
     fun updatePlaybackState(state: Int, mediaId: String?, trackName: String?) {
         val current = _uiState.value
         _uiState.value = current.copy(
-            isPlaying = (state == PlaybackStateCompat.STATE_PLAYING),
-            isPaused = (state == PlaybackStateCompat.STATE_PAUSED),
-            currentTrackName = if (state == PlaybackStateCompat.STATE_STOPPED) null else trackName,
-            currentMediaId = if (state == PlaybackStateCompat.STATE_STOPPED) null else mediaId
+            playback = current.playback.copy(
+                isPlaying = (state == PlaybackStateCompat.STATE_PLAYING),
+                isPaused = (state == PlaybackStateCompat.STATE_PAUSED),
+                currentTrackName = if (state == PlaybackStateCompat.STATE_STOPPED) null else trackName,
+                currentMediaId = if (state == PlaybackStateCompat.STATE_STOPPED) null else mediaId
+            )
         )
     }
 
     fun updateQueueState(queueTitle: String?, queueSize: Int, activeIndex: Int) {
-        _uiState.value = _uiState.value.copy(
-            isPlayingPlaylist = queueTitle != null,
-            queuePosition = if (queueTitle != null && queueSize > 0 && activeIndex >= 0) {
-                "${activeIndex + 1}/$queueSize"
-            } else {
-                null
-            },
-            hasPrev = queueTitle != null && activeIndex > 0,
-            hasNext = queueTitle != null && activeIndex >= 0 && activeIndex < queueSize - 1
+        val current = _uiState.value
+        _uiState.value = current.copy(
+            playback = current.playback.copy(
+                isPlayingPlaylist = queueTitle != null,
+                queuePosition = if (queueTitle != null && queueSize > 0 && activeIndex >= 0) {
+                    "${activeIndex + 1}/$queueSize"
+                } else {
+                    null
+                },
+                hasPrev = queueTitle != null && activeIndex > 0,
+                hasNext = queueTitle != null && activeIndex >= 0 && activeIndex < queueSize - 1
+            )
         )
     }
 
@@ -525,19 +584,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (metadataKey == uriKey && mediaCacheService.hasAlbumArtistIndexes()) return
 
         viewModelScope.launch(Dispatchers.IO) {
-            _uiState.value = _uiState.value.copy(isMetadataLoading = true)
+            val cur = _uiState.value
+            _uiState.value = cur.copy(
+                library = cur.library.copy(isMetadataLoading = true)
+            )
             mediaCacheService.buildAlbumArtistIndexesFromCache()
             val albums = mediaCacheService.albums()
             val artists = mediaCacheService.artists()
             val genres = mediaCacheService.genres()
             val decades = mediaCacheService.decades()
             metadataKey = uriKey
-            _uiState.value = _uiState.value.copy(
-                albums = albums,
-                genres = genres,
-                artists = artists,
-                decades = decades,
-                isMetadataLoading = false
+            val cur2 = _uiState.value
+            _uiState.value = cur2.copy(
+                library = cur2.library.copy(
+                    albums = albums,
+                    genres = genres,
+                    artists = artists,
+                    decades = decades,
+                    isMetadataLoading = false
+                )
             )
             applyFilteredSongs()
         }
@@ -545,18 +610,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun applyFilteredSongs() {
         val current = _uiState.value
+        val lib = current.library
         val filtered = when {
-            current.selectedAlbum != null ->
-                mediaCacheService.songsForAlbum(current.selectedAlbum)
-            current.selectedGenre != null ->
-                mediaCacheService.songsForGenre(current.selectedGenre)
-            current.selectedArtist != null ->
-                mediaCacheService.songsForArtist(current.selectedArtist)
-            current.selectedDecade != null ->
-                mediaCacheService.songsForDecade(current.selectedDecade)
+            lib.selectedAlbum != null ->
+                mediaCacheService.songsForAlbum(lib.selectedAlbum)
+            lib.selectedGenre != null ->
+                mediaCacheService.songsForGenre(lib.selectedGenre)
+            lib.selectedArtist != null ->
+                mediaCacheService.songsForArtist(lib.selectedArtist)
+            lib.selectedDecade != null ->
+                mediaCacheService.songsForDecade(lib.selectedDecade)
             else -> emptyList()
         }
-        _uiState.value = current.copy(filteredSongs = filtered)
+        _uiState.value = current.copy(
+            library = lib.copy(filteredSongs = filtered)
+        )
     }
 
     private fun applySearchResults(

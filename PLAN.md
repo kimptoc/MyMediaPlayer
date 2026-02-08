@@ -40,142 +40,67 @@ The MyMediaPlayer app follows a **clean separation of concerns** with a well-str
 
 ### Critical Issues Requiring Immediate Attention
 
-#### 🔴 CRITICAL: Memory Management Issues
+#### ~~🔴 CRITICAL: Memory Management Issues~~ ✅ FIXED
 
-1. **MediaPlayer Memory Leaks** (`MyMusicService.kt:66-67`)
-   ```kotlin
-   private lateinit var session: MediaSessionCompat
-   private var mediaPlayer: MediaPlayer? = null
-   ```
-   - **Issue**: MediaPlayer not properly released in all code paths
-   - **Impact**: Memory leaks, potential crashes
-   - **Fix**: Ensure `releaseMediaPlayer()` is called in all error paths and state transitions
+1. ~~**MediaPlayer Memory Leaks** (`MyMusicService.kt:66-67`)~~
+   - **Fixed**: `playTrack()` now creates MediaPlayer in a local variable and only assigns to the field after successful setup. On exception, the local instance is directly released, preventing leaks. `releaseMediaPlayer()` also clears all listeners before releasing to prevent callbacks on a released player.
 
-2. **Service Lifecycle Management** (`MyMusicService.kt:448-454`)
-   ```kotlin
-   override fun onDestroy() {
-       releaseMediaPlayer()
-       abandonAudioFocus()
-       session.isActive = false
-       session.release()
-       super.onDestroy()
-   }
-   ```
-   - **Issue**: Incomplete cleanup in onDestroy
-   - **Impact**: Potential memory leaks
-   - **Fix**: Add proper cleanup for all resources and callbacks
+2. ~~**Service Lifecycle Management** (`MyMusicService.kt:448-454`)~~
+   - **Fixed**: `onDestroy()` now cancels the coroutine scope, clears `pendingResults`, nulls the session callback, and clears list references (`playlistQueue`, `lastSearchResults`).
 
-#### 🔴 CRITICAL: Threading Issues
+#### ~~🔴 CRITICAL: Threading Issues~~ ✅ FIXED
 
-1. **Raw Thread Usage** (`MyMusicService.kt:1050-1086`)
-   ```kotlin
-   Thread {
-       // Long running operation
-   }.start()
-   ```
-   - **Issue**: Using raw Thread instead of coroutines or Executors
-   - **Impact**: Poor resource management, potential thread leaks
-   - **Fix**: Replace with coroutines using Dispatchers.IO
+1. ~~**Raw Thread Usage** (`MyMusicService.kt:1050-1086`)~~ ✅ FIXED
+   - **Fixed**: Replaced raw `Thread` with `serviceScope.launch` using a `CoroutineScope(SupervisorJob() + Dispatchers.IO)`. The scope is cancelled in `onDestroy()`. Added `kotlinx-coroutines-android` dependency.
 
-2. **UI Thread Blocking** (`MediaCacheService.kt:303-320`)
-   ```kotlin
-   fun buildMetadataIndexes(context: Context) {
-       // Potentially expensive operation
-   }
-   ```
-   - **Issue**: Expensive operations could block UI thread
-   - **Impact**: ANRs, poor user experience
-   - **Fix**: Move to background thread/coroutine
+2. ~~**UI Thread Blocking** (`MediaCacheService.kt:303-320`)~~ ✅ FIXED
+   - **Fixed**: `onLoadChildren()` now detaches the result and uses `serviceScope.launch` when metadata indexes need building, sending the result asynchronously. `onPlayFromMediaId()` body extracted to `handlePlayFromMediaId()` and launched via `serviceScope.launch` so `ensureMetadataIndexes()` never blocks the main thread.
 
-#### 🔴 CRITICAL: Error Handling Issues
+#### ~~🔴 CRITICAL: Error Handling Issues~~ ✅ FIXED
 
-1. **Incomplete Error Handling** (`MyMusicService.kt:1155-1159`)
-   ```kotlin
-   } catch (e: Exception) {
-       updatePlaybackState(PlaybackStateCompat.STATE_ERROR)
-       releaseMediaPlayer()
-       abandonAudioFocus()
-   }
-   ```
-   - **Issue**: Generic exception handling without specific error recovery
-   - **Impact**: Poor user experience, hard to debug issues
-   - **Fix**: Add specific exception handling and error recovery mechanisms
+1. ~~**Incomplete Error Handling** (`MyMusicService.kt:1155-1159`)~~
+   - **Fixed**: `playTrack()` now catches `SecurityException`, `IOException`, `IllegalArgumentException`, and generic `Exception` separately, each with descriptive logging including the file name and exception. `updatePlaybackState()` accepts an optional error message and sets it via `setErrorMessage()` for user-visible feedback. `setOnErrorListener` now logs the `what`/`extra` codes. Added `handlePlaybackError()` which attempts recovery by skipping to the next track in the playlist queue before falling back to an error state.
 
 ### High Priority Issues
 
-#### 🟡 HIGH: State Management Complexity
+#### ~~🟡 HIGH: State Management Complexity~~ ✅ FIXED
 
-1. **Large State Class** (`MainViewModel.kt:17-52`)
-   ```kotlin
-   data class MainUiState(
-       val isScanning: Boolean = false,
-       val scannedFiles: List<MediaFileInfo> = emptyList(),
-       // ... 47 more properties
-   )
-   ```
-   - **Issue**: MainUiState has 49 properties making state management complex
-   - **Impact**: Performance issues, hard to maintain
-   - **Fix**: Break down into smaller, focused state classes
+1. ~~**Large State Class** (`MainViewModel.kt:17-52`)~~
+   - **Fixed**: `MainUiState` broken into 5 focused sub-state data classes: `ScanState` (scanning/files), `PlaybackState` (playback controls), `LibraryState` (tab/category selection), `SearchState` (search), `PlaylistMgmtState` (playlist management). `MainUiState` now composes these as fields. All access sites in `MainViewModel`, `MainScreen`, and `MainActivity` updated. Also extracted `resetAfterScan()` helper to reduce duplication in `onDirectorySelected()`.
 
-2. **Memory Leaks in ViewModel** (`MainViewModel.kt:67-68`)
-   ```kotlin
-   private val mediaCacheService = MediaCacheService()
-   private val playlistService = PlaylistService()
-   ```
-   - **Issue**: Services created but never cleaned up
-   - **Impact**: Memory leaks
-   - **Fix**: Add proper cleanup in ViewModel's onCleared()
+2. ~~**Memory Leaks in ViewModel** (`MainViewModel.kt:67-68`)~~
+   - **Fixed**: Added `onCleared()` override that calls `mediaCacheService.clearCache()` and `scanCache.clear()` to release cached data when the ViewModel is destroyed.
 
-#### 🟡 HIGH: Code Duplication
+#### ~~🟡 HIGH: Code Duplication~~ ✅ FIXED
 
-1. **Media Category Handling** (`MyMusicService.kt:505-750`)
-   ```kotlin
-   if (parentId.startsWith(PLAYLIST_PREFIX)) { /* ... */ }
-   if (parentId.startsWith(ALBUM_PREFIX)) { /* ... */ }
-   // Repeated for GENRE_PREFIX, ARTIST_PREFIX, etc.
-   ```
-   - **Issue**: Similar code blocks for different media categories
-   - **Impact**: Code maintenance burden, potential inconsistencies
-   - **Fix**: Use polymorphism or strategy pattern to reduce duplication
+1. ~~**Media Category Handling** (`MyMusicService.kt:505-750`)~~
+   - ✅ Extracted `buildSongListItems()` helper — eliminates 6 near-identical ~30-line blocks (PLAYLIST, ALBUM, GENRE, ARTIST, DECADE, SONG_LETTER) that built [Play All] + [Shuffle] + song items
+   - ✅ Extracted `buildCategoryListItems()` helper — eliminates 5 duplicated category-to-browsable-item mapping blocks (ALBUMS_ID, GENRES_ID, DECADES_ID, ARTISTS_ID, SONGS_ALL_ID, plus ARTIST_LETTER and GENRE_LETTER prefix blocks)
+   - Each category block reduced from ~30 lines to 3-5 lines
 
 ### Medium Priority Issues
 
-#### 🟢 MEDIUM: Performance Optimization
+#### ~~🟢 MEDIUM: Performance Optimization~~ ✅ FIXED
 
-1. **Scan Directory Performance** (`MediaCacheService.kt:40-69`)
-   ```kotlin
-   fun scanDirectory(
-       context: Context,
-       treeUri: Uri,
-       maxFiles: Int = MAX_CACHE_SIZE,
-       onProgress: ((songsFound: Int, foldersScanned: Int) -> Unit)? = null
-   ): ScanStats
-   ```
-   - **Issue**: Could be optimized for large directories
-   - **Impact**: Slow scanning on large media libraries
-   - **Fix**: Implement batching and parallel processing where possible
+1. ~~**Scan Directory Performance** (`MediaCacheService.kt:40-69`)~~
+   - ✅ Separated tree walking (fast content provider queries) from metadata extraction (slow I/O)
+   - ✅ `scanDirectory` is now a `suspend` function with two-phase approach: walk first to collect `FileCandidate` objects, then extract metadata in parallel batches
+   - ✅ Uses `Dispatchers.IO.limitedParallelism(4)` for concurrent metadata extraction in batches of 50
+   - ✅ Progress reported after each batch completes
 
-2. **Metadata Extraction** (`MediaCacheService.kt:303-320`)
-   ```kotlin
-   fun buildMetadataIndexes(context: Context) {
-       // Extract metadata for each file
-   }
-   ```
-   - **Issue**: Metadata extraction could be cached more efficiently
-   - **Impact**: Performance overhead
-   - **Fix**: Implement more efficient caching strategy
+2. ~~**Metadata Extraction** (`MediaCacheService.kt:303-320`)~~
+   - ✅ Removed dead `buildMetadataIndexes(context)` method that redundantly re-extracted metadata from disk (was never called)
+   - ✅ Removed dead `metadataIndexed` field and `hasMetadataIndexes()` — only `albumArtistIndexed`/`hasAlbumArtistIndexes()` are actually used
+   - ✅ `buildAlbumArtistIndexesFromCache()` correctly uses already-cached in-memory metadata from `MediaFileInfo` objects
 
-#### 🟢 MEDIUM: Error Handling Improvements
+#### ~~🟢 MEDIUM: Error Handling Improvements~~ ✅ FIXED
 
-1. **File Operations Error Handling** (`PlaylistService.kt:106-139`)
-   ```kotlin
-   fun readPlaylist(context: Context, playlistUri: Uri): List<MediaFileInfo> {
-       // Could benefit from more specific error handling
-   }
-   ```
-   - **Issue**: Generic error handling for file operations
-   - **Impact**: Hard to diagnose issues
-   - **Fix**: Add specific error types and recovery mechanisms
+1. ~~**File Operations Error Handling** (`PlaylistService.kt:106-139`)~~
+   - ✅ `readPlaylist`: Added specific catches for `SecurityException`, `FileNotFoundException`, `IOException` when opening input stream, plus `IOException` catch around content parsing
+   - ✅ `writePlaylistWithName`: Added `SecurityException` and `IOException` catches around output stream write, plus logging on file creation failure
+   - ✅ `appendToPlaylist`: Added `SecurityException` and `IOException` catches around output stream operations
+   - ✅ `deletePlaylist`: Wrapped all three deletion strategies (DocumentFile, DocumentsContract, fallback findFile) with specific exception handling and logging
+   - All methods now log specific error types with playlist URI context via `Log.e`/`Log.w` for diagnostics
 
 ### Specific Code Fixes Required
 

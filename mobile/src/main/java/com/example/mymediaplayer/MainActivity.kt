@@ -121,11 +121,11 @@ class MainActivity : ComponentActivity() {
 
         lifecycleScope.launch {
             viewModel.uiState.collect { state ->
-                if (state.scannedFiles.isNotEmpty()) {
-                    sendFilesToServiceIfNeeded(state.scannedFiles)
+                if (state.scan.scannedFiles.isNotEmpty()) {
+                    sendFilesToServiceIfNeeded(state.scan.scannedFiles)
                 }
-                if (state.discoveredPlaylists.isNotEmpty()) {
-                    sendPlaylistsToServiceIfNeeded(state.discoveredPlaylists)
+                if (state.scan.discoveredPlaylists.isNotEmpty()) {
+                    sendPlaylistsToServiceIfNeeded(state.scan.discoveredPlaylists)
                 }
             }
         }
@@ -140,11 +140,11 @@ class MainActivity : ComponentActivity() {
                         openDocumentTree.launch(null)
                     },
                     onFileClick = { file ->
-                        sendFilesToServiceIfNeeded(uiState.value.scannedFiles)
+                        sendFilesToServiceIfNeeded(uiState.value.scan.scannedFiles)
                         mediaController?.transportControls?.playFromMediaId(file.uriString, null)
                     },
                     onPlayPause = {
-                        val isPlaying = uiState.value.isPlaying
+                        val isPlaying = uiState.value.playback.isPlaying
                         if (isPlaying) {
                             mediaController?.transportControls?.pause()
                         } else {
@@ -176,7 +176,7 @@ class MainActivity : ComponentActivity() {
                     onDeletePlaylist = { playlist -> viewModel.deletePlaylist(playlist) },
                     onPlaySongs = { songs ->
                         if (songs.isNotEmpty()) {
-                            sendFilesToServiceIfNeeded(uiState.value.scannedFiles)
+                            sendFilesToServiceIfNeeded(uiState.value.scan.scannedFiles)
                             mediaController?.transportControls?.playFromMediaId(
                                 songs.first().uriString,
                                 null
@@ -185,7 +185,7 @@ class MainActivity : ComponentActivity() {
                     },
                     onShuffleSongs = { songs ->
                         if (songs.isNotEmpty()) {
-                            sendFilesToServiceIfNeeded(uiState.value.scannedFiles)
+                            sendFilesToServiceIfNeeded(uiState.value.scan.scannedFiles)
                             val random = songs.random()
                             mediaController?.transportControls?.playFromMediaId(
                                 random.uriString,
@@ -210,8 +210,8 @@ class MainActivity : ComponentActivity() {
                     },
                     onClearManualPlaylist = { viewModel.clearManualPlaylist() },
                     onPlayPlaylist = { playlist ->
-                        sendFilesToServiceIfNeeded(uiState.value.scannedFiles)
-                        sendPlaylistsToServiceIfNeeded(uiState.value.discoveredPlaylists)
+                        sendFilesToServiceIfNeeded(uiState.value.scan.scannedFiles)
+                        sendPlaylistsToServiceIfNeeded(uiState.value.scan.discoveredPlaylists)
                         mediaController?.transportControls?.playFromMediaId(
                             "playlist:${playlist.uriString}",
                             null
@@ -219,7 +219,7 @@ class MainActivity : ComponentActivity() {
                     },
                     onShufflePlaylistSongs = { songs ->
                         if (songs.isNotEmpty()) {
-                            sendFilesToServiceIfNeeded(uiState.value.scannedFiles)
+                            sendFilesToServiceIfNeeded(uiState.value.scan.scannedFiles)
                             val random = songs.random()
                             mediaController?.transportControls?.playFromMediaId(
                                 random.uriString,
@@ -314,7 +314,7 @@ class MainActivity : ComponentActivity() {
         if (songs.isEmpty()) return
         if (songs.size > MAX_MEDIA_FILES_FOR_BUNDLE) {
             val target = if (shuffle) songs.random() else songs.first()
-            sendFilesToServiceIfNeeded(viewModel.uiState.value.scannedFiles)
+            sendFilesToServiceIfNeeded(viewModel.uiState.value.scan.scannedFiles)
             controller.transportControls?.playFromMediaId(target.uriString, null)
             return
         }
