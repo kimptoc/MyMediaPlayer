@@ -227,7 +227,7 @@ class MediaCacheService {
                                 title = metadata?.title ?: name,
                                 artist = metadata?.artist,
                                 album = metadata?.album,
-                                genre = metadata?.genre,
+                                genre = normalizeGenre(metadata?.genre),
                                 durationMs = durationMs,
                                 year = yearValue
                             )
@@ -291,7 +291,7 @@ class MediaCacheService {
             val metadata = MediaMetadataHelper.extractMetadata(context, file.uriString)
             val album = metadata?.album?.ifBlank { null } ?: "Unknown Album"
             val artist = metadata?.artist?.ifBlank { null } ?: "Unknown Artist"
-            val genre = metadata?.genre?.ifBlank { null } ?: "Unknown Genre"
+            val genre = normalizeGenre(metadata?.genre)
             val decade = decadeLabel(metadata?.year?.toIntOrNull() ?: file.year)
 
             albumIndex.getOrPut(album) { mutableListOf() }.add(file)
@@ -313,7 +313,7 @@ class MediaCacheService {
         for (file in snapshot) {
             val album = file.album?.ifBlank { null } ?: "Unknown Album"
             val artist = file.artist?.ifBlank { null } ?: "Unknown Artist"
-            val genre = file.genre?.ifBlank { null } ?: "Unknown Genre"
+            val genre = normalizeGenre(file.genre)
             val decade = decadeLabel(file.year)
             albumIndex.getOrPut(album) { mutableListOf() }.add(file)
             artistIndex.getOrPut(artist) { mutableListOf() }.add(file)
@@ -358,6 +358,29 @@ class MediaCacheService {
         decadeIndex.clear()
         metadataIndexed = false
         albumArtistIndexed = false
+    }
+
+    private fun normalizeGenre(raw: String?): String {
+        val value = raw?.trim()?.lowercase(Locale.US).orEmpty()
+        if (value.isBlank()) return "Other"
+
+        fun hasAny(vararg tokens: String): Boolean = tokens.any { value.contains(it) }
+
+        return when {
+            hasAny("hip hop", "hip-hop", "rap", "trap") -> "Hip-Hop"
+            hasAny("r&b", "rnb", "rhythm and blues") -> "R&B"
+            hasAny("electronic", "edm", "electronica", "techno", "house", "trance", "dubstep") ->
+                "Electronic"
+            hasAny("rock", "alternative", "grunge", "punk", "indie rock", "hard rock") -> "Rock"
+            hasAny("pop", "synthpop", "dance pop") -> "Pop"
+            hasAny("jazz", "swing", "bebop") -> "Jazz"
+            hasAny("classical", "orchestral", "symphony", "baroque", "opera") -> "Classical"
+            hasAny("country", "bluegrass") -> "Country"
+            hasAny("metal", "heavy metal", "death metal", "black metal") -> "Metal"
+            hasAny("reggae", "ska", "dancehall") -> "Reggae"
+            hasAny("latin", "salsa", "bachata", "reggaeton", "tango") -> "Latin"
+            else -> "Other"
+        }
     }
 
     private fun decadeLabel(year: Int?): String {
