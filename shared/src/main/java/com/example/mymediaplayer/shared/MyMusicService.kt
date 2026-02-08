@@ -32,6 +32,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         private const val GENRES_ID = "genres"
         private const val ARTISTS_ID = "artists"
         private const val DECADES_ID = "decades"
+        private const val SEARCH_ID = "search"
         private const val PLAYLIST_PREFIX = "playlist:"
         private const val PLAYLIST_URI_PREFIX = "playlist_uri:"
         private const val ALBUM_PREFIX = "album:"
@@ -49,12 +50,15 @@ class MyMusicService : MediaBrowserServiceCompat() {
         private const val ACTION_SET_MEDIA_FILES = "SET_MEDIA_FILES"
         private const val ACTION_REFRESH_LIBRARY = "REFRESH_LIBRARY"
         private const val ACTION_SET_PLAYLISTS = "SET_PLAYLISTS"
+        private const val ACTION_PLAY_SEARCH_LIST = "PLAY_SEARCH_LIST"
 
         private const val EXTRA_URIS = "uris"
         private const val EXTRA_NAMES = "names"
         private const val EXTRA_SIZES = "sizes"
         private const val EXTRA_PLAYLIST_URIS = "playlist_uris"
         private const val EXTRA_PLAYLIST_NAMES = "playlist_names"
+        private const val EXTRA_SEARCH_URIS = "search_uris"
+        private const val EXTRA_SEARCH_SHUFFLE = "search_shuffle"
     }
 
     private lateinit var session: MediaSessionCompat
@@ -71,6 +75,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
     private var currentQueueIndex: Int = -1
     private var currentPlaylistName: String? = null
     private var lastBrowseParentId: String? = null
+    private var lastSearchQuery: String? = null
+    private var lastSearchResults: List<MediaFileInfo> = emptyList()
     @Volatile
     private var isScanning: Boolean = false
     private val pendingResults =
@@ -234,8 +240,14 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 else -> emptyList()
             }
 
+            val searchList = if (lastSearchResults.any { it.uriString == resolvedMediaId }) {
+                lastSearchResults
+            } else {
+                emptyList()
+            }
             val parentList = when {
                 listFromParent.isNotEmpty() -> listFromParent
+                searchList.isNotEmpty() -> searchList
                 mediaCacheService.cachedFiles.isNotEmpty() -> mediaCacheService.cachedFiles
                 else -> emptyList()
             }
@@ -249,6 +261,10 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     currentPlaylistName = null
                 } else {
                     currentPlaylistName = when {
+                        searchList.isNotEmpty() -> {
+                            val query = lastSearchQuery?.trim().orEmpty()
+                            if (query.isNotEmpty()) "Search: $query" else "Search Results"
+                        }
                         parentId == SONGS_ID || parentId == SONGS_ALL_ID || listFromParent.isEmpty() -> "All Songs"
                         parentId?.startsWith(ALBUM_PREFIX) == true ->
                             Uri.decode(parentId.removePrefix(ALBUM_PREFIX))
@@ -330,6 +346,27 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 ACTION_REFRESH_LIBRARY -> {
                     loadCachedTreeIfAvailable()
                 }
+                ACTION_PLAY_SEARCH_LIST -> {
+                    if (extras == null) return
+                    val uris = extras.getStringArrayList(EXTRA_SEARCH_URIS) ?: return
+                    val shuffle = extras.getBoolean(EXTRA_SEARCH_SHUFFLE, false)
+                    if (uris.isEmpty()) return
+                    val snapshot = mediaCacheService.cachedFiles
+                    val lookup = snapshot.associateBy { it.uriString }
+                    val list = uris.map { uri ->
+                        lookup[uri] ?: MediaFileInfo(
+                            uriString = uri,
+                            displayName = uri,
+                            sizeBytes = 0L,
+                            title = uri
+                        )
+                    }
+                    playlistQueue = if (shuffle) list.shuffled() else list
+                    currentQueueIndex = 0
+                    currentPlaylistName = "Search Results"
+                    updateSessionQueue()
+                    playTrack(playlistQueue[currentQueueIndex])
+                }
                 ACTION_SET_PLAYLISTS -> {
                     if (extras == null) return
                     val playlistUris = extras.getStringArrayList(EXTRA_PLAYLIST_URIS) ?: return
@@ -408,6 +445,31 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
         lastBrowseParentId = parentId
         result.sendResult(buildMediaItems(parentId))
+    }
+
+    override fun onSearch(query: String, extras: Bundle?, result: Result<MutableList<MediaItem>>) {
+        val trimmed = query.trim()
+        if (trimmed.isEmpty()) {
+            lastSearchQuery = null
+            lastSearchResults = emptyList()
+            result.sendResult(mutableListOf())
+            return
+        }
+        val start = SystemClock.elapsedRealtime()
+        val matches = mediaCacheService.searchFiles(trimmed)
+        lastSearchQuery = trimmed
+        lastSearchResults = matches
+        val items = matches.map { fileInfo ->
+            val description = MediaDescriptionCompat.Builder()
+                .setMediaId(fileInfo.uriString)
+                .setTitle(fileInfo.title ?: fileInfo.displayName)
+                .setSubtitle(fileInfo.artist)
+                .build()
+            MediaItem(description, MediaItem.FLAG_PLAYABLE)
+        }.toMutableList()
+        val elapsed = SystemClock.elapsedRealtime() - start
+        Log.d("MyMusicService", "onSearch($trimmed) -> ${items.size} in ${elapsed}ms")
+        result.sendResult(items)
     }
 
     private fun buildMediaItems(parentId: String): MutableList<MediaItem> {
@@ -623,6 +685,15 @@ class MyMusicService : MediaBrowserServiceCompat() {
         val items = when (parentId) {
             ROOT_ID -> {
                 val items = mutableListOf<MediaItem>()
+                items.add(
+                    MediaItem(
+                        MediaDescriptionCompat.Builder()
+                            .setMediaId(SEARCH_ID)
+                            .setTitle("Search")
+                            .build(),
+                        MediaItem.FLAG_BROWSABLE
+                    )
+                )
                 val songsDesc = MediaDescriptionCompat.Builder()
                     .setMediaId(SONGS_ID)
                     .setTitle("Songs")
@@ -795,6 +866,17 @@ class MyMusicService : MediaBrowserServiceCompat() {
                         .build()
                     MediaItem(description, MediaItem.FLAG_BROWSABLE)
                 }.toMutableList()
+            }
+            SEARCH_ID -> {
+                mutableListOf(
+                    MediaItem(
+                        MediaDescriptionCompat.Builder()
+                            .setMediaId("search_hint")
+                            .setTitle("Use the search icon to search")
+                            .build(),
+                        MediaItem.FLAG_BROWSABLE
+                    )
+                )
             }
             else -> mutableListOf()
         }

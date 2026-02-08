@@ -31,6 +31,8 @@ data class MainUiState(
     val isMetadataLoading: Boolean = false,
     val isPlaying: Boolean = false,
     val isPaused: Boolean = false,
+    val searchQuery: String = "",
+    val searchResults: List<MediaFileInfo> = emptyList(),
     val currentTrackName: String? = null,
     val currentMediaId: String? = null,
     val playlistMessage: String? = null,
@@ -101,7 +103,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     filteredSongs = emptyList(),
                     isMetadataLoading = false,
                     scanMessage = null,
-                    scanProgress = null
+                    scanProgress = null,
+                    searchResults = applySearchResults(
+                        cached.first,
+                        _uiState.value.searchQuery
+                    )
                 )
                 metadataKey = null
                 return
@@ -134,7 +140,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         filteredSongs = emptyList(),
                         isMetadataLoading = false,
                         scanMessage = null,
-                        scanProgress = null
+                        scanProgress = null,
+                        searchResults = applySearchResults(
+                            persisted.files,
+                            _uiState.value.searchQuery
+                        )
                     )
                     metadataKey = null
                     return@launch
@@ -192,7 +202,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 playlistSongs = emptyList(),
                 isPlaylistLoading = false,
                 scanMessage = message,
-                scanProgress = null
+                scanProgress = null,
+                searchResults = applySearchResults(
+                    files,
+                    _uiState.value.searchQuery
+                )
             )
             metadataKey = null
         }
@@ -276,6 +290,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             selectedArtist = null,
             selectedDecade = null,
             filteredSongs = emptyList()
+        )
+    }
+
+    fun updateSearchQuery(query: String) {
+        val current = _uiState.value
+        val trimmed = query.trim()
+        val results = applySearchResults(current.scannedFiles, trimmed)
+        _uiState.value = current.copy(
+            searchQuery = trimmed,
+            searchResults = results
         )
     }
 
@@ -399,5 +423,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             else -> emptyList()
         }
         _uiState.value = current.copy(filteredSongs = filtered)
+    }
+
+    private fun applySearchResults(
+        files: List<MediaFileInfo>,
+        query: String
+    ): List<MediaFileInfo> {
+        if (query.isBlank()) return emptyList()
+        val needle = query.lowercase()
+        return files.filter { file ->
+            val title = file.title ?: file.displayName
+            val haystack = listOfNotNull(
+                title,
+                file.artist,
+                file.album,
+                file.genre
+            ).joinToString(" ").lowercase()
+            haystack.contains(needle)
+        }
     }
 }

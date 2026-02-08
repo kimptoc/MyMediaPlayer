@@ -31,11 +31,14 @@ class MainActivity : ComponentActivity() {
         private const val ACTION_SET_MEDIA_FILES = "SET_MEDIA_FILES"
         private const val ACTION_REFRESH_LIBRARY = "REFRESH_LIBRARY"
         private const val ACTION_SET_PLAYLISTS = "SET_PLAYLISTS"
+        private const val ACTION_PLAY_SEARCH_LIST = "PLAY_SEARCH_LIST"
         private const val EXTRA_URIS = "uris"
         private const val EXTRA_NAMES = "names"
         private const val EXTRA_SIZES = "sizes"
         private const val EXTRA_PLAYLIST_URIS = "playlist_uris"
         private const val EXTRA_PLAYLIST_NAMES = "playlist_names"
+        private const val EXTRA_SEARCH_URIS = "search_uris"
+        private const val EXTRA_SEARCH_SHUFFLE = "search_shuffle"
         private const val MAX_MEDIA_FILES_FOR_BUNDLE = 500
     }
 
@@ -166,6 +169,7 @@ class MainActivity : ComponentActivity() {
                     onGenreSelected = { viewModel.selectGenre(it) },
                     onArtistSelected = { viewModel.selectArtist(it) },
                     onDecadeSelected = { viewModel.selectDecade(it) },
+                    onSearchQueryChanged = { viewModel.updateSearchQuery(it) },
                     onClearCategorySelection = { viewModel.clearCategorySelection() },
                     onPlaylistSelected = { viewModel.selectPlaylist(it) },
                     onPlaySongs = { songs ->
@@ -186,6 +190,12 @@ class MainActivity : ComponentActivity() {
                                 null
                             )
                         }
+                    },
+                    onPlaySearchResults = { songs ->
+                        playSearchResults(songs, shuffle = false)
+                    },
+                    onShuffleSearchResults = { songs ->
+                        playSearchResults(songs, shuffle = true)
                     },
                     onPlayPlaylist = { playlist ->
                         sendFilesToServiceIfNeeded(uiState.value.scannedFiles)
@@ -285,5 +295,22 @@ class MainActivity : ComponentActivity() {
         }
         controller.transportControls.sendCustomAction(ACTION_SET_PLAYLISTS, bundle)
         lastSentPlaylistUris = uris
+    }
+
+    private fun playSearchResults(songs: List<com.example.mymediaplayer.shared.MediaFileInfo>, shuffle: Boolean) {
+        val controller = mediaController ?: return
+        if (songs.isEmpty()) return
+        if (songs.size > MAX_MEDIA_FILES_FOR_BUNDLE) {
+            val target = if (shuffle) songs.random() else songs.first()
+            sendFilesToServiceIfNeeded(viewModel.uiState.value.scannedFiles)
+            controller.transportControls?.playFromMediaId(target.uriString, null)
+            return
+        }
+        val uris = songs.map { it.uriString }
+        val bundle = Bundle().apply {
+            putStringArrayList(EXTRA_SEARCH_URIS, ArrayList(uris))
+            putBoolean(EXTRA_SEARCH_SHUFFLE, shuffle)
+        }
+        controller.transportControls.sendCustomAction(ACTION_PLAY_SEARCH_LIST, bundle)
     }
 }

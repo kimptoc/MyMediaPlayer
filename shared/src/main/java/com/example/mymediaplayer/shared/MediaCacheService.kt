@@ -361,6 +361,22 @@ class MediaCacheService {
     fun songsForDecade(decade: String): List<MediaFileInfo> =
         decadeIndex[decade]?.toList() ?: emptyList()
 
+    fun searchFiles(query: String): List<MediaFileInfo> {
+        val needle = query.trim().lowercase(Locale.US)
+        if (needle.isBlank()) return emptyList()
+        val snapshot = synchronized(cacheLock) { _cachedFiles.toList() }
+        return snapshot.filter { file ->
+            val title = file.title ?: file.displayName
+            val haystack = listOfNotNull(
+                title,
+                file.artist,
+                file.album,
+                file.genre
+            ).joinToString(" ").lowercase(Locale.US)
+            haystack.contains(needle)
+        }
+    }
+
     private fun clearMetadataIndexes() {
         albumIndex.clear()
         genreIndex.clear()

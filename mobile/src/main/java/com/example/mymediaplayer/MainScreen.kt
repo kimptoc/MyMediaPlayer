@@ -65,10 +65,13 @@ fun MainScreen(
     onGenreSelected: (String) -> Unit,
     onArtistSelected: (String) -> Unit,
     onDecadeSelected: (String) -> Unit,
+    onSearchQueryChanged: (String) -> Unit,
     onClearCategorySelection: () -> Unit,
     onPlaylistSelected: (PlaylistInfo) -> Unit,
     onPlaySongs: (List<MediaFileInfo>) -> Unit,
     onShuffleSongs: (List<MediaFileInfo>) -> Unit,
+    onPlaySearchResults: (List<MediaFileInfo>) -> Unit,
+    onShuffleSearchResults: (List<MediaFileInfo>) -> Unit,
     onPlayPlaylist: (PlaylistInfo) -> Unit,
     onShufflePlaylistSongs: (List<MediaFileInfo>) -> Unit
 ) {
@@ -172,6 +175,38 @@ fun MainScreen(
                         modifier = Modifier.align(Alignment.CenterHorizontally)
                     )
                 }
+            }
+
+            TextField(
+                value = uiState.searchQuery,
+                onValueChange = onSearchQueryChanged,
+                placeholder = { Text("Search title, artist, album, genre") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            if (uiState.searchQuery.isNotBlank()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                if (uiState.searchResults.isEmpty()) {
+                    Text("No results for \"${uiState.searchQuery}\"")
+                } else {
+                    SongsListSection(
+                        title = "Search Results (${uiState.searchResults.size})",
+                        songs = uiState.searchResults,
+                        isPlaying = uiState.isPlaying || uiState.isPlayingPlaylist,
+                        isPlayingPlaylist = uiState.isPlayingPlaylist,
+                        hasNext = uiState.hasNext,
+                        hasPrev = uiState.hasPrev,
+                        onPlay = { onPlaySearchResults(uiState.searchResults) },
+                        onShuffle = { onShuffleSearchResults(uiState.searchResults) },
+                        onStop = onStop,
+                        onNext = onNext,
+                        onPrev = onPrev,
+                        onFileClick = onFileClick,
+                        currentMediaId = uiState.currentMediaId
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
             }
 
             val tabs = LibraryTab.values().toList()
