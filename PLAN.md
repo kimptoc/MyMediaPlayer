@@ -16,6 +16,372 @@
 
 - Task 8 - an autopopulated recently added playlist
 - Task 9 - is there a number of plays meta data item
+
+## Architecture Review Findings
+
+### Overall Architecture Assessment
+
+The MyMediaPlayer app follows a **clean separation of concerns** with a well-structured architecture:
+
+1. **Service Layer**: `MyMusicService` - Handles media playback and browsing
+2. **ViewModel Layer**: `MainViewModel` - Manages UI state and business logic
+3. **Data Layer**: `MediaCacheService`, `PlaylistService`, `MediaCacheDatabase` - Handles data operations
+4. **UI Layer**: `MainScreen`, `MainActivity` - Compose-based UI components
+
+### Strengths
+
+✅ **Good Separation of Concerns**: Clear division between service, viewmodel, and UI layers
+✅ **MVVM Pattern**: Proper use of ViewModel with state management
+✅ **Dependency Injection**: Services are instantiated and injected appropriately
+✅ **Room Database**: Proper use of Room for local caching
+✅ **MediaBrowserService**: Correct implementation of Android's media browsing service
+✅ **Compose UI**: Modern Jetpack Compose implementation
+✅ **Threading**: Proper use of coroutines and background threads for I/O operations
+
+### Critical Issues Requiring Immediate Attention
+
+#### 🔴 CRITICAL: Memory Management Issues
+
+1. **MediaPlayer Memory Leaks** (`MyMusicService.kt:66-67`)
+   ```kotlin
+   private lateinit var session: MediaSessionCompat
+   private var mediaPlayer: MediaPlayer? = null
+   ```
+   - **Issue**: MediaPlayer not properly released in all code paths
+   - **Impact**: Memory leaks, potential crashes
+   - **Fix**: Ensure `releaseMediaPlayer()` is called in all error paths and state transitions
+
+2. **Service Lifecycle Management** (`MyMusicService.kt:448-454`)
+   ```kotlin
+   override fun onDestroy() {
+       releaseMediaPlayer()
+       abandonAudioFocus()
+       session.isActive = false
+       session.release()
+       super.onDestroy()
+   }
+   ```
+   - **Issue**: Incomplete cleanup in onDestroy
+   - **Impact**: Potential memory leaks
+   - **Fix**: Add proper cleanup for all resources and callbacks
+
+#### 🔴 CRITICAL: Threading Issues
+
+1. **Raw Thread Usage** (`MyMusicService.kt:1050-1086`)
+   ```kotlin
+   Thread {
+       // Long running operation
+   }.start()
+   ```
+   - **Issue**: Using raw Thread instead of coroutines or Executors
+   - **Impact**: Poor resource management, potential thread leaks
+   - **Fix**: Replace with coroutines using Dispatchers.IO
+
+2. **UI Thread Blocking** (`MediaCacheService.kt:303-320`)
+   ```kotlin
+   fun buildMetadataIndexes(context: Context) {
+       // Potentially expensive operation
+   }
+   ```
+   - **Issue**: Expensive operations could block UI thread
+   - **Impact**: ANRs, poor user experience
+   - **Fix**: Move to background thread/coroutine
+
+#### 🔴 CRITICAL: Error Handling Issues
+
+1. **Incomplete Error Handling** (`MyMusicService.kt:1155-1159`)
+   ```kotlin
+   } catch (e: Exception) {
+       updatePlaybackState(PlaybackStateCompat.STATE_ERROR)
+       releaseMediaPlayer()
+       abandonAudioFocus()
+   }
+   ```
+   - **Issue**: Generic exception handling without specific error recovery
+   - **Impact**: Poor user experience, hard to debug issues
+   - **Fix**: Add specific exception handling and error recovery mechanisms
+
+### High Priority Issues
+
+#### 🟡 HIGH: State Management Complexity
+
+1. **Large State Class** (`MainViewModel.kt:17-52`)
+   ```kotlin
+   data class MainUiState(
+       val isScanning: Boolean = false,
+       val scannedFiles: List<MediaFileInfo> = emptyList(),
+       // ... 47 more properties
+   )
+   ```
+   - **Issue**: MainUiState has 49 properties making state management complex
+   - **Impact**: Performance issues, hard to maintain
+   - **Fix**: Break down into smaller, focused state classes
+
+2. **Memory Leaks in ViewModel** (`MainViewModel.kt:67-68`)
+   ```kotlin
+   private val mediaCacheService = MediaCacheService()
+   private val playlistService = PlaylistService()
+   ```
+   - **Issue**: Services created but never cleaned up
+   - **Impact**: Memory leaks
+   - **Fix**: Add proper cleanup in ViewModel's onCleared()
+
+#### 🟡 HIGH: Code Duplication
+
+1. **Media Category Handling** (`MyMusicService.kt:505-750`)
+   ```kotlin
+   if (parentId.startsWith(PLAYLIST_PREFIX)) { /* ... */ }
+   if (parentId.startsWith(ALBUM_PREFIX)) { /* ... */ }
+   // Repeated for GENRE_PREFIX, ARTIST_PREFIX, etc.
+   ```
+   - **Issue**: Similar code blocks for different media categories
+   - **Impact**: Code maintenance burden, potential inconsistencies
+   - **Fix**: Use polymorphism or strategy pattern to reduce duplication
+
+### Medium Priority Issues
+
+#### 🟢 MEDIUM: Performance Optimization
+
+1. **Scan Directory Performance** (`MediaCacheService.kt:40-69`)
+   ```kotlin
+   fun scanDirectory(
+       context: Context,
+       treeUri: Uri,
+       maxFiles: Int = MAX_CACHE_SIZE,
+       onProgress: ((songsFound: Int, foldersScanned: Int) -> Unit)? = null
+   ): ScanStats
+   ```
+   - **Issue**: Could be optimized for large directories
+   - **Impact**: Slow scanning on large media libraries
+   - **Fix**: Implement batching and parallel processing where possible
+
+2. **Metadata Extraction** (`MediaCacheService.kt:303-320`)
+   ```kotlin
+   fun buildMetadataIndexes(context: Context) {
+       // Extract metadata for each file
+   }
+   ```
+   - **Issue**: Metadata extraction could be cached more efficiently
+   - **Impact**: Performance overhead
+   - **Fix**: Implement more efficient caching strategy
+
+#### 🟢 MEDIUM: Error Handling Improvements
+
+1. **File Operations Error Handling** (`PlaylistService.kt:106-139`)
+   ```kotlin
+   fun readPlaylist(context: Context, playlistUri: Uri): List<MediaFileInfo> {
+       // Could benefit from more specific error handling
+   }
+   ```
+   - **Issue**: Generic error handling for file operations
+   - **Impact**: Hard to diagnose issues
+   - **Fix**: Add specific error types and recovery mechanisms
+
+### Specific Code Fixes Required
+
+#### 1. MediaPlayer Lifecycle Management Fix
+
+**Current Code** (`MyMusicService.kt:1119-1160`):
+```kotlin
+private fun playTrack(fileInfo: MediaFileInfo) {
+    releaseMediaPlayer()
+    if (!requestAudioFocus()) {
+        updatePlaybackState(PlaybackStateCompat.STATE_ERROR)
+        return
+    }
+    // ... MediaPlayer setup
+    try {
+        // ... setup code
+    } catch (e: Exception) {
+        updatePlaybackState(PlaybackStateCompat.STATE_ERROR)
+        releaseMediaPlayer()
+        abandonAudioFocus()
+    }
+}
+```
+
+**Fixed Code**:
+```kotlin
+private fun playTrack(fileInfo: MediaFileInfo) {
+    releaseMediaPlayer()
+    if (!requestAudioFocus()) {
+        updatePlaybackState(PlaybackStateCompat.STATE_ERROR)
+        return
+    }
+    
+    currentFileInfo = fileInfo
+    currentMediaId = fileInfo.uriString
+    
+    try {
+        val uri = Uri.parse(fileInfo.uriString)
+        mediaPlayer = MediaPlayer().apply {
+            setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .build()
+            )
+            setDataSource(this@MyMusicService, uri)
+            setOnPreparedListener {
+                start()
+                updateMetadata(fileInfo)
+                updatePlaybackState(PlaybackStateCompat.STATE_PLAYING)
+            }
+            setOnCompletionListener { onTrackCompleted() }
+            setOnErrorListener { mp, what, extra ->
+                updatePlaybackState(PlaybackStateCompat.STATE_ERROR)
+                releaseMediaPlayer()
+                abandonAudioFocus()
+                true
+            }
+            prepareAsync()
+        }
+    } catch (e: IOException) {
+        updatePlaybackState(PlaybackStateCompat.STATE_ERROR)
+        releaseMediaPlayer()
+        abandonAudioFocus()
+    } catch (e: IllegalStateException) {
+        updatePlaybackState(PlaybackStateCompat.STATE_ERROR)
+        releaseMediaPlayer()
+        abandonAudioFocus()
+    } catch (e: Exception) {
+        updatePlaybackState(PlaybackStateCompat.STATE_ERROR)
+        releaseMediaPlayer()
+        abandonAudioFocus()
+    }
+}
+```
+
+#### 2. Threading Fix - Replace Raw Thread with Coroutines
+
+**Current Code** (`MyMusicService.kt:1050-1086`):
+```kotlin
+Thread {
+    val persisted = mediaCacheService.loadPersistedCache(this, uri, limit)
+    if (persisted != null) {
+        mediaCacheService.buildAlbumArtistIndexesFromCache()
+        deliverPendingResults()
+        // ... more operations
+        return@Thread
+    }
+    isScanning = true
+    try {
+        // ... scanning operations
+    } finally {
+        isScanning = false
+        deliverPendingResults()
+        // ... cleanup
+    }
+}.start()
+```
+
+**Fixed Code**:
+```kotlin
+viewModelScope.launch(Dispatchers.IO) {
+    val persisted = mediaCacheService.loadPersistedCache(this@MyMusicService, uri, limit)
+    if (persisted != null) {
+        mediaCacheService.buildAlbumArtistIndexesFromCache()
+        deliverPendingResults()
+        // ... more operations
+        return@launch
+    }
+    isScanning = true
+    try {
+        // ... scanning operations
+    } finally {
+        isScanning = false
+        deliverPendingResults()
+        // ... cleanup
+    }
+}
+```
+
+#### 3. State Management Refactoring
+
+**Current Code** (`MainViewModel.kt:17-52`):
+```kotlin
+data class MainUiState(
+    val isScanning: Boolean = false,
+    val scannedFiles: List<MediaFileInfo> = emptyList(),
+    val discoveredPlaylists: List<PlaylistInfo> = emptyList(),
+    // ... 46 more properties
+)
+```
+
+**Refactored Approach**:
+```kotlin
+// Break into focused state classes
+data class ScanState(
+    val isScanning: Boolean = false,
+    val scannedFiles: List<MediaFileInfo> = emptyList(),
+    val scanMessage: String? = null,
+    val scanProgress: String? = null
+)
+
+data class PlaylistState(
+    val discoveredPlaylists: List<PlaylistInfo> = emptyList(),
+    val selectedPlaylist: PlaylistInfo? = null,
+    val playlistSongs: List<MediaFileInfo> = emptyList(),
+    val isPlaylistLoading: Boolean = false,
+    val playlistMessage: String? = null
+)
+
+data class PlaybackState(
+    val isPlaying: Boolean = false,
+    val isPaused: Boolean = false,
+    val currentTrackName: String? = null,
+    val currentMediaId: String? = null,
+    val isPlayingPlaylist: Boolean = false,
+    val queuePosition: String? = null,
+    val hasNext: Boolean = false,
+    val hasPrev: Boolean = false
+)
+
+data class MainUiState(
+    val scanState: ScanState = ScanState(),
+    val playlistState: PlaylistState = PlaylistState(),
+    val playbackState: PlaybackState = PlaybackState(),
+    val selectedTab: LibraryTab = LibraryTab.Songs,
+    val searchQuery: String = "",
+    val searchResults: List<MediaFileInfo> = emptyList(),
+    val manualPlaylistSongs: List<MediaFileInfo> = emptyList(),
+    val lastPlaylistCount: Int = 3,
+    val lastScanLimit: Int = MediaCacheService.MAX_CACHE_SIZE
+)
+```
+
+### Implementation Plan for Fixes
+
+#### Phase 1: Critical Fixes (Immediate)
+1. **Fix MediaPlayer lifecycle management** - Add proper cleanup in all code paths
+2. **Replace raw Thread usage with coroutines** - Update all background operations
+3. **Improve error handling** - Add specific exception handling and recovery
+
+#### Phase 2: High Priority Fixes
+1. **Refactor state management** - Break down large state classes
+2. **Fix memory leaks in ViewModel** - Add proper cleanup
+3. **Reduce code duplication** - Implement polymorphism for media categories
+
+#### Phase 3: Medium Priority Improvements
+1. **Optimize directory scanning** - Implement batching and parallel processing
+2. **Improve metadata caching** - More efficient caching strategy
+3. **Enhance error handling** - Add specific error types and recovery
+
+### Testing Recommendations
+
+1. **Memory Leak Testing**: Use LeakCanary to detect and fix memory leaks
+2. **Threading Testing**: Verify all operations run on appropriate threads
+3. **Error Handling Testing**: Test edge cases and error conditions
+4. **Performance Testing**: Profile scanning and metadata operations
+5. **UI Testing**: Verify state management doesn't cause unnecessary recompositions
+
+### Monitoring and Maintenance
+
+1. **Add logging** for critical operations and error conditions
+2. **Implement analytics** to track performance and usage patterns
+3. **Set up crash reporting** to catch unhandled exceptions
+4. **Regular code reviews** to prevent regression of architectural issues
+
 ---
 
 # Task 1: Directory Scanner with Compose UI
