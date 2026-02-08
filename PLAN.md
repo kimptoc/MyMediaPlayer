@@ -15,7 +15,7 @@
 - Task 7 - playlist deletion
 
 - Task 8 - an autopopulated recently added playlist
-- Task 9 - is there a number of plays meta data item?
+- Task 9 - is there a number of plays meta data item
 ---
 
 # Task 1: Directory Scanner with Compose UI
