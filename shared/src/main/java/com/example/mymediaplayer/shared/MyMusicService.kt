@@ -20,6 +20,7 @@ import android.support.v4.media.session.PlaybackStateCompat
 import androidx.media.MediaBrowserServiceCompat
 import android.graphics.BitmapFactory
 import androidx.core.content.ContextCompat
+import androidx.media.utils.MediaConstants
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -33,6 +34,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
     companion object {
         private const val ROOT_ID = "root"
+        private const val HOME_ID = "home"
         private const val SONGS_ID = "songs"
         private const val SONGS_ALL_ID = "songs_all"
         private const val PLAYLISTS_ID = "playlists"
@@ -193,6 +195,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                         )
                     }
                     notifyChildrenChanged(ROOT_ID)
+                    notifyChildrenChanged(HOME_ID)
                     notifyChildrenChanged(SONGS_ID)
                     notifyChildrenChanged(ALBUMS_ID)
                     notifyChildrenChanged(GENRES_ID)
@@ -352,7 +355,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         result.sendResult(items)
     }
 
-    private fun buildMediaItems(parentId: String): MutableList<MediaItem> {
+    internal fun buildMediaItems(parentId: String): MutableList<MediaItem> {
         val start = SystemClock.elapsedRealtime()
         if (parentId.startsWith(PLAYLIST_PREFIX)) {
             val playlistUri = Uri.decode(parentId.removePrefix(PLAYLIST_PREFIX))
@@ -382,7 +385,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
             return buildCategoryListItems(
                 filterByLetter(mediaCacheService.artists(), letter),
                 ARTIST_PREFIX,
-                buildArtistCounts(mediaCacheService.cachedFiles)
+                buildArtistCounts(mediaCacheService.cachedFiles),
+                resourceIconUri(R.drawable.ic_auto_artists)
             )
         }
         if (parentId.startsWith(DECADE_PREFIX)) {
@@ -393,7 +397,11 @@ class MyMusicService : MediaBrowserServiceCompat() {
         if (parentId.startsWith(GENRE_LETTER_PREFIX)) {
             ensureMetadataIndexes()
             val letter = Uri.decode(parentId.removePrefix(GENRE_LETTER_PREFIX))
-            return buildCategoryListItems(filterByLetter(mediaCacheService.genres(), letter), GENRE_PREFIX)
+            return buildCategoryListItems(
+                filterByLetter(mediaCacheService.genres(), letter),
+                GENRE_PREFIX,
+                iconUri = resourceIconUri(R.drawable.ic_auto_genres)
+            )
         }
         if (parentId.startsWith(SONG_LETTER_PREFIX)) {
             val letter = Uri.decode(parentId.removePrefix(SONG_LETTER_PREFIX))
@@ -409,67 +417,39 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 items.add(
                     MediaItem(
                         MediaDescriptionCompat.Builder()
+                            .setMediaId(HOME_ID)
+                            .setTitle("Home")
+                            .setExtras(
+                                bundleOfContentStyle(
+                                    MediaConstants.DESCRIPTION_EXTRAS_KEY_CONTENT_STYLE_BROWSABLE,
+                                    MediaConstants.DESCRIPTION_EXTRAS_VALUE_CONTENT_STYLE_CATEGORY_GRID_ITEM
+                                )
+                            )
+                            .build(),
+                        MediaItem.FLAG_BROWSABLE
+                    )
+                )
+                items.add(
+                    MediaItem(
+                        MediaDescriptionCompat.Builder()
+                            .setMediaId(SONGS_ID)
+                            .setTitle("Songs")
+                            .build(),
+                        MediaItem.FLAG_BROWSABLE
+                    )
+                )
+                items.add(
+                    MediaItem(
+                        MediaDescriptionCompat.Builder()
                             .setMediaId(SEARCH_ID)
                             .setTitle("Search")
                             .build(),
                         MediaItem.FLAG_BROWSABLE
                     )
                 )
-                val songsDesc = MediaDescriptionCompat.Builder()
-                    .setMediaId(SONGS_ID)
-                    .setTitle("Songs")
-                    .build()
-                items.add(MediaItem(songsDesc, MediaItem.FLAG_BROWSABLE))
-
-                if (mediaCacheService.discoveredPlaylists.isNotEmpty()) {
-                    val playlistsDesc = MediaDescriptionCompat.Builder()
-                        .setMediaId(PLAYLISTS_ID)
-                        .setTitle("Playlists")
-                        .build()
-                    items.add(MediaItem(playlistsDesc, MediaItem.FLAG_BROWSABLE))
-                }
-
-                if (mediaCacheService.cachedFiles.isNotEmpty()) {
-                    items.add(
-                        MediaItem(
-                            MediaDescriptionCompat.Builder()
-                                .setMediaId(ALBUMS_ID)
-                                .setTitle("Albums")
-                                .build(),
-                            MediaItem.FLAG_BROWSABLE
-                        )
-                    )
-                    items.add(
-                        MediaItem(
-                            MediaDescriptionCompat.Builder()
-                                .setMediaId(GENRES_ID)
-                                .setTitle("Genres")
-                                .build(),
-                            MediaItem.FLAG_BROWSABLE
-                        )
-                    )
-                    items.add(
-                        MediaItem(
-                            MediaDescriptionCompat.Builder()
-                                .setMediaId(ARTISTS_ID)
-                                .setTitle("Artists")
-                                .build(),
-                            MediaItem.FLAG_BROWSABLE
-                        )
-                    )
-                    items.add(
-                        MediaItem(
-                            MediaDescriptionCompat.Builder()
-                                .setMediaId(DECADES_ID)
-                                .setTitle("Decades")
-                                .build(),
-                            MediaItem.FLAG_BROWSABLE
-                        )
-                    )
-                }
-
                 items
             }
+            HOME_ID -> buildHomeItems()
             SONGS_ID -> {
                 val items = mutableListOf<MediaItem>()
                 if (mediaCacheService.cachedFiles.isNotEmpty()) {
@@ -496,6 +476,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                             MediaDescriptionCompat.Builder()
                                 .setMediaId(SONGS_ALL_ID)
                                 .setTitle("Browse All Songs")
+                                .setIconUri(resourceIconUri(R.drawable.ic_auto_song))
                                 .build(),
                             MediaItem.FLAG_BROWSABLE
                         )
@@ -505,7 +486,11 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }
             SONGS_ALL_ID -> {
                 val titles = mediaCacheService.cachedFiles.map { it.title ?: it.displayName }
-                buildCategoryListItems(buildLetterBuckets(titles), SONG_LETTER_PREFIX)
+                buildCategoryListItems(
+                    buildLetterBuckets(titles),
+                    SONG_LETTER_PREFIX,
+                    iconUri = resourceIconUri(R.drawable.ic_auto_song)
+                )
             }
             PLAYLISTS_ID -> {
                 val items = mutableListOf<MediaItem>()
@@ -533,6 +518,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     val description = MediaDescriptionCompat.Builder()
                         .setMediaId(PLAYLIST_PREFIX + Uri.encode(playlist.uriString))
                         .setTitle(playlist.displayName.removeSuffix(".m3u"))
+                        .setIconUri(resourceIconUri(R.drawable.ic_auto_playlists))
                         .build()
                     MediaItem(description, MediaItem.FLAG_BROWSABLE)
                 }
@@ -540,19 +526,38 @@ class MyMusicService : MediaBrowserServiceCompat() {
             }
             ALBUMS_ID -> {
                 ensureMetadataIndexes()
-                buildCategoryListItems(mediaCacheService.albums(), ALBUM_PREFIX, buildAlbumCounts(mediaCacheService.cachedFiles))
+                buildCategoryListItems(
+                    mediaCacheService.albums(),
+                    ALBUM_PREFIX,
+                    buildAlbumCounts(mediaCacheService.cachedFiles),
+                    resourceIconUri(R.drawable.ic_auto_albums)
+                )
             }
             GENRES_ID -> {
                 ensureMetadataIndexes()
-                buildCategoryListItems(mediaCacheService.genres(), GENRE_PREFIX, buildGenreCounts(mediaCacheService.cachedFiles))
+                buildCategoryListItems(
+                    mediaCacheService.genres(),
+                    GENRE_PREFIX,
+                    buildGenreCounts(mediaCacheService.cachedFiles),
+                    resourceIconUri(R.drawable.ic_auto_genres)
+                )
             }
             ARTISTS_ID -> {
                 ensureMetadataIndexes()
-                buildCategoryListItems(buildLetterBuckets(mediaCacheService.artists()), ARTIST_LETTER_PREFIX)
+                buildCategoryListItems(
+                    buildLetterBuckets(mediaCacheService.artists()),
+                    ARTIST_LETTER_PREFIX,
+                    iconUri = resourceIconUri(R.drawable.ic_auto_artists)
+                )
             }
             DECADES_ID -> {
                 ensureMetadataIndexes()
-                buildCategoryListItems(mediaCacheService.decades(), DECADE_PREFIX, buildDecadeCounts(mediaCacheService.cachedFiles))
+                buildCategoryListItems(
+                    mediaCacheService.decades(),
+                    DECADE_PREFIX,
+                    buildDecadeCounts(mediaCacheService.cachedFiles),
+                    resourceIconUri(R.drawable.ic_auto_decades)
+                )
             }
             SEARCH_ID -> {
                 mutableListOf(
@@ -661,6 +666,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 mediaCacheService.buildAlbumArtistIndexesFromCache()
                 deliverPendingResults()
                 notifyChildrenChanged(ROOT_ID)
+                notifyChildrenChanged(HOME_ID)
                 notifyChildrenChanged(SONGS_ID)
                 notifyChildrenChanged(PLAYLISTS_ID)
                 notifyChildrenChanged(ALBUMS_ID)
@@ -684,6 +690,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 isScanning = false
                 deliverPendingResults()
                 notifyChildrenChanged(ROOT_ID)
+                notifyChildrenChanged(HOME_ID)
                 notifyChildrenChanged(SONGS_ID)
                 notifyChildrenChanged(PLAYLISTS_ID)
                 notifyChildrenChanged(ALBUMS_ID)
@@ -1216,4 +1223,80 @@ class MyMusicService : MediaBrowserServiceCompat() {
         drawable.draw(canvas)
         return bitmap
     }
+
+    private fun buildHomeItems(): MutableList<MediaItem> {
+        val items = mutableListOf<MediaItem>()
+        if (mediaCacheService.discoveredPlaylists.isNotEmpty()) {
+            items.add(
+                MediaItem(
+                    MediaDescriptionCompat.Builder()
+                        .setMediaId(PLAYLISTS_ID)
+                        .setTitle("Playlists")
+                        .setIconUri(resourceIconUri(R.drawable.ic_auto_playlists))
+                        .build(),
+                    MediaItem.FLAG_BROWSABLE
+                )
+            )
+        }
+
+        if (mediaCacheService.cachedFiles.isNotEmpty()) {
+            items.add(
+                MediaItem(
+                    MediaDescriptionCompat.Builder()
+                        .setMediaId(GENRES_ID)
+                        .setTitle("Genres")
+                        .setIconUri(resourceIconUri(R.drawable.ic_auto_genres))
+                        .build(),
+                    MediaItem.FLAG_BROWSABLE
+                )
+            )
+            items.add(
+                MediaItem(
+                    MediaDescriptionCompat.Builder()
+                        .setMediaId(DECADES_ID)
+                        .setTitle("Decades")
+                        .setIconUri(resourceIconUri(R.drawable.ic_auto_decades))
+                        .build(),
+                    MediaItem.FLAG_BROWSABLE
+                )
+            )
+            items.add(
+                MediaItem(
+                    MediaDescriptionCompat.Builder()
+                        .setMediaId(ALBUMS_ID)
+                        .setTitle("Albums")
+                        .setIconUri(resourceIconUri(R.drawable.ic_auto_albums))
+                        .build(),
+                    MediaItem.FLAG_BROWSABLE
+                )
+            )
+            items.add(
+                MediaItem(
+                    MediaDescriptionCompat.Builder()
+                        .setMediaId(ARTISTS_ID)
+                        .setTitle("Artists")
+                        .setIconUri(resourceIconUri(R.drawable.ic_auto_artists))
+                        .build(),
+                    MediaItem.FLAG_BROWSABLE
+                )
+            )
+            items.add(
+                MediaItem(
+                    MediaDescriptionCompat.Builder()
+                        .setMediaId(SONGS_ID)
+                        .setTitle("Songs")
+                        .setIconUri(resourceIconUri(R.drawable.ic_auto_song))
+                        .build(),
+                    MediaItem.FLAG_BROWSABLE
+                )
+            )
+        }
+        return items
+    }
+
+    private fun resourceIconUri(drawableResId: Int): Uri =
+        Uri.parse("android.resource://$packageName/$drawableResId")
+
+    private fun bundleOfContentStyle(key: String, value: Int): Bundle =
+        Bundle().apply { putInt(key, value) }
 }

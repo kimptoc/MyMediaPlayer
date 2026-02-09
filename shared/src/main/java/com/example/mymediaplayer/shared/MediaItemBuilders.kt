@@ -40,14 +40,17 @@ internal fun buildSongListItems(songs: List<MediaFileInfo>, listKey: String): Mu
 internal fun buildCategoryListItems(
     categories: List<String>,
     prefix: String,
-    counts: Map<String, Int>? = null
+    counts: Map<String, Int>? = null,
+    iconUri: Uri? = null
 ): MutableList<MediaItem> {
     return categories.map { category ->
         val label = counts?.get(category)?.let { "$category ($it)" } ?: category
-        val description = MediaDescriptionCompat.Builder()
+        val builder = MediaDescriptionCompat.Builder()
             .setMediaId(prefix + Uri.encode(category))
             .setTitle(label)
-            .build()
-        MediaItem(description, MediaItem.FLAG_BROWSABLE)
+        if (iconUri != null) {
+            builder.setIconUri(iconUri)
+        }
+        MediaItem(builder.build(), MediaItem.FLAG_BROWSABLE)
     }.toMutableList()
 }
