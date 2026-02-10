@@ -4,7 +4,11 @@ import android.net.Uri
 import android.support.v4.media.MediaBrowserCompat.MediaItem
 import android.support.v4.media.MediaDescriptionCompat
 
-internal fun buildSongListItems(songs: List<MediaFileInfo>, listKey: String): MutableList<MediaItem> {
+internal fun buildSongListItems(
+    songs: List<MediaFileInfo>,
+    listKey: String,
+    defaultIconUri: Uri? = null
+): MutableList<MediaItem> {
     val items = mutableListOf<MediaItem>()
     if (songs.isNotEmpty()) {
         items.add(
@@ -27,12 +31,14 @@ internal fun buildSongListItems(songs: List<MediaFileInfo>, listKey: String): Mu
         )
     }
     items += songs.map { fileInfo ->
-        val description = MediaDescriptionCompat.Builder()
+        val builder = MediaDescriptionCompat.Builder()
             .setMediaId(fileInfo.uriString)
             .setTitle(fileInfo.title ?: fileInfo.displayName)
             .setSubtitle(fileInfo.artist)
-            .build()
-        MediaItem(description, MediaItem.FLAG_PLAYABLE)
+        if (defaultIconUri != null) {
+            builder.setIconUri(defaultIconUri)
+        }
+        MediaItem(builder.build(), MediaItem.FLAG_PLAYABLE)
     }
     return items
 }

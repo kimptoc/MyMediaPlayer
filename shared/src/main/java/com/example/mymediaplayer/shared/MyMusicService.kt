@@ -298,7 +298,21 @@ class MyMusicService : MediaBrowserServiceCompat() {
         clientUid: Int,
         rootHints: Bundle?
     ): MediaBrowserServiceCompat.BrowserRoot {
-        return MediaBrowserServiceCompat.BrowserRoot(ROOT_ID, null)
+        val rootExtras = Bundle().apply {
+            putInt(
+                MediaConstants.BROWSER_ROOT_HINTS_KEY_ROOT_CHILDREN_SUPPORTED_FLAGS,
+                MediaItem.FLAG_BROWSABLE
+            )
+            putInt(
+                MediaConstants.DESCRIPTION_EXTRAS_KEY_CONTENT_STYLE_BROWSABLE,
+                MediaConstants.DESCRIPTION_EXTRAS_VALUE_CONTENT_STYLE_CATEGORY_LIST_ITEM
+            )
+            putInt(
+                MediaConstants.DESCRIPTION_EXTRAS_KEY_CONTENT_STYLE_PLAYABLE,
+                MediaConstants.DESCRIPTION_EXTRAS_VALUE_CONTENT_STYLE_LIST_ITEM
+            )
+        }
+        return MediaBrowserServiceCompat.BrowserRoot(ROOT_ID, rootExtras)
     }
 
     override fun onLoadChildren(parentId: String, result: Result<MutableList<MediaItem>>) {
@@ -342,11 +356,13 @@ class MyMusicService : MediaBrowserServiceCompat() {
         val matches = mediaCacheService.searchFiles(trimmed)
         lastSearchQuery = trimmed
         lastSearchResults = matches
+        val songIconUri = resourceIconUri(R.drawable.ic_album_placeholder)
         val items = matches.map { fileInfo ->
             val description = MediaDescriptionCompat.Builder()
                 .setMediaId(fileInfo.uriString)
                 .setTitle(fileInfo.title ?: fileInfo.displayName)
                 .setSubtitle(fileInfo.artist)
+                .setIconUri(songIconUri)
                 .build()
             MediaItem(description, MediaItem.FLAG_PLAYABLE)
         }.toMutableList()
@@ -362,22 +378,23 @@ class MyMusicService : MediaBrowserServiceCompat() {
             val songs = enrichFromCache(
                 playlistService.readPlaylist(this, Uri.parse(playlistUri))
             )
-            return buildSongListItems(songs, PLAYLIST_URI_PREFIX + Uri.encode(playlistUri))
+            val songIconUri = resourceIconUri(R.drawable.ic_album_placeholder)
+            return buildSongListItems(songs, PLAYLIST_URI_PREFIX + Uri.encode(playlistUri), songIconUri)
         }
         if (parentId.startsWith(ALBUM_PREFIX)) {
             ensureMetadataIndexes()
             val album = Uri.decode(parentId.removePrefix(ALBUM_PREFIX))
-            return buildSongListItems(mediaCacheService.songsForAlbum(album), ALBUM_PREFIX + Uri.encode(album))
+            return buildSongListItems(mediaCacheService.songsForAlbum(album), ALBUM_PREFIX + Uri.encode(album), resourceIconUri(R.drawable.ic_album_placeholder))
         }
         if (parentId.startsWith(GENRE_PREFIX)) {
             ensureMetadataIndexes()
             val genre = Uri.decode(parentId.removePrefix(GENRE_PREFIX))
-            return buildSongListItems(mediaCacheService.songsForGenre(genre), GENRE_PREFIX + Uri.encode(genre))
+            return buildSongListItems(mediaCacheService.songsForGenre(genre), GENRE_PREFIX + Uri.encode(genre), resourceIconUri(R.drawable.ic_album_placeholder))
         }
         if (parentId.startsWith(ARTIST_PREFIX)) {
             ensureMetadataIndexes()
             val artist = Uri.decode(parentId.removePrefix(ARTIST_PREFIX))
-            return buildSongListItems(mediaCacheService.songsForArtist(artist), ARTIST_PREFIX + Uri.encode(artist))
+            return buildSongListItems(mediaCacheService.songsForArtist(artist), ARTIST_PREFIX + Uri.encode(artist), resourceIconUri(R.drawable.ic_album_placeholder))
         }
         if (parentId.startsWith(ARTIST_LETTER_PREFIX)) {
             ensureMetadataIndexes()
@@ -392,7 +409,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         if (parentId.startsWith(DECADE_PREFIX)) {
             ensureMetadataIndexes()
             val decade = Uri.decode(parentId.removePrefix(DECADE_PREFIX))
-            return buildSongListItems(mediaCacheService.songsForDecade(decade), DECADE_PREFIX + Uri.encode(decade))
+            return buildSongListItems(mediaCacheService.songsForDecade(decade), DECADE_PREFIX + Uri.encode(decade), resourceIconUri(R.drawable.ic_album_placeholder))
         }
         if (parentId.startsWith(GENRE_LETTER_PREFIX)) {
             ensureMetadataIndexes()
@@ -407,7 +424,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
             val letter = Uri.decode(parentId.removePrefix(SONG_LETTER_PREFIX))
             return buildSongListItems(
                 filterSongsByLetter(mediaCacheService.cachedFiles, letter),
-                SONG_LETTER_PREFIX + Uri.encode(letter)
+                SONG_LETTER_PREFIX + Uri.encode(letter),
+                resourceIconUri(R.drawable.ic_album_placeholder)
             )
         }
 
@@ -425,15 +443,6 @@ class MyMusicService : MediaBrowserServiceCompat() {
                                     MediaConstants.DESCRIPTION_EXTRAS_VALUE_CONTENT_STYLE_CATEGORY_GRID_ITEM
                                 )
                             )
-                            .build(),
-                        MediaItem.FLAG_BROWSABLE
-                    )
-                )
-                items.add(
-                    MediaItem(
-                        MediaDescriptionCompat.Builder()
-                            .setMediaId(SONGS_ID)
-                            .setTitle("Songs")
                             .build(),
                         MediaItem.FLAG_BROWSABLE
                     )
@@ -1226,26 +1235,48 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
     private fun buildHomeItems(): MutableList<MediaItem> {
         val items = mutableListOf<MediaItem>()
-        if (mediaCacheService.discoveredPlaylists.isNotEmpty()) {
+        val childListExtras = Bundle().apply {
+            putInt(
+                MediaConstants.DESCRIPTION_EXTRAS_KEY_CONTENT_STYLE_BROWSABLE,
+                MediaConstants.DESCRIPTION_EXTRAS_VALUE_CONTENT_STYLE_CATEGORY_LIST_ITEM
+            )
+            putInt(
+                MediaConstants.DESCRIPTION_EXTRAS_KEY_CONTENT_STYLE_PLAYABLE,
+                MediaConstants.DESCRIPTION_EXTRAS_VALUE_CONTENT_STYLE_LIST_ITEM
+            )
+        }
+        val playlistCount = mediaCacheService.discoveredPlaylists.size
+        if (playlistCount > 0) {
             items.add(
                 MediaItem(
                     MediaDescriptionCompat.Builder()
                         .setMediaId(PLAYLISTS_ID)
                         .setTitle("Playlists")
+                        .setSubtitle("$playlistCount playlist${if (playlistCount != 1) "s" else ""}")
                         .setIconUri(resourceIconUri(R.drawable.ic_auto_playlists))
+                        .setExtras(childListExtras)
                         .build(),
                     MediaItem.FLAG_BROWSABLE
                 )
             )
         }
 
-        if (mediaCacheService.cachedFiles.isNotEmpty()) {
+        val songCount = mediaCacheService.cachedFiles.size
+        if (songCount > 0) {
+            ensureMetadataIndexes()
+            val genreCount = mediaCacheService.genres().size
+            val decadeCount = mediaCacheService.decades().size
+            val albumCount = mediaCacheService.albums().size
+            val artistCount = mediaCacheService.artists().size
+
             items.add(
                 MediaItem(
                     MediaDescriptionCompat.Builder()
                         .setMediaId(GENRES_ID)
                         .setTitle("Genres")
+                        .setSubtitle("$genreCount genre${if (genreCount != 1) "s" else ""}")
                         .setIconUri(resourceIconUri(R.drawable.ic_auto_genres))
+                        .setExtras(childListExtras)
                         .build(),
                     MediaItem.FLAG_BROWSABLE
                 )
@@ -1255,7 +1286,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     MediaDescriptionCompat.Builder()
                         .setMediaId(DECADES_ID)
                         .setTitle("Decades")
+                        .setSubtitle("$decadeCount decade${if (decadeCount != 1) "s" else ""}")
                         .setIconUri(resourceIconUri(R.drawable.ic_auto_decades))
+                        .setExtras(childListExtras)
                         .build(),
                     MediaItem.FLAG_BROWSABLE
                 )
@@ -1265,7 +1298,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     MediaDescriptionCompat.Builder()
                         .setMediaId(ALBUMS_ID)
                         .setTitle("Albums")
+                        .setSubtitle("$albumCount album${if (albumCount != 1) "s" else ""}")
                         .setIconUri(resourceIconUri(R.drawable.ic_auto_albums))
+                        .setExtras(childListExtras)
                         .build(),
                     MediaItem.FLAG_BROWSABLE
                 )
@@ -1275,7 +1310,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     MediaDescriptionCompat.Builder()
                         .setMediaId(ARTISTS_ID)
                         .setTitle("Artists")
+                        .setSubtitle("$artistCount artist${if (artistCount != 1) "s" else ""}")
                         .setIconUri(resourceIconUri(R.drawable.ic_auto_artists))
+                        .setExtras(childListExtras)
                         .build(),
                     MediaItem.FLAG_BROWSABLE
                 )
@@ -1285,7 +1322,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     MediaDescriptionCompat.Builder()
                         .setMediaId(SONGS_ID)
                         .setTitle("Songs")
+                        .setSubtitle("$songCount song${if (songCount != 1) "s" else ""}")
                         .setIconUri(resourceIconUri(R.drawable.ic_auto_song))
+                        .setExtras(childListExtras)
                         .build(),
                     MediaItem.FLAG_BROWSABLE
                 )

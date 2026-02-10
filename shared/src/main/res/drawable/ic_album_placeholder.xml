@@ -3,13 +3,29 @@
     android:height="200dp"
     android:viewportWidth="200"
     android:viewportHeight="200">
+    <!-- Dark charcoal background -->
     <path
-        android:fillColor="#2F2F2F"
-        android:pathData="M0,0h200v200h-200z" />
+        android:fillColor="#2D2D3A"
+        android:pathData="M16,0h168a16,16 0 0 1 16,16v168a16,16 0 0 1 -16,16h-168a16,16 0 0 1 -16,-16v-168a16,16 0 0 1 16,-16z" />
+    <!-- Vinyl outer ring -->
     <path
-        android:fillColor="#4B4B4B"
-        android:pathData="M100,28a72,72 0 1,0 0,144a72,72 0 1,0 0,-144z" />
+        android:fillColor="#4A4A5C"
+        android:pathData="M100,25a75,75 0 1,0 0,150a75,75 0 1,0 0,-150zM100,35a65,65 0 1,1 0,130a65,65 0 1,1 0,-130z" />
+    <!-- Vinyl mid groove -->
     <path
-        android:fillColor="#1C1C1C"
-        android:pathData="M100,88a12,12 0 1,0 0,24a12,12 0 1,0 0,-24z" />
+        android:fillColor="#3D3D4E"
+        android:pathData="M100,50a50,50 0 1,0 0,100a50,50 0 1,0 0,-50zM100,58a42,42 0 1,1 0,84a42,42 0 1,1 0,-84z" />
+    <!-- Label area -->
+    <path
+        android:fillColor="#E91E63"
+        android:pathData="M100,72a28,28 0 1,1 0,56a28,28 0 1,1 0,-56z" />
+    <!-- Center hole -->
+    <path
+        android:fillColor="#2D2D3A"
+        android:pathData="M100,92a8,8 0 1,1 0,16a8,8 0 1,1 0,-16z" />
+    <!-- Music note on label -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.7"
+        android:pathData="M96,80h4v20h-4zM100,80h14v3h-14zM110,80h4v12h-4zM88,98a6,4 0 1,0 12,0a6,4 0 1,0 -12,0zM106,90a6,4 0 1,0 12,0a6,4 0 1,0 -12,0z" />
 </vector>

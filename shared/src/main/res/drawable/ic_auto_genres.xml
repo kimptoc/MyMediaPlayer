@@ -1,9 +1,14 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp"
-    android:height="24dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
+    android:width="128dp"
+    android:height="128dp"
+    android:viewportWidth="128"
+    android:viewportHeight="128">
+    <!-- Purple background -->
     <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M3,7h10v10H3zM14,8h7v2h-7zM14,12h7v2h-7zM14,16h5v2h-5z" />
+        android:fillColor="#7B1FA2"
+        android:pathData="M12,0h104a12,12 0 0 1 12,12v104a12,12 0 0 1 -12,12h-104a12,12 0 0 1 -12,-12v-104a12,12 0 0 1 12,-12z" />
+    <!-- Equalizer bars -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M30,88V56h12v32zM50,88V40h12v48zM70,88V64h12v24zM90,88V48h12v40z" />
 </vector>

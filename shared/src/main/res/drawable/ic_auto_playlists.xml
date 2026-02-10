@@ -1,9 +1,18 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp"
-    android:height="24dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
+    android:width="128dp"
+    android:height="128dp"
+    android:viewportWidth="128"
+    android:viewportHeight="128">
+    <!-- Teal background -->
     <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M4,6h14v2H4zM4,11h14v2H4zM4,16h10v2H4z" />
+        android:fillColor="#00897B"
+        android:pathData="M12,0h104a12,12 0 0 1 12,12v104a12,12 0 0 1 -12,12h-104a12,12 0 0 1 -12,-12v-104a12,12 0 0 1 12,-12z" />
+    <!-- Playlist lines -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M28,38h52v6H28zM28,54h52v6H28zM28,70h38v6H28z" />
+    <!-- Play triangle -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M78,62l22,14l-22,14z" />
 </vector>
