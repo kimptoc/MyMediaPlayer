@@ -15,7 +15,7 @@ Add a dedicated Android Auto home page in the MediaBrowser browse tree with butt
 
 ## Non-Goals
 - No mobile UI changes.
-- No playback logic changes.
+- No playback logic changes (beyond adding now-playing notification plumbing).
 - No changes to existing media item IDs for categories.
 
 ## Public API / Interface Changes

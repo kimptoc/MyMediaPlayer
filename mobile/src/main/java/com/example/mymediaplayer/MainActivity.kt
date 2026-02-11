@@ -5,6 +5,8 @@ import android.content.Intent
 import android.media.AudioManager
 import android.net.Uri
 import android.os.Bundle
+import android.os.Build
+import android.Manifest
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -21,6 +23,7 @@ import com.example.mymediaplayer.shared.MediaCacheService
 import com.example.mymediaplayer.shared.MyMusicService
 import com.example.mymediaplayer.shared.PlaylistInfo
 import kotlinx.coroutines.launch
+import androidx.core.content.ContextCompat
 
 class MainActivity : ComponentActivity() {
 
@@ -106,9 +109,13 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+    private val requestPostNotifications =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         volumeControlStream = AudioManager.STREAM_MUSIC
+        maybeRequestPostNotifications()
 
         restoreLastTreeUri()
 
@@ -229,6 +236,17 @@ class MainActivity : ComponentActivity() {
                     }
                 )
             }
+        }
+    }
+
+    private fun maybeRequestPostNotifications() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        val granted = ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.POST_NOTIFICATIONS
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (!granted) {
+            requestPostNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
 

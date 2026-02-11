@@ -9,6 +9,10 @@ import android.media.AudioManager
 import android.media.MediaMetadataRetriever
 import android.media.MediaPlayer
 import android.net.Uri
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Intent
 import android.os.Bundle
 import android.os.SystemClock
 import android.util.Log
@@ -18,6 +22,9 @@ import android.support.v4.media.MediaDescriptionCompat
 import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import androidx.media.session.MediaButtonReceiver
 import androidx.media.MediaBrowserServiceCompat
 import android.graphics.BitmapFactory
 import androidx.core.content.ContextCompat
@@ -76,6 +83,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
         private const val EXTRA_SEARCH_SHUFFLE = "search_shuffle"
 
         private const val MAX_CONSECUTIVE_PLAYBACK_ERRORS = 3
+
+        private const val NOW_PLAYING_CHANNEL_ID = "now_playing"
+        private const val NOW_PLAYING_NOTIFICATION_ID = 1001
     }
 
     private lateinit var session: MediaSessionCompat
@@ -90,6 +100,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val playMutex = Mutex()
     private var playJob: Job? = null
+    private lateinit var notificationManager: NotificationManagerCompat
+    private var lastMetadata: MediaMetadataCompat? = null
 
     private var playlistQueue: List<MediaFileInfo> = emptyList()
     private var currentQueueIndex: Int = -1
@@ -258,8 +270,11 @@ class MyMusicService : MediaBrowserServiceCompat() {
         super.onCreate()
 
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        notificationManager = NotificationManagerCompat.from(this)
+        ensureNotificationChannel()
 
         session = MediaSessionCompat(this, "MyMusicService")
+        session.setSessionActivity(buildLaunchIntent())
         sessionToken = session.sessionToken
         session.setCallback(callback)
         @Suppress("DEPRECATION")
@@ -283,6 +298,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
     }
 
     override fun onDestroy() {
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        notificationManager.cancel(NOW_PLAYING_NOTIFICATION_ID)
         serviceScope.cancel()
         releaseMediaPlayer()
         abandonAudioFocus()
@@ -295,6 +312,11 @@ class MyMusicService : MediaBrowserServiceCompat() {
         session.isActive = false
         session.release()
         super.onDestroy()
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        MediaButtonReceiver.handleIntent(session, intent)
+        return super.onStartCommand(intent, flags, startId)
     }
 
     override fun onGetRoot(
@@ -1371,6 +1393,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }
 
         session.setPlaybackState(playbackStateBuilder.build())
+        updateNowPlayingNotification(state)
     }
 
     private fun updateMetadata(fileInfo: MediaFileInfo) {
@@ -1408,7 +1431,10 @@ class MyMusicService : MediaBrowserServiceCompat() {
             builder.putBitmap(MediaMetadataCompat.METADATA_KEY_ART, bitmap)
             builder.putBitmap(MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON, bitmap)
         }
-        session.setMetadata(builder.build())
+        val metadata = builder.build()
+        lastMetadata = metadata
+        session.setMetadata(metadata)
+        updateNowPlayingNotification(lastPlaybackState()?.state ?: PlaybackStateCompat.STATE_NONE)
     }
 
     private fun loadPlaceholderArt(): Bitmap? {
@@ -1420,6 +1446,146 @@ class MyMusicService : MediaBrowserServiceCompat() {
         drawable.setBounds(0, 0, canvas.width, canvas.height)
         drawable.draw(canvas)
         return bitmap
+    }
+
+    private fun ensureNotificationChannel() {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.O) return
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val existing = manager.getNotificationChannel(NOW_PLAYING_CHANNEL_ID)
+        if (existing != null) return
+        val channel = NotificationChannel(
+            NOW_PLAYING_CHANNEL_ID,
+            "Now Playing",
+            NotificationManager.IMPORTANCE_LOW
+        )
+        manager.createNotificationChannel(channel)
+    }
+
+    private fun canPostNotifications(): Boolean {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU) return true
+        return checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) ==
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun lastPlaybackState(): PlaybackStateCompat? =
+        session.controller?.playbackState
+
+    private fun buildNowPlayingNotification(state: Int): android.app.Notification {
+        val metadata = lastMetadata ?: session.controller?.metadata
+        val title = metadata?.getString(MediaMetadataCompat.METADATA_KEY_TITLE) ?: "My Media Player"
+        val artist = metadata?.getString(MediaMetadataCompat.METADATA_KEY_ARTIST)
+        val art = metadata?.getBitmap(MediaMetadataCompat.METADATA_KEY_ART) ?:
+            metadata?.getBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART)
+        val isPlaying = state == PlaybackStateCompat.STATE_PLAYING
+        val hasPrev = playlistQueue.size > 1 && currentQueueIndex > 0
+        val hasNext = playlistQueue.size > 1 && currentQueueIndex < playlistQueue.size - 1
+
+        val builder = NotificationCompat.Builder(this, NOW_PLAYING_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_auto_song)
+            .setContentTitle(title)
+            .setContentText(artist)
+            .setOnlyAlertOnce(true)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setOngoing(isPlaying)
+
+        if (art != null) {
+            builder.setLargeIcon(art)
+        }
+
+        val contentIntent = session.controller?.sessionActivity
+        if (contentIntent != null) {
+            builder.setContentIntent(contentIntent)
+        }
+
+        if (hasPrev) {
+            builder.addAction(
+                NotificationCompat.Action(
+                    android.R.drawable.ic_media_previous,
+                    "Previous",
+                    MediaButtonReceiver.buildMediaButtonPendingIntent(
+                        this,
+                        PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS
+                    )
+                )
+            )
+        }
+
+        val playPauseAction = if (isPlaying) {
+            NotificationCompat.Action(
+                android.R.drawable.ic_media_pause,
+                "Pause",
+                MediaButtonReceiver.buildMediaButtonPendingIntent(
+                    this,
+                    PlaybackStateCompat.ACTION_PAUSE
+                )
+            )
+        } else {
+            NotificationCompat.Action(
+                android.R.drawable.ic_media_play,
+                "Play",
+                MediaButtonReceiver.buildMediaButtonPendingIntent(
+                    this,
+                    PlaybackStateCompat.ACTION_PLAY
+                )
+            )
+        }
+        builder.addAction(playPauseAction)
+
+        if (hasNext) {
+            builder.addAction(
+                NotificationCompat.Action(
+                    android.R.drawable.ic_media_next,
+                    "Next",
+                    MediaButtonReceiver.buildMediaButtonPendingIntent(
+                        this,
+                        PlaybackStateCompat.ACTION_SKIP_TO_NEXT
+                    )
+                )
+            )
+        }
+
+        val compactIndices = when {
+            hasPrev && hasNext -> intArrayOf(0, 1, 2)
+            hasPrev || hasNext -> intArrayOf(0, 1)
+            else -> intArrayOf(0)
+        }
+
+        builder.setStyle(
+            androidx.media.app.NotificationCompat.MediaStyle()
+                .setMediaSession(session.sessionToken)
+                .setShowActionsInCompactView(*compactIndices)
+        )
+
+        return builder.build()
+    }
+
+    private fun buildLaunchIntent(): PendingIntent? {
+        val launchIntent = packageManager.getLaunchIntentForPackage(packageName) ?: return null
+        launchIntent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        return PendingIntent.getActivity(
+            this,
+            0,
+            launchIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+    }
+
+    private fun updateNowPlayingNotification(state: Int) {
+        if (!canPostNotifications()) return
+        val notification = buildNowPlayingNotification(state)
+        when (state) {
+            PlaybackStateCompat.STATE_PLAYING -> {
+                startForeground(NOW_PLAYING_NOTIFICATION_ID, notification)
+            }
+            PlaybackStateCompat.STATE_PAUSED -> {
+                stopForeground(STOP_FOREGROUND_DETACH)
+                notificationManager.notify(NOW_PLAYING_NOTIFICATION_ID, notification)
+            }
+            else -> {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                notificationManager.cancel(NOW_PLAYING_NOTIFICATION_ID)
+            }
+        }
     }
 
     private fun buildHomeItems(): MutableList<MediaItem> {
