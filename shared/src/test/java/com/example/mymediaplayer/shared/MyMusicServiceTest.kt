@@ -1,7 +1,9 @@
 package com.example.mymediaplayer.shared
 
+import android.net.Uri
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -46,6 +48,24 @@ class MyMusicServiceTest {
     }
 
     @Test
+    fun buildSongItems_noActionsAdded() {
+        val songs = listOf(
+            MediaFileInfo(
+                uriString = "content://test/song1",
+                displayName = "Song One",
+                sizeBytes = 1L,
+                title = "Song One"
+            )
+        )
+
+        val items = buildSongItems(songs)
+
+        assertEquals(1, items.size)
+        assertEquals(songs[0].uriString, items[0].description.mediaId)
+        assertEquals("Song One", items[0].description.title)
+    }
+
+    @Test
     fun buildCategoryListItems_appliesCountsToLabels() {
         val categories = listOf("Rock", "Pop")
         val counts = mapOf("Rock" to 2)
@@ -57,6 +77,112 @@ class MyMusicServiceTest {
         assertEquals("Rock (2)", items[0].description.title)
         assertEquals("genre:Pop", items[1].description.mediaId)
         assertEquals("Pop", items[1].description.title)
+    }
+
+    @Test
+    fun buildSongLetterBuckets_generatesSortedBucketsWithHashLast() {
+        val service = MyMusicService()
+        val songs = listOf(
+            MediaFileInfo(
+                uriString = "content://test/song1",
+                displayName = "Alpha",
+                sizeBytes = 1L,
+                title = "Alpha"
+            ),
+            MediaFileInfo(
+                uriString = "content://test/song2",
+                displayName = "beta",
+                sizeBytes = 1L,
+                title = "beta"
+            ),
+            MediaFileInfo(
+                uriString = "content://test/song3",
+                displayName = "123",
+                sizeBytes = 1L,
+                title = "123"
+            )
+        )
+
+        val buckets = service.buildSongLetterBuckets(songs)
+
+        assertEquals(listOf("A", "B", "#"), buckets)
+    }
+
+    @Test
+    fun buildSongLetterCounts_countsLettersAndOther() {
+        val service = MyMusicService()
+        val songs = listOf(
+            MediaFileInfo(
+                uriString = "content://test/song1",
+                displayName = "Alpha",
+                sizeBytes = 1L,
+                title = "Alpha"
+            ),
+            MediaFileInfo(
+                uriString = "content://test/song2",
+                displayName = "Another",
+                sizeBytes = 1L,
+                title = "Another"
+            ),
+            MediaFileInfo(
+                uriString = "content://test/song3",
+                displayName = "beta",
+                sizeBytes = 1L,
+                title = "beta"
+            ),
+            MediaFileInfo(
+                uriString = "content://test/song4",
+                displayName = "123",
+                sizeBytes = 1L,
+                title = "123"
+            )
+        )
+
+        val counts = service.buildSongLetterCounts(songs)
+
+        assertEquals(2, counts["A"])
+        assertEquals(1, counts["B"])
+        assertEquals(1, counts["#"])
+    }
+
+    @Test
+    fun parseBucketParts_decodesValidPayload() {
+        val service = MyMusicService()
+        val genre = "Heavy Metal"
+        val letter = "#"
+        val encoded = "genre_song_letter:" +
+            Uri.encode(genre) + ":" + Uri.encode(letter)
+
+        val parts = service.parseBucketParts(encoded, "genre_song_letter:")
+
+        assertEquals(genre, parts?.first)
+        assertEquals(letter, parts?.second)
+    }
+
+    @Test
+    fun parseBucketParts_returnsNullForInvalidPayload() {
+        val service = MyMusicService()
+
+        val parts = service.parseBucketParts("genre_song_letter:Rock", "genre_song_letter:")
+
+        assertNull(parts)
+    }
+
+    @Test
+    fun formatBucketTitle_formatsPairOrReturnsNull() {
+        val service = MyMusicService()
+        val encoded = "decade_song_letter:" + Uri.encode("1990s") + ":" + Uri.encode("C")
+
+        assertEquals("1990s • C", service.formatBucketTitle(encoded, "decade_song_letter:"))
+        assertNull(service.formatBucketTitle("decade_song_letter:1990s", "decade_song_letter:"))
+    }
+
+    @Test
+    fun shouldBucketSongs_usesThreshold() {
+        val service = MyMusicService()
+
+        assertFalse(service.shouldBucketSongs(500))
+        assertTrue(service.shouldBucketSongs(501))
     }
 
     @Test
@@ -91,6 +217,8 @@ class MyMusicServiceTest {
         assertTrue(service.shouldLoadChildrenAsync("genre_letter:R", hasIndexes = false))
         assertTrue(service.shouldLoadChildrenAsync("decades", hasIndexes = false))
         assertTrue(service.shouldLoadChildrenAsync("decade:1990s", hasIndexes = false))
+        assertTrue(service.shouldLoadChildrenAsync("genre_song_letter:Rock:C", hasIndexes = false))
+        assertTrue(service.shouldLoadChildrenAsync("decade_song_letter:1990s:C", hasIndexes = false))
 
         assertFalse(service.shouldLoadChildrenAsync("songs", hasIndexes = false))
         assertFalse(service.shouldLoadChildrenAsync("search", hasIndexes = false))

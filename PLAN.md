@@ -78,6 +78,7 @@ Add unit tests under `shared/src/test/java/com/example/mymediaplayer/shared/MyMu
 - Existing category IDs remain unchanged.
 - Large genre/decade lists are bucketed A–Z/# with Play All/Shuffle actions.
 - Letter buckets include Play All/Shuffle and queue stays scoped to the selected bucket.
+- Song letter lists include Play All/Shuffle and queue stays scoped to that letter.
 
 ## Assumptions
 - Home is delivered via MediaBrowser browse list (not a separate Car App UI).

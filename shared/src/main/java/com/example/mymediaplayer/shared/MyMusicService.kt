@@ -12,6 +12,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.SystemClock
 import android.util.Log
+import androidx.annotation.VisibleForTesting
 import android.support.v4.media.MediaBrowserCompat.MediaItem
 import android.support.v4.media.MediaDescriptionCompat
 import android.support.v4.media.MediaMetadataCompat
@@ -393,7 +394,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
             ensureMetadataIndexes()
             val genre = Uri.decode(parentId.removePrefix(GENRE_PREFIX))
             val songs = mediaCacheService.songsForGenre(genre)
-            if (songs.size > SONG_BUCKET_THRESHOLD) {
+            if (shouldBucketSongs(songs.size)) {
                 return buildSongBucketItems(
                     songs,
                     GENRE_PREFIX + Uri.encode(genre),
@@ -433,7 +434,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
             ensureMetadataIndexes()
             val decade = Uri.decode(parentId.removePrefix(DECADE_PREFIX))
             val songs = mediaCacheService.songsForDecade(decade)
-            if (songs.size > SONG_BUCKET_THRESHOLD) {
+            if (shouldBucketSongs(songs.size)) {
                 return buildSongBucketItems(
                     songs,
                     DECADE_PREFIX + Uri.encode(decade),
@@ -690,7 +691,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
             file.genre?.ifBlank { null } ?: "Other"
         }.eachCount()
 
-    private fun buildSongLetterBuckets(songs: List<MediaFileInfo>): List<String> {
+    @VisibleForTesting
+    internal fun buildSongLetterBuckets(songs: List<MediaFileInfo>): List<String> {
         val letters = mutableSetOf<String>()
         var hasOther = false
         for (song in songs) {
@@ -707,7 +709,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
         return result
     }
 
-    private fun buildSongLetterCounts(songs: List<MediaFileInfo>): Map<String, Int> {
+    @VisibleForTesting
+    internal fun buildSongLetterCounts(songs: List<MediaFileInfo>): Map<String, Int> {
         val counts = mutableMapOf<String, Int>()
         for (song in songs) {
             val title = (song.title ?: song.displayName).trim()
@@ -765,13 +768,24 @@ class MyMusicService : MediaBrowserServiceCompat() {
         return items
     }
 
-    private fun parseBucketParts(value: String, prefix: String): Pair<String, String>? {
+    @VisibleForTesting
+    internal fun parseBucketParts(value: String, prefix: String): Pair<String, String>? {
         if (!value.startsWith(prefix)) return null
         val payload = value.removePrefix(prefix)
         val parts = payload.split(":", limit = 2)
         if (parts.size < 2) return null
         return Uri.decode(parts[0]) to Uri.decode(parts[1])
     }
+
+    @VisibleForTesting
+    internal fun formatBucketTitle(value: String, prefix: String): String? {
+        val parts = parseBucketParts(value, prefix) ?: return null
+        return "${parts.first} • ${parts.second}"
+    }
+
+    @VisibleForTesting
+    internal fun shouldBucketSongs(count: Int): Boolean =
+        count > SONG_BUCKET_THRESHOLD
 
     private fun buildDecadeCounts(files: List<MediaFileInfo>): Map<String, Int> =
         files.groupingBy { file ->
@@ -1126,12 +1140,10 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     "Songs $letter"
                 }
                 listKey.startsWith(GENRE_SONG_LETTER_PREFIX) -> {
-                    val parts = parseBucketParts(listKey, GENRE_SONG_LETTER_PREFIX)
-                    if (parts == null) "Playlist" else "${parts.first} • ${parts.second}"
+                    formatBucketTitle(listKey, GENRE_SONG_LETTER_PREFIX) ?: "Playlist"
                 }
                 listKey.startsWith(DECADE_SONG_LETTER_PREFIX) -> {
-                    val parts = parseBucketParts(listKey, DECADE_SONG_LETTER_PREFIX)
-                    if (parts == null) "Playlist" else "${parts.first} • ${parts.second}"
+                    formatBucketTitle(listKey, DECADE_SONG_LETTER_PREFIX) ?: "Playlist"
                 }
                 else -> "Playlist"
             }
@@ -1253,12 +1265,10 @@ class MyMusicService : MediaBrowserServiceCompat() {
                         "Songs $letter"
                     }
                     parentId?.startsWith(GENRE_SONG_LETTER_PREFIX) == true -> {
-                        val parts = parseBucketParts(parentId, GENRE_SONG_LETTER_PREFIX)
-                        if (parts == null) null else "${parts.first} • ${parts.second}"
+                        formatBucketTitle(parentId, GENRE_SONG_LETTER_PREFIX)
                     }
                     parentId?.startsWith(DECADE_SONG_LETTER_PREFIX) == true -> {
-                        val parts = parseBucketParts(parentId, DECADE_SONG_LETTER_PREFIX)
-                        if (parts == null) null else "${parts.first} • ${parts.second}"
+                        formatBucketTitle(parentId, DECADE_SONG_LETTER_PREFIX)
                     }
                     else -> null
                 }
