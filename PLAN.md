@@ -57,6 +57,13 @@ All entries are `MediaItem.FLAG_BROWSABLE`.
    - Add `BROWSE_LIBRARY_ID` branch to return `buildLegacyRootItems()`.
 3. Add “Browse Library” item to the Home list.
 4. Keep all other browse branches unchanged.
+5. Bucket large genre/decade lists:
+   - Add a shared threshold constant.
+   - Route large lists to A–Z/# buckets.
+6. Add letter-bucket handling:
+   - Build letter buckets with counts.
+   - Add Play All/Shuffle above bucket lists and within letter lists.
+   - Ensure queue scoping respects letter-bucket parents.
 
 ## Testing
 
@@ -69,8 +76,11 @@ Add unit tests under `shared/src/test/java/com/example/mymediaplayer/shared/MyMu
 - Browse Library navigates to old root list.
 - Empty categories are hidden.
 - Existing category IDs remain unchanged.
+- Large genre/decade lists are bucketed A–Z/# with Play All/Shuffle actions.
+- Letter buckets include Play All/Shuffle and queue stays scoped to the selected bucket.
 
 ## Assumptions
 - Home is delivered via MediaBrowser browse list (not a separate Car App UI).
 - Search remains on home (confirmed).
 - Hide empty entries (confirmed).
+- Bucketing threshold is shared across genres/decades and defaults to 500 songs.

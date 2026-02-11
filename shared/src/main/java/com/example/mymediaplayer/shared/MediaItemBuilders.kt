@@ -30,7 +30,15 @@ internal fun buildSongListItems(
             )
         )
     }
-    items += songs.map { fileInfo ->
+    items += buildSongItems(songs, defaultIconUri)
+    return items
+}
+
+internal fun buildSongItems(
+    songs: List<MediaFileInfo>,
+    defaultIconUri: Uri? = null
+): List<MediaItem> {
+    return songs.map { fileInfo ->
         val builder = MediaDescriptionCompat.Builder()
             .setMediaId(fileInfo.uriString)
             .setTitle(fileInfo.title ?: fileInfo.displayName)
@@ -40,7 +48,6 @@ internal fun buildSongListItems(
         }
         MediaItem(builder.build(), MediaItem.FLAG_PLAYABLE)
     }
-    return items
 }
 
 internal fun buildCategoryListItems(
