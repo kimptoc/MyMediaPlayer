@@ -11,6 +11,8 @@ import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Transaction
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Entity(tableName = "media_files")
 data class MediaFileEntity(
@@ -22,7 +24,8 @@ data class MediaFileEntity(
     val album: String?,
     val genre: String?,
     val durationMs: Long?,
-    val year: Int?
+    val year: Int?,
+    val addedAtMs: Long?
 )
 
 @Entity(tableName = "playlists")
@@ -85,13 +88,19 @@ interface MediaCacheDao {
 
 @Database(
     entities = [MediaFileEntity::class, PlaylistEntity::class, ScanStateEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class MediaCacheDatabase : RoomDatabase() {
     abstract fun cacheDao(): MediaCacheDao
 
     companion object {
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE media_files ADD COLUMN addedAtMs INTEGER")
+            }
+        }
+
         @Volatile
         private var instance: MediaCacheDatabase? = null
 
@@ -101,7 +110,10 @@ abstract class MediaCacheDatabase : RoomDatabase() {
                     context.applicationContext,
                     MediaCacheDatabase::class.java,
                     "media_cache.db"
-                ).build().also { instance = it }
+                )
+                    .addMigrations(MIGRATION_1_2)
+                    .build()
+                    .also { instance = it }
             }
         }
     }

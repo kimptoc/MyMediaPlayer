@@ -8,6 +8,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -49,5 +50,63 @@ class MediaCacheServiceTest {
         job.join()
 
         assertTrue(job.isCancelled)
+    }
+
+    @Test
+    fun albumsByLatestAddedDesc_sortsByNewestTrackPerAlbum() {
+        val service = MediaCacheService()
+        service.addFile(
+            MediaFileInfo(
+                uriString = "content://test/a1",
+                displayName = "a1.mp3",
+                sizeBytes = 1L,
+                album = "Album A",
+                addedAtMs = 1_000L
+            )
+        )
+        service.addFile(
+            MediaFileInfo(
+                uriString = "content://test/b1",
+                displayName = "b1.mp3",
+                sizeBytes = 1L,
+                album = "Album B",
+                addedAtMs = 3_000L
+            )
+        )
+        service.addFile(
+            MediaFileInfo(
+                uriString = "content://test/a2",
+                displayName = "a2.mp3",
+                sizeBytes = 1L,
+                album = "Album A",
+                addedAtMs = 5_000L
+            )
+        )
+        service.buildAlbumArtistIndexesFromCache()
+
+        val albums = service.albumsByLatestAddedDesc()
+
+        assertEquals(listOf("Album A", "Album B"), albums)
+    }
+
+    @Test
+    fun isSupportedAudioFile_acceptsMoreExtensionsAndAudioMime() {
+        val service = MediaCacheService()
+
+        assertTrue(service.isSupportedAudioFile("track.wma", null))
+        assertTrue(service.isSupportedAudioFile("track.alac", null))
+        assertTrue(service.isSupportedAudioFile("track.ape", null))
+        assertTrue(service.isSupportedAudioFile("track.m4a", "audio/mp4"))
+        assertTrue(service.isSupportedAudioFile("track.bin", "audio/flac"))
+        assertTrue(service.isSupportedAudioFile("track.unknown", "application/ogg"))
+    }
+
+    @Test
+    fun isSupportedAudioFile_rejectsPlaylistMime() {
+        val service = MediaCacheService()
+
+        assertTrue(service.isSupportedPlaylistFile("playlist.m3u", null))
+        assertTrue(service.isSupportedPlaylistFile("playlist.txt", "audio/x-mpegurl"))
+        assertFalse(service.isSupportedAudioFile("playlist.m3u", "audio/x-mpegurl"))
     }
 }

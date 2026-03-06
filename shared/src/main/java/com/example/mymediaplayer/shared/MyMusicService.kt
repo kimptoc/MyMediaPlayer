@@ -14,8 +14,13 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
+import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import android.util.Log
+import android.app.SearchManager
 import androidx.annotation.VisibleForTesting
 import android.support.v4.media.MediaBrowserCompat.MediaItem
 import android.support.v4.media.MediaDescriptionCompat
@@ -52,6 +57,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         private const val DECADES_ID = "decades"
         private const val SEARCH_ID = "search"
         private const val PLAYLIST_PREFIX = "playlist:"
+        private const val SMART_PLAYLIST_PREFIX = "smart_playlist:"
         private const val PLAYLIST_URI_PREFIX = "playlist_uri:"
         private const val ALBUM_PREFIX = "album:"
         private const val GENRE_PREFIX = "genre:"
@@ -68,11 +74,30 @@ class MyMusicService : MediaBrowserServiceCompat() {
         private const val PREFS_NAME = "mymediaplayer_prefs"
         private const val KEY_TREE_URI = "tree_uri"
         private const val KEY_SCAN_LIMIT = "scan_limit"
+        private const val KEY_RESUME_MEDIA_URI = "resume_media_uri"
+        private const val KEY_RESUME_QUEUE_URIS = "resume_queue_uris"
+        private const val KEY_RESUME_QUEUE_INDEX = "resume_queue_index"
+        private const val KEY_RESUME_QUEUE_TITLE = "resume_queue_title"
+        private const val KEY_RESUME_POSITION_MS = "resume_position_ms"
+        private const val KEY_RESUME_REPEAT_MODE = "resume_repeat_mode"
+        private const val KEY_FAVORITE_URIS = "favorite_uris"
+        private const val KEY_PLAY_COUNTS = "play_counts"
+        private const val KEY_LAST_PLAYED_AT = "last_played_at"
+        private const val KEY_TRACK_VOICE_INTRO_ENABLED = "track_voice_intro_enabled"
+        private const val KEY_TRACK_VOICE_OUTRO_ENABLED = "track_voice_outro_enabled"
+        private const val SMART_PLAYLIST_FAVORITES = "favorites"
+        private const val SMART_PLAYLIST_RECENTLY_ADDED = "recently_added"
+        private const val SMART_PLAYLIST_MOST_PLAYED = "most_played"
+        private const val SMART_PLAYLIST_NOT_HEARD_RECENTLY = "not_heard_recently"
 
         private const val ACTION_SET_MEDIA_FILES = "SET_MEDIA_FILES"
         private const val ACTION_REFRESH_LIBRARY = "REFRESH_LIBRARY"
         private const val ACTION_SET_PLAYLISTS = "SET_PLAYLISTS"
         private const val ACTION_PLAY_SEARCH_LIST = "PLAY_SEARCH_LIST"
+        private const val ACTION_SET_TRACK_VOICE_INTRO = "SET_TRACK_VOICE_INTRO"
+        private const val ACTION_SET_TRACK_VOICE_OUTRO = "SET_TRACK_VOICE_OUTRO"
+        const val ACTION_BT_AUTOPLAY = "BT_AUTOPLAY"
+        private const val ACTION_MEDIA_PLAY_FROM_SEARCH = "android.media.action.MEDIA_PLAY_FROM_SEARCH"
 
         private const val EXTRA_URIS = "uris"
         private const val EXTRA_NAMES = "names"
@@ -81,11 +106,25 @@ class MyMusicService : MediaBrowserServiceCompat() {
         private const val EXTRA_PLAYLIST_NAMES = "playlist_names"
         private const val EXTRA_SEARCH_URIS = "search_uris"
         private const val EXTRA_SEARCH_SHUFFLE = "search_shuffle"
+        private const val EXTRA_TRACK_VOICE_INTRO_ENABLED = "track_voice_intro_enabled"
+        private const val EXTRA_TRACK_VOICE_OUTRO_ENABLED = "track_voice_outro_enabled"
 
         private const val MAX_CONSECUTIVE_PLAYBACK_ERRORS = 3
 
         private const val NOW_PLAYING_CHANNEL_ID = "now_playing"
         private const val NOW_PLAYING_NOTIFICATION_ID = 1001
+
+        private const val EXTRA_MEDIA_FOCUS_KEY = "android.intent.extra.focus"
+        private const val EXTRA_MEDIA_ARTIST_KEY = "android.intent.extra.artist"
+        private const val EXTRA_MEDIA_ALBUM_KEY = "android.intent.extra.album"
+        private const val EXTRA_MEDIA_GENRE_KEY = "android.intent.extra.genre"
+        private const val EXTRA_MEDIA_TITLE_KEY = "android.intent.extra.title"
+        private const val EXTRA_MEDIA_PLAYLIST_KEY = "android.intent.extra.playlist"
+        private const val FOCUS_PLAYLIST = "vnd.android.cursor.dir/playlist"
+        private const val FOCUS_ARTIST = "vnd.android.cursor.dir/artist"
+        private const val FOCUS_ALBUM = "vnd.android.cursor.dir/album"
+        private const val FOCUS_GENRE = "vnd.android.cursor.dir/genre"
+        private const val FOCUS_TITLE = "vnd.android.cursor.item/audio"
     }
 
     private lateinit var session: MediaSessionCompat
@@ -106,6 +145,10 @@ class MyMusicService : MediaBrowserServiceCompat() {
     private var playlistQueue: List<MediaFileInfo> = emptyList()
     private var currentQueueIndex: Int = -1
     private var currentPlaylistName: String? = null
+    private var repeatMode: Int = PlaybackStateCompat.REPEAT_MODE_NONE
+    private var pendingResumePositionMs: Long? = null
+    private var resumeOnAudioFocusGain: Boolean = false
+    private var isDuckedForFocusLoss: Boolean = false
     private var lastBrowseParentId: String? = null
     private var lastSearchQuery: String? = null
     private var lastSearchResults: List<MediaFileInfo> = emptyList()
@@ -114,22 +157,50 @@ class MyMusicService : MediaBrowserServiceCompat() {
     private var isScanning: Boolean = false
     private val pendingResults =
         mutableMapOf<String, MutableList<MediaBrowserServiceCompat.Result<MutableList<MediaItem>>>>()
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var textToSpeech: TextToSpeech? = null
+    private var ttsReady: Boolean = false
+    private var ttsInitializing: Boolean = false
+    private var pendingIntroUtteranceId: String? = null
+    private var pendingIntroCompletion: (() -> Unit)? = null
+    private var trackVoiceIntroEnabled: Boolean = false
+    private var trackVoiceOutroEnabled: Boolean = false
 
     private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
         when (focusChange) {
-            AudioManager.AUDIOFOCUS_LOSS -> handleStop()
-            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> handlePause()
+            AudioManager.AUDIOFOCUS_LOSS -> {
+                resumeOnAudioFocusGain = false
+                unduckIfNeeded()
+                handlePause()
+                abandonAudioFocus()
+            }
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                resumeOnAudioFocusGain = mediaPlayer?.isPlaying == true
+                unduckIfNeeded()
+                handlePause()
+            }
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
+                val player = mediaPlayer ?: return@OnAudioFocusChangeListener
+                if (player.isPlaying) {
+                    player.setVolume(0.25f, 0.25f)
+                    isDuckedForFocusLoss = true
+                }
+            }
             AudioManager.AUDIOFOCUS_GAIN -> {
-                if (mediaPlayer != null && mediaPlayer?.isPlaying == false) {
+                unduckIfNeeded()
+                if (resumeOnAudioFocusGain && mediaPlayer != null && mediaPlayer?.isPlaying == false) {
                     mediaPlayer?.start()
                     updatePlaybackState(PlaybackStateCompat.STATE_PLAYING)
+                    savePlaybackSnapshot()
                 }
+                resumeOnAudioFocusGain = false
             }
         }
     }
 
     private val callback = object : MediaSessionCompat.Callback() {
         override fun onPlay() {
+            resumeOnAudioFocusGain = false
             if (mediaPlayer == null) {
                 val resumeFromQueue =
                     if (playlistQueue.isNotEmpty() && currentQueueIndex in playlistQueue.indices) {
@@ -161,11 +232,24 @@ class MyMusicService : MediaBrowserServiceCompat() {
             }
         }
 
+        override fun onPlayFromSearch(query: String?, extras: Bundle?) {
+            playJob?.cancel()
+            playJob = serviceScope.launch {
+                playMutex.withLock {
+                    handlePlayFromSearch(query, extras)
+                }
+            }
+        }
+
         override fun onPause() {
+            resumeOnAudioFocusGain = false
+            unduckIfNeeded()
             handlePause()
         }
 
         override fun onStop() {
+            resumeOnAudioFocusGain = false
+            unduckIfNeeded()
             handleStop()
         }
 
@@ -173,7 +257,13 @@ class MyMusicService : MediaBrowserServiceCompat() {
             if (playlistQueue.isEmpty()) return
             val nextIndex = currentQueueIndex + 1
             if (nextIndex >= playlistQueue.size) {
-                handleStop()
+                if (repeatMode == PlaybackStateCompat.REPEAT_MODE_ALL && playlistQueue.isNotEmpty()) {
+                    currentQueueIndex = 0
+                    updateSessionQueue()
+                    playTrack(playlistQueue[currentQueueIndex])
+                } else {
+                    handleStop()
+                }
                 return
             }
             currentQueueIndex = nextIndex
@@ -184,10 +274,32 @@ class MyMusicService : MediaBrowserServiceCompat() {
         override fun onSkipToPrevious() {
             if (playlistQueue.isEmpty()) return
             val previousIndex = currentQueueIndex - 1
-            if (previousIndex < 0) return
+            if (previousIndex < 0) {
+                if (repeatMode == PlaybackStateCompat.REPEAT_MODE_ALL && playlistQueue.isNotEmpty()) {
+                    currentQueueIndex = playlistQueue.size - 1
+                    updateSessionQueue()
+                    playTrack(playlistQueue[currentQueueIndex])
+                }
+                return
+            }
             currentQueueIndex = previousIndex
             updateSessionQueue()
             playTrack(playlistQueue[currentQueueIndex])
+        }
+
+        override fun onSkipToQueueItem(id: Long) {
+            if (playlistQueue.isEmpty()) return
+            val targetIndex = id.toInt()
+            if (targetIndex !in playlistQueue.indices) return
+            currentQueueIndex = targetIndex
+            updateSessionQueue()
+            playTrack(playlistQueue[currentQueueIndex])
+        }
+
+        override fun onSetRepeatMode(repeatMode: Int) {
+            this@MyMusicService.repeatMode = repeatMode
+            session.setRepeatMode(repeatMode)
+            savePlaybackSnapshot()
         }
 
         override fun onCustomAction(action: String?, extras: Bundle?) {
@@ -260,10 +372,36 @@ class MyMusicService : MediaBrowserServiceCompat() {
                         )
                     }
                     notifyChildrenChanged(ROOT_ID)
-                notifyChildrenChanged(PLAYLISTS_ID)
+                    notifyChildrenChanged(PLAYLISTS_ID)
+                }
+                ACTION_SET_TRACK_VOICE_INTRO -> {
+                    val enabled = extras?.getBoolean(EXTRA_TRACK_VOICE_INTRO_ENABLED) ?: false
+                    trackVoiceIntroEnabled = enabled
+                    getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                        .edit()
+                        .putBoolean(KEY_TRACK_VOICE_INTRO_ENABLED, enabled)
+                        .apply()
+                    if (enabled) {
+                        ensureTextToSpeechInitialized()
+                    } else if (!trackVoiceOutroEnabled) {
+                        clearPendingIntro()
+                    }
+                }
+                ACTION_SET_TRACK_VOICE_OUTRO -> {
+                    val enabled = extras?.getBoolean(EXTRA_TRACK_VOICE_OUTRO_ENABLED) ?: false
+                    trackVoiceOutroEnabled = enabled
+                    getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                        .edit()
+                        .putBoolean(KEY_TRACK_VOICE_OUTRO_ENABLED, enabled)
+                        .apply()
+                    if (enabled) {
+                        ensureTextToSpeechInitialized()
+                    } else if (!trackVoiceIntroEnabled) {
+                        clearPendingIntro()
+                    }
+                }
             }
         }
-    }
     }
 
     override fun onCreate() {
@@ -292,12 +430,24 @@ class MyMusicService : MediaBrowserServiceCompat() {
             )
             .setState(PlaybackStateCompat.STATE_NONE, 0L, 0f, SystemClock.elapsedRealtime())
         session.setPlaybackState(playbackStateBuilder.build())
+        session.setRepeatMode(repeatMode)
         session.isActive = true
 
+        trackVoiceIntroEnabled = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+            .getBoolean(KEY_TRACK_VOICE_INTRO_ENABLED, false)
+        trackVoiceOutroEnabled = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+            .getBoolean(KEY_TRACK_VOICE_OUTRO_ENABLED, false)
+        if (trackVoiceIntroEnabled || trackVoiceOutroEnabled) {
+            ensureTextToSpeechInitialized()
+        }
+
+        restorePlaybackSnapshot()
         loadCachedTreeIfAvailable()
     }
 
     override fun onDestroy() {
+        val lastPosition = currentPositionSafeMs()
+        savePlaybackSnapshot(positionMsOverride = lastPosition)
         stopForeground(STOP_FOREGROUND_REMOVE)
         notificationManager.cancel(NOW_PLAYING_NOTIFICATION_ID)
         serviceScope.cancel()
@@ -311,10 +461,30 @@ class MyMusicService : MediaBrowserServiceCompat() {
         session.setCallback(null)
         session.isActive = false
         session.release()
+        clearPendingIntro()
+        textToSpeech?.shutdown()
+        textToSpeech = null
+        ttsReady = false
+        ttsInitializing = false
         super.onDestroy()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_BT_AUTOPLAY) {
+            session.controller.transportControls.play()
+            return START_NOT_STICKY
+        }
+        if (intent?.action == ACTION_MEDIA_PLAY_FROM_SEARCH) {
+            val query = intent.getStringExtra(SearchManager.QUERY)
+            val extras = intent.extras?.let { Bundle(it) }
+            playJob?.cancel()
+            playJob = serviceScope.launch {
+                playMutex.withLock {
+                    handlePlayFromSearch(query, extras)
+                }
+            }
+            return START_NOT_STICKY
+        }
         MediaButtonReceiver.handleIntent(session, intent)
         return super.onStartCommand(intent, flags, startId)
     }
@@ -399,6 +569,15 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
     internal fun buildMediaItems(parentId: String): MutableList<MediaItem> {
         val start = SystemClock.elapsedRealtime()
+        if (parentId.startsWith(SMART_PLAYLIST_PREFIX)) {
+            val smartId = Uri.decode(parentId.removePrefix(SMART_PLAYLIST_PREFIX))
+            val tracks = resolveSmartPlaylistTracksById(smartId) ?: emptyList()
+            return buildSongListItems(
+                tracks,
+                SMART_PLAYLIST_PREFIX + Uri.encode(smartId),
+                resourceIconUri(R.drawable.ic_album_placeholder)
+            )
+        }
         if (parentId.startsWith(PLAYLIST_PREFIX)) {
             val playlistUri = Uri.decode(parentId.removePrefix(PLAYLIST_PREFIX))
             val songs = enrichFromCache(
@@ -569,7 +748,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
             }
             PLAYLISTS_ID -> {
                 val items = mutableListOf<MediaItem>()
-                if (mediaCacheService.discoveredPlaylists.isNotEmpty()) {
+                if (mediaCacheService.discoveredPlaylists.isNotEmpty() ||
+                    mediaCacheService.cachedFiles.isNotEmpty()
+                ) {
                     items.add(
                         MediaItem(
                             MediaDescriptionCompat.Builder()
@@ -588,6 +769,20 @@ class MyMusicService : MediaBrowserServiceCompat() {
                             MediaItem.FLAG_PLAYABLE
                         )
                     )
+                }
+                val smartPlaylists = listOf(
+                    SMART_PLAYLIST_FAVORITES to "Favorites",
+                    SMART_PLAYLIST_RECENTLY_ADDED to "Recently Added",
+                    SMART_PLAYLIST_MOST_PLAYED to "Most Played",
+                    SMART_PLAYLIST_NOT_HEARD_RECENTLY to "Haven't Heard In A While"
+                )
+                items += smartPlaylists.map { smart ->
+                    val description = MediaDescriptionCompat.Builder()
+                        .setMediaId(SMART_PLAYLIST_PREFIX + Uri.encode(smart.first))
+                        .setTitle(smart.second)
+                        .setIconUri(resourceIconUri(R.drawable.ic_auto_playlists))
+                        .build()
+                    MediaItem(description, MediaItem.FLAG_BROWSABLE)
                 }
                 items += mediaCacheService.discoveredPlaylists.map { playlist ->
                     val description = MediaDescriptionCompat.Builder()
@@ -710,7 +905,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
     private fun buildGenreCounts(files: List<MediaFileInfo>): Map<String, Int> =
         files.groupingBy { file ->
-            file.genre?.ifBlank { null } ?: "Other"
+            bucketGenre(file.genre)
         }.eachCount()
 
     @VisibleForTesting
@@ -914,6 +1109,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
     }
 
     private fun playTrack(fileInfo: MediaFileInfo) {
+        clearPendingIntro()
         releaseMediaPlayer()
         if (!requestAudioFocus()) {
             updatePlaybackState(
@@ -925,6 +1121,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
         currentFileInfo = fileInfo
         currentMediaId = fileInfo.uriString
+        savePlaybackSnapshot()
 
         val player = MediaPlayer()
         try {
@@ -939,12 +1136,17 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 setDataSource(this@MyMusicService, uri)
                 setOnPreparedListener {
                     consecutivePlaybackErrors = 0
-                    start()
+                    val pending = pendingResumePositionMs
+                    if (pending != null && pending > 0L) {
+                        runCatching { seekTo(pending.toInt()) }
+                    }
+                    pendingResumePositionMs = null
+                    unduckIfNeeded()
                     updateMetadata(fileInfo)
-                    updatePlaybackState(PlaybackStateCompat.STATE_PLAYING)
+                    maybeSpeakTrackIntroThenStart(fileInfo, this)
                 }
                 setOnCompletionListener {
-                    onTrackCompleted()
+                    maybeSpeakTrackFinishedThenAdvance(fileInfo)
                 }
                 setOnErrorListener { _, what, extra ->
                     Log.e(
@@ -986,6 +1188,125 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }
     }
 
+    private fun maybeSpeakTrackIntroThenStart(fileInfo: MediaFileInfo, preparedPlayer: MediaPlayer) {
+        val onComplete: () -> Unit = {
+            mainHandler.post {
+                if (mediaPlayer !== preparedPlayer) return@post
+                runCatching {
+                    preparedPlayer.start()
+                    updatePlaybackState(PlaybackStateCompat.STATE_PLAYING)
+                    savePlaybackSnapshot()
+                }.onFailure { error ->
+                    Log.w("MyMusicService", "Failed to start playback after intro", error)
+                }
+            }
+        }
+        if (!trackVoiceIntroEnabled) {
+            onComplete()
+            return
+        }
+        ensureTextToSpeechInitialized()
+        val tts = textToSpeech
+        if (!ttsReady || tts == null) {
+            onComplete()
+            return
+        }
+        val title = fileInfo.title?.takeIf { it.isNotBlank() } ?: fileInfo.displayName
+        val artist = fileInfo.artist?.takeIf { it.isNotBlank() }
+        val introText = if (artist != null) {
+            "And now we have $artist with $title."
+        } else {
+            "And now we have $title."
+        }
+        val utteranceId = "track_intro_${SystemClock.elapsedRealtime()}"
+        pendingIntroUtteranceId = utteranceId
+        pendingIntroCompletion = onComplete
+        val result = tts.speak(introText, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
+        if (result == TextToSpeech.ERROR) {
+            clearPendingIntro()
+            onComplete()
+        }
+    }
+
+    private fun maybeSpeakTrackFinishedThenAdvance(fileInfo: MediaFileInfo) {
+        val onComplete: () -> Unit = {
+            mainHandler.post {
+                onTrackCompleted()
+            }
+        }
+        if (!trackVoiceOutroEnabled) {
+            onComplete()
+            return
+        }
+        ensureTextToSpeechInitialized()
+        val tts = textToSpeech
+        if (!ttsReady || tts == null) {
+            onComplete()
+            return
+        }
+        val title = fileInfo.title?.takeIf { it.isNotBlank() } ?: fileInfo.displayName
+        val artist = fileInfo.artist?.takeIf { it.isNotBlank() }
+        val outroText = if (artist != null) {
+            "That was $artist with $title."
+        } else {
+            "That was $title."
+        }
+        val utteranceId = "track_outro_${SystemClock.elapsedRealtime()}"
+        pendingIntroUtteranceId = utteranceId
+        pendingIntroCompletion = onComplete
+        val result = tts.speak(outroText, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
+        if (result == TextToSpeech.ERROR) {
+            clearPendingIntro()
+            onComplete()
+        }
+    }
+
+    private fun ensureTextToSpeechInitialized() {
+        if (ttsReady || ttsInitializing) return
+        if (textToSpeech != null && !ttsReady) {
+            runCatching { textToSpeech?.shutdown() }
+            textToSpeech = null
+        }
+        ttsInitializing = true
+        textToSpeech = TextToSpeech(this) { status ->
+            ttsInitializing = false
+            if (status != TextToSpeech.SUCCESS) {
+                ttsReady = false
+                return@TextToSpeech
+            }
+            val tts = textToSpeech ?: return@TextToSpeech
+            val locale = java.util.Locale.getDefault()
+            val result = tts.setLanguage(locale)
+            ttsReady = result != TextToSpeech.LANG_MISSING_DATA &&
+                result != TextToSpeech.LANG_NOT_SUPPORTED
+            tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                override fun onStart(utteranceId: String?) = Unit
+
+                override fun onDone(utteranceId: String?) {
+                    if (utteranceId == pendingIntroUtteranceId) {
+                        val completion = pendingIntroCompletion
+                        clearPendingIntro()
+                        completion?.invoke()
+                    }
+                }
+
+                override fun onError(utteranceId: String?) {
+                    if (utteranceId == pendingIntroUtteranceId) {
+                        val completion = pendingIntroCompletion
+                        clearPendingIntro()
+                        completion?.invoke()
+                    }
+                }
+            })
+        }
+    }
+
+    private fun clearPendingIntro() {
+        pendingIntroUtteranceId = null
+        pendingIntroCompletion = null
+        runCatching { textToSpeech?.stop() }
+    }
+
     internal fun advanceQueueOnError(): Boolean {
         val nextIndex = nextQueueIndexForError(currentQueueIndex, playlistQueue.size)
         return if (nextIndex != null) {
@@ -1015,9 +1336,20 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
     private fun onTrackCompleted() {
         if (playlistQueue.isNotEmpty()) {
+            if (repeatMode == PlaybackStateCompat.REPEAT_MODE_ONE &&
+                currentQueueIndex in playlistQueue.indices
+            ) {
+                updateSessionQueue()
+                playTrack(playlistQueue[currentQueueIndex])
+                return
+            }
             val nextIndex = currentQueueIndex + 1
             if (nextIndex < playlistQueue.size) {
                 currentQueueIndex = nextIndex
+                updateSessionQueue()
+                playTrack(playlistQueue[currentQueueIndex])
+            } else if (repeatMode == PlaybackStateCompat.REPEAT_MODE_ALL) {
+                currentQueueIndex = 0
                 updateSessionQueue()
                 playTrack(playlistQueue[currentQueueIndex])
             } else {
@@ -1026,12 +1358,14 @@ class MyMusicService : MediaBrowserServiceCompat() {
         } else {
             handleStop()
         }
+        savePlaybackSnapshot(positionMsOverride = 0L)
     }
 
     private fun updateSessionQueue() {
         if (playlistQueue.isEmpty()) {
             session.setQueue(null)
             session.setQueueTitle(null)
+            savePlaybackSnapshot()
             return
         }
 
@@ -1045,6 +1379,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }
         session.setQueue(queueItems)
         session.setQueueTitle(currentPlaylistName)
+        savePlaybackSnapshot()
     }
 
 
@@ -1093,6 +1428,10 @@ class MyMusicService : MediaBrowserServiceCompat() {
                             Uri.parse(playlistUri)
                         )
                     )
+                }
+                listKey.startsWith(SMART_PLAYLIST_PREFIX) -> {
+                    val smartId = Uri.decode(listKey.removePrefix(SMART_PLAYLIST_PREFIX))
+                    resolveSmartPlaylistTracksById(smartId) ?: emptyList()
                 }
                 listKey.startsWith(ALBUM_PREFIX) -> {
                     ensureMetadataIndexes()
@@ -1149,6 +1488,10 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 listKey.startsWith(PLAYLIST_URI_PREFIX) -> {
                     Uri.decode(listKey.removePrefix(PLAYLIST_URI_PREFIX))
                 }
+                listKey.startsWith(SMART_PLAYLIST_PREFIX) -> {
+                    val smartId = Uri.decode(listKey.removePrefix(SMART_PLAYLIST_PREFIX))
+                    smartPlaylistTitleFromId(smartId)
+                }
                 listKey.startsWith(ALBUM_PREFIX) ->
                     Uri.decode(listKey.removePrefix(ALBUM_PREFIX))
                 listKey.startsWith(GENRE_PREFIX) ->
@@ -1171,6 +1514,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
             }
             updateSessionQueue()
             playTrack(playlistQueue[currentQueueIndex])
+            savePlaybackSnapshot()
             return
         }
         if (resolvedMediaId.startsWith(PLAYLIST_PREFIX)) {
@@ -1193,6 +1537,22 @@ class MyMusicService : MediaBrowserServiceCompat() {
             currentPlaylistName = playlistInfo.displayName.removeSuffix(".m3u")
             updateSessionQueue()
             playTrack(playlistQueue[currentQueueIndex])
+            savePlaybackSnapshot()
+            return
+        }
+        if (resolvedMediaId.startsWith(SMART_PLAYLIST_PREFIX)) {
+            val smartId = Uri.decode(resolvedMediaId.removePrefix(SMART_PLAYLIST_PREFIX))
+            val playlistTracks = resolveSmartPlaylistTracksById(smartId) ?: emptyList()
+            if (playlistTracks.isEmpty()) {
+                updatePlaybackState(PlaybackStateCompat.STATE_ERROR)
+                return
+            }
+            playlistQueue = playlistTracks
+            currentQueueIndex = 0
+            currentPlaylistName = smartPlaylistTitleFromId(smartId)
+            updateSessionQueue()
+            playTrack(playlistQueue[currentQueueIndex])
+            savePlaybackSnapshot()
             return
         }
 
@@ -1303,9 +1663,284 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
         updateSessionQueue()
         playTrack(fileInfo)
+        savePlaybackSnapshot()
+    }
+
+    private suspend fun handlePlayFromSearch(query: String?, extras: Bundle?) {
+        ensureCacheReadyForSearch()
+        val raw = query?.trim().orEmpty()
+        val lowered = raw.lowercase()
+        val wantsShuffle = Regex("\\bshuffle\\b").containsMatchIn(lowered)
+        var cleanedQuery = lowered.trim()
+        while (true) {
+            val next = cleanedQuery
+                .replaceFirst(Regex("^\\s*(play|shuffle)\\b\\s*"), "")
+                .trim()
+            if (next == cleanedQuery) break
+            cleanedQuery = next
+        }
+
+        val mediaFocus = extras?.getString(EXTRA_MEDIA_FOCUS_KEY)?.trim().orEmpty()
+        val requestedPlaylist = extras?.getString(EXTRA_MEDIA_PLAYLIST_KEY)?.trim().orEmpty()
+        val requestedArtist = extras?.getString(EXTRA_MEDIA_ARTIST_KEY)?.trim().orEmpty()
+        val requestedAlbum = extras?.getString(EXTRA_MEDIA_ALBUM_KEY)?.trim().orEmpty()
+        val requestedGenre = extras?.getString(EXTRA_MEDIA_GENRE_KEY)?.trim().orEmpty()
+        val requestedTitle = extras?.getString(EXTRA_MEDIA_TITLE_KEY)?.trim().orEmpty()
+        val focusPlaylist = mediaFocus.equals(FOCUS_PLAYLIST, ignoreCase = true)
+        val focusArtist = mediaFocus.equals(FOCUS_ARTIST, ignoreCase = true)
+        val focusAlbum = mediaFocus.equals(FOCUS_ALBUM, ignoreCase = true)
+        val focusGenre = mediaFocus.equals(FOCUS_GENRE, ignoreCase = true)
+        val focusTitle = mediaFocus.equals(FOCUS_TITLE, ignoreCase = true)
+
+        val playlistNameQuery = when {
+            requestedPlaylist.isNotBlank() -> requestedPlaylist
+            focusPlaylist && cleanedQuery.isNotBlank() -> cleanedQuery
+            else -> ""
+        }
+        val smartPlaylistQuery = when {
+            playlistNameQuery.isNotBlank() -> playlistNameQuery
+            else -> cleanedQuery
+        }
+        val smartPlaylistId = smartPlaylistIdFromQuery(smartPlaylistQuery)
+        if (smartPlaylistId != null) {
+            val smartTracks = resolveSmartPlaylistTracksById(smartPlaylistId)
+            if (smartTracks != null && smartTracks.isNotEmpty()) {
+                playlistQueue = if (wantsShuffle) smartTracks.shuffled() else smartTracks
+                currentQueueIndex = 0
+                currentPlaylistName = smartPlaylistTitleFromId(smartPlaylistId)
+                updateSessionQueue()
+                playTrack(playlistQueue[currentQueueIndex])
+                savePlaybackSnapshot()
+                return
+            }
+        }
+        if (playlistNameQuery.isNotBlank()) {
+            val playlist = mediaCacheService.discoveredPlaylists.firstOrNull {
+                it.displayName.removeSuffix(".m3u").contains(playlistNameQuery, ignoreCase = true)
+            }
+            if (playlist != null) {
+                val tracks = enrichFromCache(
+                    playlistService.readPlaylist(this, Uri.parse(playlist.uriString))
+                )
+                if (tracks.isNotEmpty()) {
+                    playlistQueue = if (wantsShuffle) tracks.shuffled() else tracks
+                    currentQueueIndex = 0
+                    currentPlaylistName = playlist.displayName.removeSuffix(".m3u")
+                    updateSessionQueue()
+                    playTrack(playlistQueue[currentQueueIndex])
+                    savePlaybackSnapshot()
+                    return
+                }
+            }
+        }
+
+        fun refine(
+            base: List<MediaFileInfo>?,
+            filter: (MediaFileInfo) -> Boolean
+        ): List<MediaFileInfo> {
+            val source = base ?: mediaCacheService.cachedFiles
+            return source.filter(filter)
+        }
+
+        var focusedMatches: List<MediaFileInfo>? = null
+        var focusLabel: String? = null
+        val focusQuery = cleanedQuery.ifBlank { raw }.trim()
+        if (requestedArtist.isNotBlank()) {
+            focusedMatches = refine(focusedMatches) { file ->
+                file.artist?.contains(requestedArtist, ignoreCase = true) == true
+            }
+            focusLabel = "Artist: $requestedArtist"
+        }
+        if (requestedAlbum.isNotBlank()) {
+            focusedMatches = refine(focusedMatches) { file ->
+                file.album?.contains(requestedAlbum, ignoreCase = true) == true
+            }
+            focusLabel = "Album: $requestedAlbum"
+        }
+        if (requestedGenre.isNotBlank()) {
+            focusedMatches = refine(focusedMatches) { file ->
+                file.genre?.contains(requestedGenre, ignoreCase = true) == true
+            }
+            focusLabel = "Genre: $requestedGenre"
+        }
+        if (requestedTitle.isNotBlank()) {
+            focusedMatches = refine(focusedMatches) { file ->
+                val title = file.title ?: file.displayName
+                title.contains(requestedTitle, ignoreCase = true)
+            }
+            focusLabel = "Title: $requestedTitle"
+        }
+
+        if (focusedMatches == null && focusQuery.isNotBlank()) {
+            focusedMatches = when {
+                focusArtist -> mediaCacheService.cachedFiles.filter { file ->
+                    file.artist?.contains(focusQuery, ignoreCase = true) == true
+                }
+                focusAlbum -> mediaCacheService.cachedFiles.filter { file ->
+                    file.album?.contains(focusQuery, ignoreCase = true) == true
+                }
+                focusGenre -> mediaCacheService.cachedFiles.filter { file ->
+                    file.genre?.contains(focusQuery, ignoreCase = true) == true
+                }
+                focusTitle -> mediaCacheService.cachedFiles.filter { file ->
+                    val title = file.title ?: file.displayName
+                    title.contains(focusQuery, ignoreCase = true)
+                }
+                else -> null
+            }
+            focusLabel = when {
+                focusArtist -> "Artist: $focusQuery"
+                focusAlbum -> "Album: $focusQuery"
+                focusGenre -> "Genre: $focusQuery"
+                focusTitle -> "Title: $focusQuery"
+                else -> focusLabel
+            }
+        }
+
+        val queryForSongs = cleanedQuery.ifBlank { raw }.trim()
+        val matches = when {
+            focusedMatches != null && focusedMatches.isNotEmpty() -> focusedMatches
+            queryForSongs.isBlank() -> mediaCacheService.cachedFiles
+            else -> mediaCacheService.searchFiles(queryForSongs)
+        }
+        if (matches.isEmpty()) {
+            updatePlaybackState(PlaybackStateCompat.STATE_ERROR, "No results for \"$raw\"")
+            return
+        }
+
+        playlistQueue = if (wantsShuffle) matches.shuffled() else matches
+        currentQueueIndex = 0
+        currentPlaylistName = when {
+            focusLabel != null -> focusLabel
+            queryForSongs.isBlank() -> {
+                "All Songs"
+            }
+            else -> {
+                "Search: $queryForSongs"
+            }
+        }
+        updateSessionQueue()
+        playTrack(playlistQueue[currentQueueIndex])
+        savePlaybackSnapshot()
+    }
+
+    private suspend fun ensureCacheReadyForSearch() {
+        if (mediaCacheService.cachedFiles.isNotEmpty()) return
+        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        val uriString = prefs.getString(KEY_TREE_URI, null) ?: return
+        val limit = prefs.getInt(KEY_SCAN_LIMIT, MediaCacheService.MAX_CACHE_SIZE)
+        val uri = Uri.parse(uriString)
+        val hasPermission = contentResolver.persistedUriPermissions.any {
+            it.uri == uri && it.isReadPermission
+        }
+        if (!hasPermission) return
+        mediaCacheService.loadPersistedCache(this, uri, limit)
+    }
+
+    private fun resolveSmartPlaylistTitle(playlistNameQuery: String): String {
+        val smartId = smartPlaylistIdFromQuery(playlistNameQuery) ?: return playlistNameQuery
+        return smartPlaylistTitleFromId(smartId)
+    }
+
+    private fun resolveSmartPlaylistTracks(playlistNameQuery: String): List<MediaFileInfo>? {
+        val smartId = smartPlaylistIdFromQuery(playlistNameQuery) ?: return null
+        return resolveSmartPlaylistTracksById(smartId)
+    }
+
+    @VisibleForTesting
+    internal fun smartPlaylistIdFromQuery(query: String): String? {
+        val needle = query.lowercase().trim()
+        if (needle.isBlank()) return null
+        return when {
+            needle.contains("favorite") -> SMART_PLAYLIST_FAVORITES
+            needle.contains("recently added") || needle == "recent" || needle.contains(" recent") ->
+                SMART_PLAYLIST_RECENTLY_ADDED
+            needle.contains("most played") || (needle.contains("most") && needle.contains("played")) ->
+                SMART_PLAYLIST_MOST_PLAYED
+            needle.contains("haven't heard") ||
+                needle.contains("havent heard") ||
+                needle.contains("not heard") ||
+                needle.contains("unheard") -> SMART_PLAYLIST_NOT_HEARD_RECENTLY
+            else -> null
+        }
+    }
+
+    private fun smartPlaylistTitleFromId(smartId: String): String {
+        return when (smartId) {
+            SMART_PLAYLIST_FAVORITES -> "Favorites"
+            SMART_PLAYLIST_RECENTLY_ADDED -> "Recently Added"
+            SMART_PLAYLIST_MOST_PLAYED -> "Most Played"
+            SMART_PLAYLIST_NOT_HEARD_RECENTLY -> "Haven't Heard In A While"
+            else -> smartId
+        }
+    }
+
+    private fun resolveSmartPlaylistTracksById(smartId: String): List<MediaFileInfo>? {
+        val all = mediaCacheService.cachedFiles.ifEmpty { playlistQueue }
+        if (all.isEmpty()) return null
+        return when (smartId) {
+            SMART_PLAYLIST_FAVORITES -> {
+                val favorites = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                    .getStringSet(KEY_FAVORITE_URIS, emptySet())
+                    ?.toSet()
+                    ?: emptySet()
+                all.filter { it.uriString in favorites }
+            }
+            SMART_PLAYLIST_RECENTLY_ADDED -> {
+                all.sortedByDescending { it.addedAtMs ?: Long.MIN_VALUE }
+            }
+            SMART_PLAYLIST_MOST_PLAYED -> {
+                val playCounts = parsePlayCounts(
+                    getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getString(KEY_PLAY_COUNTS, null)
+                )
+                all.mapNotNull { file ->
+                    val plays = playCounts[file.uriString] ?: 0
+                    if (plays > 0) file to plays else null
+                }.sortedByDescending { it.second }.map { it.first }
+            }
+            SMART_PLAYLIST_NOT_HEARD_RECENTLY -> {
+                val lastPlayedAt = parseLongMap(
+                    getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getString(KEY_LAST_PLAYED_AT, null)
+                )
+                all.sortedWith(
+                    compareBy<MediaFileInfo> { lastPlayedAt[it.uriString] != null }
+                        .thenBy { lastPlayedAt[it.uriString] ?: Long.MIN_VALUE }
+                        .thenBy { (it.title ?: it.displayName).lowercase() }
+                )
+            }
+            else -> null
+        }
+    }
+
+    private fun parsePlayCounts(raw: String?): Map<String, Int> {
+        if (raw.isNullOrBlank()) return emptyMap()
+        val out = mutableMapOf<String, Int>()
+        raw.lineSequence().forEach { line ->
+            val split = line.split('\t', limit = 2)
+            if (split.size != 2) return@forEach
+            val uri = split[0].trim()
+            val count = split[1].trim().toIntOrNull() ?: return@forEach
+            if (uri.isNotEmpty() && count > 0) out[uri] = count
+        }
+        return out
+    }
+
+    private fun parseLongMap(raw: String?): Map<String, Long> {
+        if (raw.isNullOrBlank()) return emptyMap()
+        val out = mutableMapOf<String, Long>()
+        raw.lineSequence().forEach { line ->
+            val split = line.split('\t', limit = 2)
+            if (split.size != 2) return@forEach
+            val key = split[0].trim()
+            val value = split[1].trim().toLongOrNull() ?: return@forEach
+            if (key.isNotEmpty() && value > 0L) out[key] = value
+        }
+        return out
     }
 
     private fun abandonAudioFocus() {
+        resumeOnAudioFocusGain = false
+        unduckIfNeeded()
         val request = audioFocusRequest ?: return
         audioManager.abandonAudioFocusRequest(request)
         audioFocusRequest = null
@@ -1329,14 +1964,18 @@ class MyMusicService : MediaBrowserServiceCompat() {
         if (mediaPlayer?.isPlaying == true) {
             mediaPlayer?.pause()
             updatePlaybackState(PlaybackStateCompat.STATE_PAUSED)
+            savePlaybackSnapshot()
         }
     }
 
     private fun handleStop() {
+        resumeOnAudioFocusGain = false
+        val lastPosition = currentPositionSafeMs()
         releaseMediaPlayer()
         abandonAudioFocus()
         updatePlaybackState(PlaybackStateCompat.STATE_STOPPED)
         consecutivePlaybackErrors = 0
+        savePlaybackSnapshot(positionMsOverride = lastPosition)
     }
 
     private fun updatePlaybackState(state: Int, errorMessage: String? = null) {
@@ -1365,13 +2004,16 @@ class MyMusicService : MediaBrowserServiceCompat() {
             if (currentQueueIndex > 0) {
                 actions = actions or PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS
             }
+            actions = actions or PlaybackStateCompat.ACTION_SKIP_TO_QUEUE_ITEM
             actions
         } else {
             0L
         }
 
+        val repeatActions = PlaybackStateCompat.ACTION_SET_REPEAT_MODE
+
         playbackStateBuilder
-            .setActions(baseActions or queueActions)
+            .setActions(baseActions or queueActions or repeatActions)
             .setState(state, position, speed, SystemClock.elapsedRealtime())
 
         if (state == PlaybackStateCompat.STATE_ERROR && errorMessage != null) {
@@ -1459,12 +2101,6 @@ class MyMusicService : MediaBrowserServiceCompat() {
             NotificationManager.IMPORTANCE_LOW
         )
         manager.createNotificationChannel(channel)
-    }
-
-    private fun canPostNotifications(): Boolean {
-        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU) return true
-        return checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) ==
-            android.content.pm.PackageManager.PERMISSION_GRANTED
     }
 
     private fun lastPlaybackState(): PlaybackStateCompat? =
@@ -1571,20 +2207,23 @@ class MyMusicService : MediaBrowserServiceCompat() {
     }
 
     private fun updateNowPlayingNotification(state: Int) {
-        if (!canPostNotifications()) return
         val notification = buildNowPlayingNotification(state)
-        when (state) {
-            PlaybackStateCompat.STATE_PLAYING -> {
-                startForeground(NOW_PLAYING_NOTIFICATION_ID, notification)
+        runCatching {
+            when (state) {
+                PlaybackStateCompat.STATE_PLAYING -> {
+                    startForeground(NOW_PLAYING_NOTIFICATION_ID, notification)
+                }
+                PlaybackStateCompat.STATE_PAUSED -> {
+                    stopForeground(STOP_FOREGROUND_DETACH)
+                    notificationManager.notify(NOW_PLAYING_NOTIFICATION_ID, notification)
+                }
+                else -> {
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    notificationManager.cancel(NOW_PLAYING_NOTIFICATION_ID)
+                }
             }
-            PlaybackStateCompat.STATE_PAUSED -> {
-                stopForeground(STOP_FOREGROUND_DETACH)
-                notificationManager.notify(NOW_PLAYING_NOTIFICATION_ID, notification)
-            }
-            else -> {
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                notificationManager.cancel(NOW_PLAYING_NOTIFICATION_ID)
-            }
+        }.onFailure {
+            Log.w("MyMusicService", "Failed to update now playing notification", it)
         }
     }
 
@@ -1686,6 +2325,82 @@ class MyMusicService : MediaBrowserServiceCompat() {
             )
         }
         return items
+    }
+
+    private fun restorePlaybackSnapshot() {
+        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        repeatMode = prefs.getInt(KEY_RESUME_REPEAT_MODE, PlaybackStateCompat.REPEAT_MODE_NONE)
+        session.setRepeatMode(repeatMode)
+
+        val queueUrisRaw = prefs.getString(KEY_RESUME_QUEUE_URIS, null).orEmpty()
+        val queueUris = if (queueUrisRaw.isBlank()) {
+            emptyList()
+        } else {
+            queueUrisRaw.split('\n').filter { it.isNotBlank() }
+        }
+        if (queueUris.isNotEmpty()) {
+            val byUri = mediaCacheService.cachedFiles.associateBy { it.uriString }
+            playlistQueue = queueUris.map { uri ->
+                byUri[uri] ?: MediaFileInfo(
+                    uriString = uri,
+                    displayName = uri,
+                    sizeBytes = 0L,
+                    title = uri
+                )
+            }
+            val savedIndex = prefs.getInt(KEY_RESUME_QUEUE_INDEX, -1)
+            val clampedIndex = savedIndex.coerceIn(-1, playlistQueue.lastIndex)
+            currentQueueIndex = if (clampedIndex >= 0) clampedIndex else 0
+            currentPlaylistName = prefs.getString(KEY_RESUME_QUEUE_TITLE, null)
+            updateSessionQueue()
+        } else {
+            playlistQueue = emptyList()
+            currentQueueIndex = -1
+            currentPlaylistName = null
+            updateSessionQueue()
+        }
+
+        val savedMediaUri = prefs.getString(KEY_RESUME_MEDIA_URI, null)
+        if (!savedMediaUri.isNullOrBlank()) {
+            currentMediaId = savedMediaUri
+            currentFileInfo = playlistQueue.firstOrNull { it.uriString == savedMediaUri }
+                ?: mediaCacheService.cachedFiles.firstOrNull { it.uriString == savedMediaUri }
+                ?: MediaFileInfo(
+                    uriString = savedMediaUri,
+                    displayName = savedMediaUri,
+                    sizeBytes = 0L,
+                    title = savedMediaUri
+                )
+            if (currentQueueIndex < 0 && playlistQueue.isNotEmpty()) {
+                currentQueueIndex = playlistQueue.indexOfFirst { it.uriString == savedMediaUri }
+            }
+        }
+
+        val savedPosition = prefs.getLong(KEY_RESUME_POSITION_MS, 0L)
+        pendingResumePositionMs = if (savedPosition > 0L) savedPosition else null
+    }
+
+    private fun savePlaybackSnapshot(positionMsOverride: Long? = null) {
+        val currentUri = currentMediaId ?: currentFileInfo?.uriString
+        val position = positionMsOverride ?: currentPositionSafeMs()
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+            .edit()
+            .putString(KEY_RESUME_MEDIA_URI, currentUri)
+            .putString(KEY_RESUME_QUEUE_URIS, playlistQueue.joinToString("\n") { it.uriString })
+            .putInt(KEY_RESUME_QUEUE_INDEX, currentQueueIndex)
+            .putString(KEY_RESUME_QUEUE_TITLE, currentPlaylistName)
+            .putLong(KEY_RESUME_POSITION_MS, position)
+            .putInt(KEY_RESUME_REPEAT_MODE, repeatMode)
+            .apply()
+    }
+
+    private fun currentPositionSafeMs(): Long =
+        runCatching { mediaPlayer?.currentPosition?.toLong() ?: 0L }.getOrDefault(0L)
+
+    private fun unduckIfNeeded() {
+        if (!isDuckedForFocusLoss) return
+        mediaPlayer?.setVolume(1.0f, 1.0f)
+        isDuckedForFocusLoss = false
     }
 
     private fun resourceIconUri(drawableResId: Int): Uri =

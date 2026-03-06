@@ -1,8 +1,10 @@
 package com.example.mymediaplayer.shared
 
+import android.content.ContentUris
 import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
+import android.provider.MediaStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -22,11 +24,121 @@ data class PersistedCache(
 class MediaCacheService {
 
     companion object {
-        const val MAX_CACHE_SIZE = 20
+        const val MAX_CACHE_SIZE = 50000
         const val MAX_PLAYLIST_CACHE_SIZE = 20
         private const val UNKNOWN_DECADE = "Unknown Decade"
         private const val METADATA_BATCH_SIZE = 50
         private const val METADATA_PARALLELISM = 4
+        private val SUPPORTED_AUDIO_EXTENSIONS = setOf(
+            ".mp3", ".m4a", ".aac", ".flac", ".ogg", ".opus", ".wav", ".m4b",
+            ".aiff", ".aif", ".wma", ".alac", ".ape", ".amr", ".awb",
+            ".3gp", ".3gpp", ".3g2", ".3gp2",
+            ".mp2", ".mp1", ".mpa", ".mpga",
+            ".ac3", ".eac3", ".dts",
+            ".mid", ".midi", ".mka", ".weba", ".webm", ".tta", ".wv"
+        )
+    }
+
+    suspend fun scanWholeDevice(
+        context: Context,
+        maxFiles: Int = MAX_CACHE_SIZE,
+        onProgress: ((songsFound: Int, foldersScanned: Int) -> Unit)? = null
+    ): ScanStats = kotlinx.coroutines.withContext(Dispatchers.IO) {
+        clearCache()
+        maxFileLimit = maxFiles.coerceAtLeast(1)
+        foldersScanned = 0
+        songsFound = 0
+        val startTime = android.os.SystemClock.elapsedRealtime()
+        val extensionCounts = mutableMapOf<String, Int>()
+        val out = mutableListOf<MediaFileInfo>()
+
+        val projection = arrayOf(
+            MediaStore.Audio.Media._ID,
+            MediaStore.Audio.Media.DISPLAY_NAME,
+            MediaStore.Audio.Media.SIZE,
+            MediaStore.Audio.Media.TITLE,
+            MediaStore.Audio.Media.ARTIST,
+            MediaStore.Audio.Media.ALBUM,
+            MediaStore.Audio.Media.DURATION,
+            MediaStore.Audio.Media.YEAR,
+            MediaStore.Audio.Media.DATE_ADDED
+        )
+        val sortOrder = "${MediaStore.Audio.Media.DATE_ADDED} DESC"
+        val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
+
+        context.contentResolver.query(
+            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+            projection,
+            selection,
+            null,
+            sortOrder
+        )?.use { cursor ->
+            val idIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
+            val nameIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)
+            val sizeIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.SIZE)
+            val titleIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
+            val artistIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
+            val albumIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
+            val durationIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
+            val yearIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.YEAR)
+            val addedIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
+            while (cursor.moveToNext() && out.size < maxFileLimit) {
+                val id = cursor.getLong(idIndex)
+                val uri = ContentUris.withAppendedId(
+                    MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                    id
+                )
+                val displayName = cursor.getString(nameIndex) ?: uri.toString()
+                val sizeBytes = if (cursor.isNull(sizeIndex)) 0L else cursor.getLong(sizeIndex)
+                val title = cursor.getString(titleIndex)
+                val artist = cursor.getString(artistIndex)
+                val album = cursor.getString(albumIndex)
+                val durationMs = if (cursor.isNull(durationIndex)) null else cursor.getLong(durationIndex)
+                val year = if (cursor.isNull(yearIndex)) null else cursor.getInt(yearIndex)
+                val addedAtMs = if (cursor.isNull(addedIndex)) {
+                    null
+                } else {
+                    cursor.getLong(addedIndex) * 1000L
+                }
+                out.add(
+                    MediaFileInfo(
+                        uriString = uri.toString(),
+                        displayName = displayName,
+                        sizeBytes = sizeBytes,
+                        title = title,
+                        artist = artist,
+                        album = album,
+                        genre = null,
+                        durationMs = durationMs,
+                        year = year,
+                        addedAtMs = addedAtMs
+                    )
+                )
+                songsFound = out.size
+                val ext = fileExtension(displayName)
+                extensionCounts[ext] = (extensionCounts[ext] ?: 0) + 1
+                if (songsFound % 200 == 0 || songsFound == 1) {
+                    onProgress?.invoke(songsFound, 0)
+                }
+            }
+        }
+        synchronized(cacheLock) {
+            _cachedFiles.clear()
+            _cachedFiles.addAll(out)
+            _discoveredPlaylists.clear()
+            albumArtistIndexed = false
+        }
+        onProgress?.invoke(out.size, 0)
+        val durationMs = android.os.SystemClock.elapsedRealtime() - startTime
+        ScanStats(
+            durationMs = durationMs,
+            foldersScanned = 0,
+            songsFound = out.size,
+            extensionCounts = extensionCounts.toMap(),
+            skippedReasons = emptyMap(),
+            deepScan = false,
+            probedCandidates = 0
+        )
     }
 
     private val _cachedFiles = mutableListOf<MediaFileInfo>()
@@ -52,6 +164,7 @@ class MediaCacheService {
         context: Context,
         treeUri: Uri,
         maxFiles: Int = MAX_CACHE_SIZE,
+        deepScan: Boolean = false,
         onProgress: ((songsFound: Int, foldersScanned: Int) -> Unit)? = null
     ): ScanStats {
         clearCache()
@@ -60,12 +173,23 @@ class MediaCacheService {
         songsFound = 0
         val startTime = android.os.SystemClock.elapsedRealtime()
         val rootDocumentId = DocumentsContract.getTreeDocumentId(treeUri)
+        val extensionCounts = mutableMapOf<String, Int>()
+        val skippedReasons = mutableMapOf<String, Int>()
+        var probedCandidates = 0
 
         // Phase 1: Walk tree to collect file candidates (fast - content provider queries only)
         val candidates = mutableListOf<FileCandidate>()
         val parentContext = coroutineContext
         val shouldContinue: () -> Boolean = { parentContext.isActive }
-        walkTree(context, treeUri, rootDocumentId, candidates, shouldContinue)
+        walkTree(
+            context = context,
+            treeUri = treeUri,
+            rootDocumentId = rootDocumentId,
+            candidates = candidates,
+            shouldContinue = shouldContinue,
+            deepScan = deepScan,
+            skippedReasons = skippedReasons
+        )
         onProgress?.invoke(candidates.size, foldersScanned)
 
         // Phase 2: Extract metadata in parallel batches
@@ -76,6 +200,11 @@ class MediaCacheService {
                 batch.map { candidate ->
                     async(metadataDispatcher) {
                         val metadata = MediaMetadataHelper.extractMetadata(context, candidate.uri.toString())
+                        if (candidate.requiresProbe) {
+                            if (!looksLikeAudioMetadata(metadata)) {
+                                return@async null
+                            }
+                        }
                         val fallbackYear = candidate.lastModified?.let { millis ->
                             Instant.ofEpochMilli(millis)
                                 .atZone(ZoneId.systemDefault())
@@ -89,30 +218,44 @@ class MediaCacheService {
                             sizeBytes = candidate.size,
                             title = metadata?.title ?: candidate.name,
                             artist = metadata?.artist,
-                            album = metadata?.album,
+                            album = metadata?.album?.ifBlank { null } ?: candidate.parentFolderName,
                             genre = normalizeGenre(metadata?.genre),
                             durationMs = durationMs,
-                            year = yearValue
+                            year = yearValue,
+                            addedAtMs = candidate.lastModified
                         )
                     }
                 }.awaitAll()
             }
+            probedCandidates += batch.count { it.requiresProbe }
+            val accepted = results.filterNotNull()
+            val rejected = results.size - accepted.size
+            if (rejected > 0) {
+                skippedReasons["probe_not_audio"] = (skippedReasons["probe_not_audio"] ?: 0) + rejected
+            }
             synchronized(cacheLock) {
-                _cachedFiles.addAll(results)
+                _cachedFiles.addAll(accepted)
                 albumArtistIndexed = false
             }
-            for (result in results) {
+            for (result in accepted) {
                 processed += 1
                 songsFound = processed
+                val ext = fileExtension(result.displayName)
+                extensionCounts[ext] = (extensionCounts[ext] ?: 0) + 1
                 onProgress?.invoke(songsFound, foldersScanned)
             }
+            if (songsFound >= maxFileLimit) break
         }
 
         val durationMs = android.os.SystemClock.elapsedRealtime() - startTime
         return ScanStats(
             durationMs = durationMs,
             foldersScanned = foldersScanned,
-            songsFound = songsFound
+            songsFound = songsFound,
+            extensionCounts = extensionCounts.toMap(),
+            skippedReasons = skippedReasons.toMap(),
+            deepScan = deepScan,
+            probedCandidates = probedCandidates
         )
     }
 
@@ -137,7 +280,8 @@ class MediaCacheService {
                 album = it.album,
                 genre = it.genre,
                 durationMs = it.durationMs,
-                year = it.year
+                year = it.year,
+                addedAtMs = it.addedAtMs
             )
         }
         val playlists = dao.getAllPlaylists().map {
@@ -169,7 +313,8 @@ class MediaCacheService {
                 album = it.album,
                 genre = it.genre,
                 durationMs = it.durationMs,
-                year = it.year
+                year = it.year,
+                addedAtMs = it.addedAtMs
             )
         }
         val playlists = synchronized(cacheLock) { _discoveredPlaylists.toList() }.map {
@@ -211,7 +356,9 @@ class MediaCacheService {
         val uri: Uri,
         val name: String,
         val size: Long,
-        val lastModified: Long?
+        val lastModified: Long?,
+        val parentFolderName: String?,
+        val requiresProbe: Boolean
     )
 
     private fun walkTree(
@@ -219,11 +366,13 @@ class MediaCacheService {
         treeUri: Uri,
         rootDocumentId: String,
         candidates: MutableList<FileCandidate>,
-        shouldContinue: () -> Boolean
+        shouldContinue: () -> Boolean,
+        deepScan: Boolean,
+        skippedReasons: MutableMap<String, Int>
     ) {
         val contentResolver = context.contentResolver
-        val toVisit = ArrayDeque<String>()
-        toVisit.add(rootDocumentId)
+        val toVisit = ArrayDeque<Pair<String, String?>>()
+        toVisit.add(rootDocumentId to null)
         foldersScanned = 1
 
         val projection = arrayOf(
@@ -236,9 +385,9 @@ class MediaCacheService {
 
         while (toVisit.isNotEmpty()) {
             if (!shouldContinue()) return
-            if (candidates.size >= maxFileLimit) return
+            if (candidates.size >= effectiveCandidateLimit(deepScan)) return
 
-            val documentId = toVisit.removeFirst()
+            val (documentId, parentFolderName) = toVisit.removeFirst()
             val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, documentId)
             val cursor = contentResolver.query(childrenUri, projection, null, null, null) ?: continue
 
@@ -252,7 +401,7 @@ class MediaCacheService {
 
             while (it.moveToNext()) {
                 if (!shouldContinue()) return
-                if (candidates.size >= maxFileLimit) return
+                if (candidates.size >= effectiveCandidateLimit(deepScan)) return
 
                     val childId = it.getString(idIndex)
                     val name = it.getString(nameIndex) ?: "Unknown"
@@ -262,26 +411,14 @@ class MediaCacheService {
                         if (it.isNull(modifiedIndex)) null else it.getLong(modifiedIndex)
 
                     if (mimeType == DocumentsContract.Document.MIME_TYPE_DIR) {
-                        toVisit.add(childId)
+                        toVisit.add(childId to name)
                         foldersScanned += 1
                         continue
                     }
 
                     val lowerName = name.lowercase(Locale.US)
-                    val isAudio = lowerName.endsWith(".mp3") ||
-                        lowerName.endsWith(".m4a") ||
-                        lowerName.endsWith(".aac") ||
-                        lowerName.endsWith(".flac") ||
-                        lowerName.endsWith(".ogg") ||
-                        lowerName.endsWith(".opus") ||
-                        lowerName.endsWith(".wav") ||
-                        lowerName.endsWith(".m4b") ||
-                        lowerName.endsWith(".aiff") ||
-                        lowerName.endsWith(".aif")
-                    if (isAudio) {
-                        val uri = DocumentsContract.buildDocumentUriUsingTree(treeUri, childId)
-                        candidates.add(FileCandidate(uri, name, size, lastModified))
-                    } else if (lowerName.endsWith(".m3u") &&
+                    val isPlaylist = isSupportedPlaylistFile(lowerName, mimeType)
+                    if (isPlaylist &&
                         synchronized(cacheLock) { _discoveredPlaylists.size < MAX_PLAYLIST_CACHE_SIZE }
                     ) {
                         val uri = DocumentsContract.buildDocumentUriUsingTree(treeUri, childId)
@@ -295,10 +432,78 @@ class MediaCacheService {
                                 )
                             }
                         }
+                        continue
+                    }
+
+                    val isAudio = isSupportedAudioFile(lowerName, mimeType)
+                    if (isAudio) {
+                        val uri = DocumentsContract.buildDocumentUriUsingTree(treeUri, childId)
+                        candidates.add(
+                            FileCandidate(
+                                uri = uri,
+                                name = name,
+                                size = size,
+                                lastModified = lastModified,
+                                parentFolderName = parentFolderName,
+                                requiresProbe = false
+                            )
+                        )
+                    } else if (deepScan) {
+                        val uri = DocumentsContract.buildDocumentUriUsingTree(treeUri, childId)
+                        candidates.add(
+                            FileCandidate(
+                                uri = uri,
+                                name = name,
+                                size = size,
+                                lastModified = lastModified,
+                                parentFolderName = parentFolderName,
+                                requiresProbe = true
+                            )
+                        )
+                    } else {
+                        skippedReasons["unsupported_type"] = (skippedReasons["unsupported_type"] ?: 0) + 1
                     }
                 }
             }
         }
+    }
+
+    internal fun isSupportedAudioFile(nameLowercase: String, mimeType: String?): Boolean {
+        val mime = mimeType?.lowercase(Locale.US).orEmpty()
+        if (mime.startsWith("audio/")) {
+            if (mime.contains("mpegurl") || mime.contains("x-mpegurl")) return false
+            return true
+        }
+        if (mime == "application/ogg" || mime == "application/x-ogg") return true
+        return SUPPORTED_AUDIO_EXTENSIONS.any { nameLowercase.endsWith(it) }
+    }
+
+    internal fun isSupportedPlaylistFile(nameLowercase: String, mimeType: String?): Boolean {
+        val mime = mimeType?.lowercase(Locale.US).orEmpty()
+        if (nameLowercase.endsWith(".m3u") || nameLowercase.endsWith(".m3u8") || nameLowercase.endsWith(".pls")) {
+            return true
+        }
+        return mime.contains("mpegurl") || mime.contains("x-mpegurl") || mime == "audio/x-scpls"
+    }
+
+    private fun effectiveCandidateLimit(deepScan: Boolean): Int {
+        return if (deepScan) maxFileLimit * 4 else maxFileLimit
+    }
+
+    private fun looksLikeAudioMetadata(metadata: MediaMetadataInfo?): Boolean {
+        if (metadata == null) return false
+        val duration = metadata.durationMs?.toLongOrNull() ?: 0L
+        if (duration > 0L) return true
+        return !metadata.title.isNullOrBlank() ||
+            !metadata.artist.isNullOrBlank() ||
+            !metadata.album.isNullOrBlank() ||
+            !metadata.genre.isNullOrBlank()
+    }
+
+    private fun fileExtension(displayName: String): String {
+        val dot = displayName.lastIndexOf('.')
+        if (dot < 0 || dot == displayName.lastIndex) return "(none)"
+        return displayName.substring(dot).lowercase(Locale.US)
     }
 
     fun clearFiles() {
@@ -330,7 +535,7 @@ class MediaCacheService {
         for (file in snapshot) {
             val album = file.album?.ifBlank { null } ?: "Unknown Album"
             val artist = file.artist?.ifBlank { null } ?: "Unknown Artist"
-            val genre = normalizeGenre(file.genre)
+            val genre = bucketGenre(file.genre)
             val decade = decadeLabel(file.year)
             albumIndex.getOrPut(album) { mutableListOf() }.add(file)
             artistIndex.getOrPut(artist) { mutableListOf() }.add(file)
@@ -341,6 +546,27 @@ class MediaCacheService {
     }
 
     fun albums(): List<String> = albumIndex.keys.sorted()
+
+    fun albumsByLatestAddedDesc(): List<String> {
+        return albumIndex.entries
+            .sortedWith(
+                compareByDescending<Map.Entry<String, MutableList<MediaFileInfo>>> { entry ->
+                    val latestAddedMs = entry.value.maxOfOrNull { file ->
+                        val timestamp = file.addedAtMs ?: Long.MIN_VALUE
+                        if (timestamp > 0L) timestamp else Long.MIN_VALUE
+                    } ?: Long.MIN_VALUE
+                    if (latestAddedMs != Long.MIN_VALUE) {
+                        latestAddedMs
+                    } else {
+                        // Fallback when provider does not expose reliable modified/added timestamps.
+                        // Use latest release year as a coarse "newness" proxy to avoid always
+                        // collapsing to pure name order.
+                        entry.value.maxOfOrNull { (it.year ?: Int.MIN_VALUE).toLong() } ?: Long.MIN_VALUE
+                    }
+                }.thenBy { it.key.lowercase(Locale.US) }
+            )
+            .map { it.key }
+    }
 
     fun genres(): List<String> = genreIndex.keys.sorted()
 
@@ -393,26 +619,14 @@ class MediaCacheService {
     }
 
     private fun normalizeGenre(raw: String?): String {
-        val value = raw?.trim()?.lowercase(Locale.US).orEmpty()
-        if (value.isBlank()) return "Other"
-
-        fun hasAny(vararg tokens: String): Boolean = tokens.any { value.contains(it) }
-
-        return when {
-            hasAny("hip hop", "hip-hop", "rap", "trap") -> "Hip-Hop"
-            hasAny("r&b", "rnb", "rhythm and blues") -> "R&B"
-            hasAny("electronic", "edm", "electronica", "techno", "house", "trance", "dubstep") ->
-                "Electronic"
-            hasAny("rock", "alternative", "grunge", "punk", "indie rock", "hard rock") -> "Rock"
-            hasAny("pop", "synthpop", "dance pop") -> "Pop"
-            hasAny("jazz", "swing", "bebop") -> "Jazz"
-            hasAny("classical", "orchestral", "symphony", "baroque", "opera") -> "Classical"
-            hasAny("country", "bluegrass") -> "Country"
-            hasAny("metal", "heavy metal", "death metal", "black metal") -> "Metal"
-            hasAny("reggae", "ska", "dancehall") -> "Reggae"
-            hasAny("latin", "salsa", "bachata", "reggaeton", "tango") -> "Latin"
-            else -> "Other"
-        }
+        val trimmed = raw?.trim().orEmpty()
+        if (trimmed.isBlank()) return "Other"
+        val primary = trimmed
+            .split(';', '/', '|', ',')
+            .firstOrNull { it.isNotBlank() }
+            ?.trim()
+            .orEmpty()
+        return if (primary.isBlank()) "Other" else primary
     }
 
     private fun decadeLabel(year: Int?): String {
@@ -426,5 +640,9 @@ class MediaCacheService {
 data class ScanStats(
     val durationMs: Long,
     val foldersScanned: Int,
-    val songsFound: Int
+    val songsFound: Int,
+    val extensionCounts: Map<String, Int> = emptyMap(),
+    val skippedReasons: Map<String, Int> = emptyMap(),
+    val deepScan: Boolean = false,
+    val probedCandidates: Int = 0
 )

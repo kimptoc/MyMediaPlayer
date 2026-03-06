@@ -224,4 +224,18 @@ class MyMusicServiceTest {
         assertFalse(service.shouldLoadChildrenAsync("search", hasIndexes = false))
         assertFalse(service.shouldLoadChildrenAsync("albums", hasIndexes = true))
     }
+
+    @Test
+    fun smartPlaylistIdFromQuery_mapsGenericVoiceQueries() {
+        val service = MyMusicService()
+
+        assertEquals("favorites", service.smartPlaylistIdFromQuery("play favorites"))
+        assertEquals("recently_added", service.smartPlaylistIdFromQuery("play recently added"))
+        assertEquals("most_played", service.smartPlaylistIdFromQuery("shuffle most played"))
+        assertEquals(
+            "not_heard_recently",
+            service.smartPlaylistIdFromQuery("play havent heard in a while")
+        )
+        assertNull(service.smartPlaylistIdFromQuery("play coldplay"))
+    }
 }

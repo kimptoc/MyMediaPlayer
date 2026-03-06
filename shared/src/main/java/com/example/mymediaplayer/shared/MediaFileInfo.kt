@@ -9,5 +9,6 @@ data class MediaFileInfo(
     val album: String? = null,
     val genre: String? = null,
     val durationMs: Long? = null,
-    val year: Int? = null
+    val year: Int? = null,
+    val addedAtMs: Long? = null
 )

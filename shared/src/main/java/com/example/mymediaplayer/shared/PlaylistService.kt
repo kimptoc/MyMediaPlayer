@@ -82,6 +82,34 @@ class PlaylistService {
         )
     }
 
+    fun listPlaylistsInTree(context: Context, treeUri: Uri): List<PlaylistInfo> {
+        val root = DocumentFile.fromTreeUri(context, treeUri) ?: return emptyList()
+        val out = mutableListOf<PlaylistInfo>()
+        val stack = ArrayDeque<DocumentFile>()
+        stack.add(root)
+        while (stack.isNotEmpty()) {
+            val node = stack.removeLast()
+            val children = runCatching { node.listFiles().toList() }.getOrNull() ?: continue
+            for (child in children) {
+                if (child.isDirectory) {
+                    stack.add(child)
+                    continue
+                }
+                val name = child.name ?: continue
+                val lower = name.lowercase(Locale.US)
+                if (lower.endsWith(".m3u") || lower.endsWith(".m3u8") || lower.endsWith(".pls")) {
+                    out.add(
+                        PlaylistInfo(
+                            uriString = child.uri.toString(),
+                            displayName = name
+                        )
+                    )
+                }
+            }
+        }
+        return out.sortedBy { it.displayName.lowercase(Locale.US) }
+    }
+
     fun appendToPlaylist(
         context: Context,
         playlistUri: Uri,
@@ -106,6 +134,68 @@ class PlaylistService {
         } catch (e: IOException) {
             Log.e(TAG, "I/O error appending to playlist: $playlistUri", e)
             return false
+        }
+    }
+
+    fun overwritePlaylist(
+        context: Context,
+        playlistUri: Uri,
+        files: List<MediaFileInfo>
+    ): Boolean {
+        if (files.isEmpty()) return false
+        val content = generateM3uContent(files)
+        try {
+            val output = context.contentResolver.openOutputStream(playlistUri, "wt")
+                ?: context.contentResolver.openOutputStream(playlistUri, "w")
+                ?: run {
+                    Log.e(TAG, "Could not open output stream for overwrite: $playlistUri")
+                    return false
+                }
+            output.use { stream ->
+                stream.write(content.toByteArray())
+                stream.flush()
+            }
+            return true
+        } catch (e: SecurityException) {
+            Log.e(TAG, "Permission denied overwriting playlist: $playlistUri", e)
+            return false
+        } catch (e: IOException) {
+            Log.e(TAG, "I/O error overwriting playlist: $playlistUri", e)
+            return false
+        }
+    }
+
+    fun renamePlaylist(
+        context: Context,
+        playlistUri: Uri,
+        newName: String
+    ): PlaylistInfo? {
+        val trimmed = newName.trim()
+        if (trimmed.isEmpty()) return null
+        val safeName = trimmed.replace("/", "_")
+        val finalName = if (safeName.endsWith(".m3u", ignoreCase = true)) {
+            safeName
+        } else {
+            "$safeName.m3u"
+        }
+
+        return try {
+            val doc = DocumentFile.fromSingleUri(context, playlistUri)
+                ?: DocumentFile.fromTreeUri(context, playlistUri)
+                ?: return null
+            if (!doc.renameTo(finalName)) return null
+            PlaylistInfo(
+                uriString = doc.uri.toString(),
+                // Some providers return stale DocumentFile.name immediately after rename.
+                // Use the requested final name so UI updates deterministically.
+                displayName = finalName
+            )
+        } catch (e: SecurityException) {
+            Log.e(TAG, "Permission denied renaming playlist: $playlistUri", e)
+            null
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to rename playlist: $playlistUri", e)
+            null
         }
     }
 

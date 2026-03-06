@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.test.core.app.ApplicationProvider
 import java.io.IOException
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -54,6 +55,17 @@ class PlaylistServiceTest {
         )
 
         assertFalse(result)
+    }
+
+    @Test
+    fun renamePlaylist_returnsNullOnBlankName() {
+        val baseContext = ApplicationProvider.getApplicationContext<Context>()
+        val uri = Uri.parse("content://test/playlist.m3u")
+        val service = PlaylistService()
+
+        val result = service.renamePlaylist(baseContext, uri, "   ")
+
+        assertNull(result)
     }
 
 }
