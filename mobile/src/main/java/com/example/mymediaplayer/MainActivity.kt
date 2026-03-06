@@ -191,7 +191,7 @@ class MainActivity : ComponentActivity() {
                 getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
                     .edit()
                     .putString(KEY_PLAYLIST_TREE_URI, it.toString())
-                    .apply()
+                    .commit()
                 viewModel.setPlaylistTreeUri(it)
                 showPlaylistSaveFolderPrompt = false
                 Toast.makeText(this, "Playlist save folder updated", Toast.LENGTH_SHORT).show()
@@ -517,7 +517,7 @@ class MainActivity : ComponentActivity() {
                 it.uri == playlistUri && it.isReadPermission
             }
             if (hasPlaylistPermission) {
-                viewModel.setPlaylistTreeUri(playlistUri)
+                viewModel.setPlaylistTreeUri(playlistUri, showMessage = false)
             } else {
                 prefs.edit().remove(KEY_PLAYLIST_TREE_URI).apply()
             }

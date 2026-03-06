@@ -190,6 +190,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 cached.first.forEach { mediaCacheService.addFile(it) }
                 cached.second.forEach { mediaCacheService.addPlaylist(it) }
                 _uiState.value = resetAfterScan(cached.first, cached.second, maxFiles, deepScan)
+                reimportPlaylistsFromSaveFolderIfNeeded()
                 metadataKey = null
                 return
             }
@@ -207,6 +208,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         maxFiles,
                         deepScan = false
                     )
+                    reimportPlaylistsFromSaveFolderIfNeeded()
                     metadataKey = null
                     return@launch
                 }
@@ -281,6 +283,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 deepScan = deepScan,
                 scanMessage = message
             )
+            reimportPlaylistsFromSaveFolderIfNeeded()
             metadataKey = null
         }
     }
@@ -300,6 +303,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     deepScan = false,
                     scanMessage = "Whole-drive scan loaded from cache"
                 )
+                reimportPlaylistsFromSaveFolderIfNeeded()
                 metadataKey = null
                 return
             }
@@ -355,6 +359,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 deepScan = false,
                 scanMessage = message
             )
+            reimportPlaylistsFromSaveFolderIfNeeded()
             metadataKey = null
         }
     }
@@ -364,14 +369,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         metadataKey = null
     }
 
-    fun setPlaylistTreeUri(uri: Uri) {
+    fun setPlaylistTreeUri(uri: Uri, showMessage: Boolean = true) {
         playlistTreeUri = uri
-        importPlaylistsFromSaveFolder(uri)
+        importPlaylistsFromSaveFolder(uri, showMessage = showMessage)
     }
 
     private fun resolvePlaylistTreeUri(): Uri? = playlistTreeUri ?: treeUri
 
-    private fun importPlaylistsFromSaveFolder(uri: Uri) {
+    private fun importPlaylistsFromSaveFolder(uri: Uri, showMessage: Boolean = true) {
         viewModelScope.launch(Dispatchers.IO) {
             val imported = playlistService.listPlaylistsInTree(getApplication(), uri)
             if (imported.isEmpty()) return@launch
@@ -382,10 +387,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.value = current.copy(
                 scan = current.scan.copy(discoveredPlaylists = merged),
                 playlist = current.playlist.copy(
-                    playlistMessage = "Loaded ${imported.size} playlist(s) from save folder"
+                    playlistMessage = if (showMessage) {
+                        "Loaded ${imported.size} playlist(s) from save folder"
+                    } else {
+                        current.playlist.playlistMessage
+                    }
                 )
             )
-            val key = treeUri?.let { "${it}|${current.scan.lastScanLimit}" }
+            val key = treeUri?.let { "${it}|${current.scan.lastScanLimit}|deep=${current.scan.deepScanEnabled}" }
             if (key != null) {
                 val cached = scanCache[key]
                 if (cached != null) {
@@ -393,6 +402,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
+    }
+
+    private fun reimportPlaylistsFromSaveFolderIfNeeded() {
+        val uri = playlistTreeUri ?: return
+        importPlaylistsFromSaveFolder(uri, showMessage = false)
     }
 
     fun selectTab(tab: LibraryTab) {
