@@ -1518,7 +1518,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
             return
         }
         if (resolvedMediaId.startsWith(PLAYLIST_PREFIX)) {
-            val playlistUri = resolvedMediaId.removePrefix(PLAYLIST_PREFIX)
+            val playlistUri = Uri.decode(resolvedMediaId.removePrefix(PLAYLIST_PREFIX))
             val playlistInfo = mediaCacheService.discoveredPlaylists.firstOrNull {
                 it.uriString == playlistUri
             } ?: return

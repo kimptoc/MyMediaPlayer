@@ -104,7 +104,7 @@ fun MainScreen(
     onPlaySearchResults: (List<MediaFileInfo>) -> Unit,
     onShuffleSearchResults: (List<MediaFileInfo>) -> Unit,
     onPlayPlaylist: (PlaylistInfo) -> Unit,
-    onShufflePlaylistSongs: (List<MediaFileInfo>) -> Unit,
+    onShufflePlaylistSongs: (PlaylistInfo, List<MediaFileInfo>) -> Unit,
     onAddToExistingPlaylist: (PlaylistInfo, List<MediaFileInfo>) -> Unit,
     onCreatePlaylistFromSongs: (String, List<MediaFileInfo>) -> PlaylistInfo?,
     onToggleFavorite: (MediaFileInfo) -> Unit,
@@ -1564,7 +1564,7 @@ private fun PlaylistsSection(
     onRequestRenamePlaylist: (PlaylistInfo) -> Unit,
     onSavePlaylistEdits: (PlaylistInfo, List<MediaFileInfo>) -> Unit,
     onPlayPlaylist: (PlaylistInfo) -> Unit,
-    onShufflePlaylistSongs: (List<MediaFileInfo>) -> Unit,
+    onShufflePlaylistSongs: (PlaylistInfo, List<MediaFileInfo>) -> Unit,
     onPlaySongs: (List<MediaFileInfo>) -> Unit,
     onStop: () -> Unit,
     onNext: () -> Unit,
@@ -1663,7 +1663,6 @@ private fun PlaylistsSection(
                 style = MaterialTheme.typography.titleSmall
             )
             Spacer(modifier = Modifier.height(4.dp))
-            val isSmartSelected = selectedPlaylist.uriString.startsWith(MainViewModel.SMART_PREFIX)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (!isEditing) {
                     TextButton(
@@ -1671,7 +1670,8 @@ private fun PlaylistsSection(
                             editableSongs = playlistSongs
                             isEditing = true
                         },
-                        enabled = playlistSongs.isNotEmpty() && !isSmartSelected
+                        enabled = playlistSongs.isNotEmpty() &&
+                            !selectedPlaylist.uriString.startsWith(MainViewModel.SMART_PREFIX)
                     ) {
                         Text("Edit")
                     }
@@ -1726,10 +1726,8 @@ private fun PlaylistsSection(
                 hasNext = hasNext,
                 hasPrev = hasPrev,
                 showShuffleWhenPlaying = true,
-                onPlay = {
-                    if (isSmartSelected) onPlaySongs(playlistSongs) else onPlayPlaylist(selectedPlaylist)
-                },
-                onShuffle = { onShufflePlaylistSongs(playlistSongs) },
+                onPlay = { onPlayPlaylist(selectedPlaylist) },
+                onShuffle = { onShufflePlaylistSongs(selectedPlaylist, playlistSongs) },
                 onStop = onStop,
                 onNext = onNext,
                 onPrev = onPrev

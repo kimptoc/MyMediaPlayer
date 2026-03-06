@@ -66,6 +66,9 @@ class MainActivity : ComponentActivity() {
         private const val ACTION_REFRESH_LIBRARY = "REFRESH_LIBRARY"
         private const val ACTION_SET_PLAYLISTS = "SET_PLAYLISTS"
         private const val ACTION_PLAY_SEARCH_LIST = "PLAY_SEARCH_LIST"
+        private const val ACTION_SHUFFLE_PREFIX = "action:shuffle:"
+        private const val SMART_PLAYLIST_PREFIX = "smart_playlist:"
+        private const val PLAYLIST_URI_PREFIX = "playlist_uri:"
         private const val ACTION_SET_TRACK_VOICE_INTRO = "SET_TRACK_VOICE_INTRO"
         private const val ACTION_SET_TRACK_VOICE_OUTRO = "SET_TRACK_VOICE_OUTRO"
         private const val EXTRA_URIS = "uris"
@@ -409,17 +412,26 @@ class MainActivity : ComponentActivity() {
                     onPlayPlaylist = { playlist ->
                         sendFilesToServiceIfNeeded(uiState.value.scan.scannedFiles)
                         sendPlaylistsToServiceIfNeeded(uiState.value.scan.discoveredPlaylists)
-                        mediaController?.transportControls?.playFromMediaId(
-                            "playlist:${playlist.uriString}",
-                            null
-                        )
+                        val mediaId = if (playlist.uriString.startsWith(MainViewModel.SMART_PREFIX)) {
+                            val smartId = playlist.uriString.removePrefix(MainViewModel.SMART_PREFIX)
+                            SMART_PLAYLIST_PREFIX + Uri.encode(smartId)
+                        } else {
+                            "playlist:${playlist.uriString}"
+                        }
+                        mediaController?.transportControls?.playFromMediaId(mediaId, null)
                     },
-                    onShufflePlaylistSongs = { songs ->
+                    onShufflePlaylistSongs = { playlist, songs ->
                         if (songs.isNotEmpty()) {
                             sendFilesToServiceIfNeeded(uiState.value.scan.scannedFiles)
-                            val random = songs.random()
+                            sendPlaylistsToServiceIfNeeded(uiState.value.scan.discoveredPlaylists)
+                            val listKey = if (playlist.uriString.startsWith(MainViewModel.SMART_PREFIX)) {
+                                val smartId = playlist.uriString.removePrefix(MainViewModel.SMART_PREFIX)
+                                SMART_PLAYLIST_PREFIX + Uri.encode(smartId)
+                            } else {
+                                PLAYLIST_URI_PREFIX + Uri.encode(playlist.uriString)
+                            }
                             mediaController?.transportControls?.playFromMediaId(
-                                random.uriString,
+                                ACTION_SHUFFLE_PREFIX + listKey,
                                 null
                             )
                         }
