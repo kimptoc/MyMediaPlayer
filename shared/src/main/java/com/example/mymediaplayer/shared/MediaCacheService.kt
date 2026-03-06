@@ -51,6 +51,7 @@ class MediaCacheService {
         val startTime = android.os.SystemClock.elapsedRealtime()
         val extensionCounts = mutableMapOf<String, Int>()
         val out = mutableListOf<MediaFileInfo>()
+        val outIds = mutableListOf<Long>()
 
         val projection = arrayOf(
             MediaStore.Audio.Media._ID,
@@ -114,12 +115,21 @@ class MediaCacheService {
                         addedAtMs = addedAtMs
                     )
                 )
+                outIds.add(id)
                 songsFound = out.size
                 val ext = fileExtension(displayName)
                 extensionCounts[ext] = (extensionCounts[ext] ?: 0) + 1
                 if (songsFound % 200 == 0 || songsFound == 1) {
                     onProgress?.invoke(songsFound, 0)
                 }
+            }
+        }
+        val genresByAudioId = loadWholeDriveGenres(context, outIds.toSet())
+        if (genresByAudioId.isNotEmpty()) {
+            for (index in out.indices) {
+                val audioId = outIds[index]
+                val mappedGenre = genresByAudioId[audioId] ?: continue
+                out[index] = out[index].copy(genre = normalizeGenre(mappedGenre))
             }
         }
         synchronized(cacheLock) {
@@ -139,6 +149,50 @@ class MediaCacheService {
             deepScan = false,
             probedCandidates = 0
         )
+    }
+
+    private fun loadWholeDriveGenres(context: Context, audioIds: Set<Long>): Map<Long, String> {
+        if (audioIds.isEmpty()) return emptyMap()
+        val resolver = context.contentResolver
+        val genresByAudioId = mutableMapOf<Long, String>()
+        val genreProjection = arrayOf(
+            MediaStore.Audio.Genres._ID,
+            MediaStore.Audio.Genres.NAME
+        )
+        resolver.query(
+            MediaStore.Audio.Genres.EXTERNAL_CONTENT_URI,
+            genreProjection,
+            null,
+            null,
+            null
+        )?.use { genreCursor ->
+            val genreIdIndex = genreCursor.getColumnIndexOrThrow(MediaStore.Audio.Genres._ID)
+            val genreNameIndex = genreCursor.getColumnIndexOrThrow(MediaStore.Audio.Genres.NAME)
+            while (genreCursor.moveToNext()) {
+                val genreId = genreCursor.getLong(genreIdIndex)
+                val genreName = genreCursor.getString(genreNameIndex)?.trim().orEmpty()
+                if (genreName.isBlank()) continue
+                val membersUri = MediaStore.Audio.Genres.Members.getContentUri("external", genreId)
+                resolver.query(
+                    membersUri,
+                    arrayOf(MediaStore.Audio.Genres.Members.AUDIO_ID),
+                    null,
+                    null,
+                    null
+                )?.use { membersCursor ->
+                    val audioIdIndex =
+                        membersCursor.getColumnIndexOrThrow(MediaStore.Audio.Genres.Members.AUDIO_ID)
+                    while (membersCursor.moveToNext()) {
+                        val audioId = membersCursor.getLong(audioIdIndex)
+                        if (audioId !in audioIds) continue
+                        if (genresByAudioId[audioId].isNullOrBlank()) {
+                            genresByAudioId[audioId] = genreName
+                        }
+                    }
+                }
+            }
+        }
+        return genresByAudioId
     }
 
     private val _cachedFiles = mutableListOf<MediaFileInfo>()
