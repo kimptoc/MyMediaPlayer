@@ -302,6 +302,20 @@ class MyMusicService : MediaBrowserServiceCompat() {
             savePlaybackSnapshot()
         }
 
+        override fun onSeekTo(pos: Long) {
+            val player = mediaPlayer ?: return
+            val duration = runCatching { player.duration.toLong() }.getOrDefault(0L)
+            val clamped = if (duration > 0L) pos.coerceIn(0L, duration) else pos.coerceAtLeast(0L)
+            runCatching { player.seekTo(clamped.toInt()) }
+            val state = lastPlaybackState()?.state ?: if (player.isPlaying) {
+                PlaybackStateCompat.STATE_PLAYING
+            } else {
+                PlaybackStateCompat.STATE_PAUSED
+            }
+            updatePlaybackState(state)
+            savePlaybackSnapshot(positionMsOverride = clamped)
+        }
+
         override fun onCustomAction(action: String?, extras: Bundle?) {
             when (action) {
                 ACTION_SET_MEDIA_FILES -> {
@@ -1981,39 +1995,15 @@ class MyMusicService : MediaBrowserServiceCompat() {
     private fun updatePlaybackState(state: Int, errorMessage: String? = null) {
         val position = mediaPlayer?.currentPosition?.toLong() ?: 0L
         val speed = if (state == PlaybackStateCompat.STATE_PLAYING) 1f else 0f
-        val baseActions = when (state) {
-            PlaybackStateCompat.STATE_PLAYING -> {
-                PlaybackStateCompat.ACTION_PAUSE or PlaybackStateCompat.ACTION_STOP
-            }
-            PlaybackStateCompat.STATE_PAUSED -> {
-                PlaybackStateCompat.ACTION_PLAY or PlaybackStateCompat.ACTION_STOP
-            }
-            PlaybackStateCompat.STATE_STOPPED -> {
-                PlaybackStateCompat.ACTION_PLAY or PlaybackStateCompat.ACTION_PLAY_FROM_MEDIA_ID
-            }
-            else -> {
-                PlaybackStateCompat.ACTION_PLAY or PlaybackStateCompat.ACTION_PLAY_FROM_MEDIA_ID
-            }
-        }
-
-        val queueActions = if (playlistQueue.size > 1 && currentQueueIndex >= 0) {
-            var actions = 0L
-            if (currentQueueIndex < playlistQueue.size - 1) {
-                actions = actions or PlaybackStateCompat.ACTION_SKIP_TO_NEXT
-            }
-            if (currentQueueIndex > 0) {
-                actions = actions or PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS
-            }
-            actions = actions or PlaybackStateCompat.ACTION_SKIP_TO_QUEUE_ITEM
-            actions
-        } else {
-            0L
-        }
-
-        val repeatActions = PlaybackStateCompat.ACTION_SET_REPEAT_MODE
+        val playbackActions = resolvePlaybackActions(
+            state = state,
+            queueSize = playlistQueue.size,
+            queueIndex = currentQueueIndex,
+            canSeek = mediaPlayer != null
+        )
 
         playbackStateBuilder
-            .setActions(baseActions or queueActions or repeatActions)
+            .setActions(playbackActions)
             .setState(state, position, speed, SystemClock.elapsedRealtime())
 
         if (state == PlaybackStateCompat.STATE_ERROR && errorMessage != null) {
@@ -2036,6 +2026,46 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
         session.setPlaybackState(playbackStateBuilder.build())
         updateNowPlayingNotification(state)
+    }
+
+    @VisibleForTesting
+    internal fun resolvePlaybackActions(
+        state: Int,
+        queueSize: Int,
+        queueIndex: Int,
+        canSeek: Boolean
+    ): Long {
+        val baseActions = when (state) {
+            PlaybackStateCompat.STATE_PLAYING -> {
+                PlaybackStateCompat.ACTION_PAUSE or PlaybackStateCompat.ACTION_STOP
+            }
+            PlaybackStateCompat.STATE_PAUSED -> {
+                PlaybackStateCompat.ACTION_PLAY or PlaybackStateCompat.ACTION_STOP
+            }
+            PlaybackStateCompat.STATE_STOPPED -> {
+                PlaybackStateCompat.ACTION_PLAY or PlaybackStateCompat.ACTION_PLAY_FROM_MEDIA_ID
+            }
+            else -> {
+                PlaybackStateCompat.ACTION_PLAY or PlaybackStateCompat.ACTION_PLAY_FROM_MEDIA_ID
+            }
+        }
+
+        val queueActions = if (queueSize > 1 && queueIndex >= 0) {
+            var actions = 0L
+            if (queueIndex < queueSize - 1) {
+                actions = actions or PlaybackStateCompat.ACTION_SKIP_TO_NEXT
+            }
+            if (queueIndex > 0) {
+                actions = actions or PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS
+            }
+            actions or PlaybackStateCompat.ACTION_SKIP_TO_QUEUE_ITEM
+        } else {
+            0L
+        }
+
+        val seekActions = if (canSeek) PlaybackStateCompat.ACTION_SEEK_TO else 0L
+        val repeatActions = PlaybackStateCompat.ACTION_SET_REPEAT_MODE
+        return baseActions or queueActions or seekActions or repeatActions
     }
 
     private fun updateMetadata(fileInfo: MediaFileInfo) {

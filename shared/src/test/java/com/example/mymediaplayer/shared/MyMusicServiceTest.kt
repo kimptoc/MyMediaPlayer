@@ -1,6 +1,7 @@
 package com.example.mymediaplayer.shared
 
 import android.net.Uri
+import android.support.v4.media.session.PlaybackStateCompat
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -237,5 +238,37 @@ class MyMusicServiceTest {
             service.smartPlaylistIdFromQuery("play havent heard in a while")
         )
         assertNull(service.smartPlaylistIdFromQuery("play coldplay"))
+    }
+
+    @Test
+    fun resolvePlaybackActions_includesSeekWhenPlayerAvailable() {
+        val service = MyMusicService()
+
+        val actions = service.resolvePlaybackActions(
+            state = PlaybackStateCompat.STATE_PLAYING,
+            queueSize = 3,
+            queueIndex = 1,
+            canSeek = true
+        )
+
+        assertTrue(actions and PlaybackStateCompat.ACTION_SEEK_TO != 0L)
+        assertTrue(actions and PlaybackStateCompat.ACTION_SKIP_TO_NEXT != 0L)
+        assertTrue(actions and PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS != 0L)
+    }
+
+    @Test
+    fun resolvePlaybackActions_excludesSeekWhenNoPlayer() {
+        val service = MyMusicService()
+
+        val actions = service.resolvePlaybackActions(
+            state = PlaybackStateCompat.STATE_STOPPED,
+            queueSize = 0,
+            queueIndex = -1,
+            canSeek = false
+        )
+
+        assertTrue(actions and PlaybackStateCompat.ACTION_PLAY != 0L)
+        assertTrue(actions and PlaybackStateCompat.ACTION_PLAY_FROM_MEDIA_ID != 0L)
+        assertTrue(actions and PlaybackStateCompat.ACTION_SEEK_TO == 0L)
     }
 }
