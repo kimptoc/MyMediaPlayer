@@ -165,6 +165,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
     private var pendingIntroCompletion: (() -> Unit)? = null
     private var trackVoiceIntroEnabled: Boolean = false
     private var trackVoiceOutroEnabled: Boolean = false
+    private var lastIntroTemplateIndex: Int = -1
+    private var lastOutroTemplateIndex: Int = -1
 
     private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
         when (focusChange) {
@@ -1227,11 +1229,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }
         val title = fileInfo.title?.takeIf { it.isNotBlank() } ?: fileInfo.displayName
         val artist = fileInfo.artist?.takeIf { it.isNotBlank() }
-        val introText = if (artist != null) {
-            "And now we have $artist with $title."
-        } else {
-            "And now we have $title."
-        }
+        val introText = buildIntroAnnouncement(artist, title)
         val utteranceId = "track_intro_${SystemClock.elapsedRealtime()}"
         pendingIntroUtteranceId = utteranceId
         pendingIntroCompletion = onComplete
@@ -1260,11 +1258,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }
         val title = fileInfo.title?.takeIf { it.isNotBlank() } ?: fileInfo.displayName
         val artist = fileInfo.artist?.takeIf { it.isNotBlank() }
-        val outroText = if (artist != null) {
-            "That was $artist with $title."
-        } else {
-            "That was $title."
-        }
+        val outroText = buildOutroAnnouncement(artist, title)
         val utteranceId = "track_outro_${SystemClock.elapsedRealtime()}"
         pendingIntroUtteranceId = utteranceId
         pendingIntroCompletion = onComplete
@@ -1273,6 +1267,74 @@ class MyMusicService : MediaBrowserServiceCompat() {
             clearPendingIntro()
             onComplete()
         }
+    }
+
+    private fun buildIntroAnnouncement(artist: String?, title: String): String {
+        val templates = listOf(
+            "Now playing %s by %s.",
+            "Up next, %s from %s.",
+            "Here comes %s by %s.",
+            "Let's hear %s by %s.",
+            "Coming up, %s from %s.",
+            "This is %s by %s."
+        )
+        val soloTemplates = listOf(
+            "Now playing %s.",
+            "Up next, %s.",
+            "Here comes %s.",
+            "Let's hear %s.",
+            "Coming up, %s.",
+            "This is %s."
+        )
+        val (pickedIndex, pickedTemplate) = pickTemplate(
+            templates = if (artist != null) templates else soloTemplates,
+            previousIndex = lastIntroTemplateIndex
+        )
+        lastIntroTemplateIndex = pickedIndex
+        return if (artist != null) {
+            String.format(java.util.Locale.US, pickedTemplate, title, artist)
+        } else {
+            String.format(java.util.Locale.US, pickedTemplate, title)
+        }
+    }
+
+    private fun buildOutroAnnouncement(artist: String?, title: String): String {
+        val templates = listOf(
+            "That was %s by %s.",
+            "You just heard %s from %s.",
+            "That was %s by %s just now.",
+            "We just finished %s by %s.",
+            "That wraps up %s from %s.",
+            "Recently played: %s by %s."
+        )
+        val soloTemplates = listOf(
+            "That was %s.",
+            "You just heard %s.",
+            "That was %s just now.",
+            "We just finished %s.",
+            "That wraps up %s.",
+            "Recently played: %s."
+        )
+        val (pickedIndex, pickedTemplate) = pickTemplate(
+            templates = if (artist != null) templates else soloTemplates,
+            previousIndex = lastOutroTemplateIndex
+        )
+        lastOutroTemplateIndex = pickedIndex
+        return if (artist != null) {
+            String.format(java.util.Locale.US, pickedTemplate, title, artist)
+        } else {
+            String.format(java.util.Locale.US, pickedTemplate, title)
+        }
+    }
+
+    private fun pickTemplate(templates: List<String>, previousIndex: Int): Pair<Int, String> {
+        if (templates.isEmpty()) return -1 to ""
+        if (templates.size == 1) return 0 to templates[0]
+        var index = kotlin.random.Random.nextInt(templates.size)
+        if (index == previousIndex) {
+            index = (index + 1 + kotlin.random.Random.nextInt(templates.size - 1)) % templates.size
+        }
+        return index to templates[index]
     }
 
     private fun ensureTextToSpeechInitialized() {
