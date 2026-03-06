@@ -30,7 +30,12 @@ data class PlaybackState(
     val isPlaying: Boolean = false,
     val isPaused: Boolean = false,
     val currentTrackName: String? = null,
+    val currentArtistName: String? = null,
     val currentMediaId: String? = null,
+    val currentPositionMs: Long = 0L,
+    val positionUpdatedAtElapsedMs: Long = 0L,
+    val playbackSpeed: Float = 0f,
+    val durationMs: Long = 0L,
     val isPlayingPlaylist: Boolean = false,
     val queueTitle: String? = null,
     val queuePosition: String? = null,
@@ -1036,7 +1041,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         refreshSmartPlaylistSelection()
     }
 
-    fun updatePlaybackState(state: Int, mediaId: String?, trackName: String?) {
+    fun updatePlaybackState(
+        state: Int,
+        mediaId: String?,
+        trackName: String?,
+        artistName: String?,
+        positionMs: Long,
+        positionUpdatedAtElapsedMs: Long,
+        playbackSpeed: Float,
+        durationMs: Long
+    ) {
         val current = _uiState.value
         var updatedPlayCounts = current.playCounts
         var updatedLastPlayedAt = current.lastPlayedAt
@@ -1056,7 +1070,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 isPlaying = (state == PlaybackStateCompat.STATE_PLAYING),
                 isPaused = (state == PlaybackStateCompat.STATE_PAUSED),
                 currentTrackName = if (state == PlaybackStateCompat.STATE_STOPPED) null else trackName,
-                currentMediaId = if (state == PlaybackStateCompat.STATE_STOPPED) null else mediaId
+                currentArtistName = if (state == PlaybackStateCompat.STATE_STOPPED) null else artistName,
+                currentMediaId = if (state == PlaybackStateCompat.STATE_STOPPED) null else mediaId,
+                currentPositionMs = if (state == PlaybackStateCompat.STATE_STOPPED) 0L else positionMs,
+                positionUpdatedAtElapsedMs = positionUpdatedAtElapsedMs,
+                playbackSpeed = playbackSpeed,
+                durationMs = if (state == PlaybackStateCompat.STATE_STOPPED) 0L else durationMs
             ),
             playCounts = updatedPlayCounts,
             lastPlayedAt = updatedLastPlayedAt

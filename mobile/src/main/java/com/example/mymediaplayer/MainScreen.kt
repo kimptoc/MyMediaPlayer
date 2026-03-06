@@ -1,8 +1,11 @@
 package com.example.mymediaplayer
 
+import android.graphics.Bitmap
+import android.os.SystemClock
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -27,6 +30,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -47,6 +51,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextOverflow
@@ -79,6 +84,7 @@ fun MainScreen(
     onStop: () -> Unit,
     onNext: () -> Unit,
     onPrev: () -> Unit,
+    onSeekTo: (Long) -> Unit,
     onToggleRepeat: () -> Unit,
     onQueueItemSelected: (Long) -> Unit,
     onCreatePlaylist: (Int) -> Unit,
@@ -120,6 +126,7 @@ fun MainScreen(
     onRemoveTrustedBluetoothDevice: (String) -> Unit,
     onClearTrustedBluetoothDevices: () -> Unit,
     onRefreshBluetoothDiagnostics: () -> Unit,
+    nowPlayingArt: Bitmap?,
     showPlaylistSaveFolderPrompt: Boolean,
     onDismissPlaylistSaveFolderPrompt: () -> Unit,
     onSetPlaylistSaveFolderNow: () -> Unit
@@ -145,6 +152,7 @@ fun MainScreen(
     var pendingRenamePlaylist by remember { mutableStateOf<PlaylistInfo?>(null) }
     var renamePlaylistNameText by remember { mutableStateOf("") }
     var showQueueDialog by remember { mutableStateOf(false) }
+    var showExpandedNowPlayingDialog by remember { mutableStateOf(false) }
     var showBluetoothDiagnosticsDialog by remember { mutableStateOf(false) }
     var showManageTrustedBluetoothDialog by remember { mutableStateOf(false) }
     var songsFavoritesOnly by rememberSaveable { mutableStateOf(false) }
@@ -298,6 +306,7 @@ fun MainScreen(
             if (uiState.playback.currentTrackName != null) {
                 PlaybackBar(
                     trackName = uiState.playback.currentTrackName,
+                    artistName = uiState.playback.currentArtistName,
                     isPlaying = uiState.playback.isPlaying,
                     isPlayingPlaylist = uiState.playback.isPlayingPlaylist,
                     repeatMode = uiState.playback.repeatMode,
@@ -309,6 +318,7 @@ fun MainScreen(
                     onPrev = onPrev,
                     onToggleRepeat = onToggleRepeat,
                     onShowQueue = { showQueueDialog = true },
+                    onOpenExpanded = { showExpandedNowPlayingDialog = true },
                     hasNext = uiState.playback.hasNext,
                     hasPrev = uiState.playback.hasPrev
                 )
@@ -1080,6 +1090,27 @@ fun MainScreen(
                     Text("Cancel")
                 }
             }
+        )
+    }
+
+    if (showExpandedNowPlayingDialog && uiState.playback.currentTrackName != null) {
+        ExpandedNowPlayingDialog(
+            trackName = uiState.playback.currentTrackName,
+            artistName = uiState.playback.currentArtistName,
+            artwork = nowPlayingArt,
+            currentPositionMs = uiState.playback.currentPositionMs,
+            positionUpdatedAtElapsedMs = uiState.playback.positionUpdatedAtElapsedMs,
+            durationMs = uiState.playback.durationMs,
+            isPlaying = uiState.playback.isPlaying,
+            playbackSpeed = uiState.playback.playbackSpeed,
+            hasPrev = uiState.playback.hasPrev,
+            hasNext = uiState.playback.hasNext,
+            isPlayingPlaylist = uiState.playback.isPlayingPlaylist,
+            onSeekTo = onSeekTo,
+            onPlayPause = onPlayPause,
+            onPrev = onPrev,
+            onNext = onNext,
+            onDismiss = { showExpandedNowPlayingDialog = false }
         )
     }
 
@@ -2000,6 +2031,7 @@ private fun CategoryCard(
 @Composable
 fun PlaybackBar(
     trackName: String,
+    artistName: String?,
     isPlaying: Boolean,
     isPlayingPlaylist: Boolean,
     repeatMode: Int,
@@ -2012,9 +2044,15 @@ fun PlaybackBar(
     onNext: () -> Unit,
     onPrev: () -> Unit,
     onToggleRepeat: () -> Unit,
-    onShowQueue: () -> Unit
+    onShowQueue: () -> Unit,
+    onOpenExpanded: () -> Unit
 ) {
-    Surface(tonalElevation = 3.dp, modifier = Modifier.fillMaxWidth()) {
+    Surface(
+        tonalElevation = 3.dp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onOpenExpanded() }
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -2026,6 +2064,14 @@ fun PlaybackBar(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+            if (!artistName.isNullOrBlank()) {
+                Text(
+                    text = artistName,
+                    style = MaterialTheme.typography.labelSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
             if (queuePosition != null) {
                 Text(
                     text = "${queueTitle ?: "Queue"} • Track $queuePosition",
@@ -2065,6 +2111,112 @@ fun PlaybackBar(
             }
         }
     }
+}
+
+@Composable
+private fun ExpandedNowPlayingDialog(
+    trackName: String,
+    artistName: String?,
+    artwork: Bitmap?,
+    currentPositionMs: Long,
+    positionUpdatedAtElapsedMs: Long,
+    durationMs: Long,
+    isPlaying: Boolean,
+    playbackSpeed: Float,
+    hasPrev: Boolean,
+    hasNext: Boolean,
+    isPlayingPlaylist: Boolean,
+    onSeekTo: (Long) -> Unit,
+    onPlayPause: () -> Unit,
+    onPrev: () -> Unit,
+    onNext: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val now = SystemClock.elapsedRealtime()
+    val projectedPositionMs = if (isPlaying && playbackSpeed > 0f) {
+        val elapsed = (now - positionUpdatedAtElapsedMs).coerceAtLeast(0L)
+        currentPositionMs + (elapsed * playbackSpeed).toLong()
+    } else {
+        currentPositionMs
+    }
+    val durationSafe = durationMs.coerceAtLeast(0L)
+    val clampedProjectedMs = if (durationSafe > 0L) {
+        projectedPositionMs.coerceIn(0L, durationSafe)
+    } else {
+        projectedPositionMs.coerceAtLeast(0L)
+    }
+    var seekValueMs by remember(
+        trackName,
+        artistName,
+        currentPositionMs,
+        positionUpdatedAtElapsedMs,
+        durationMs,
+        isPlaying
+    ) {
+        mutableStateOf(clampedProjectedMs.toFloat())
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Now Playing") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (artwork != null) {
+                    Image(
+                        bitmap = artwork.asImageBitmap(),
+                        contentDescription = "Album art",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(220.dp)
+                    )
+                }
+                Text(trackName, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                if (!artistName.isNullOrBlank()) {
+                    Text(artistName, style = MaterialTheme.typography.bodySmall)
+                }
+                if (durationSafe > 0L) {
+                    Slider(
+                        value = seekValueMs.coerceIn(0f, durationSafe.toFloat()),
+                        onValueChange = { seekValueMs = it },
+                        valueRange = 0f..durationSafe.toFloat(),
+                        onValueChangeFinished = { onSeekTo(seekValueMs.toLong()) }
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            formatPlaybackDuration(seekValueMs.toLong()),
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                        Text(
+                            formatPlaybackDuration(durationSafe),
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (isPlayingPlaylist) {
+                        TextButton(onClick = onPrev, enabled = hasPrev) { Text("Prev") }
+                    }
+                    TextButton(onClick = onPlayPause) { Text(if (isPlaying) "Pause" else "Play") }
+                    if (isPlayingPlaylist) {
+                        TextButton(onClick = onNext, enabled = hasNext) { Text("Next") }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
+        }
+    )
+}
+
+private fun formatPlaybackDuration(durationMs: Long): String {
+    val totalSeconds = (durationMs / 1000L).coerceAtLeast(0L)
+    val minutes = totalSeconds / 60L
+    val seconds = totalSeconds % 60L
+    return "%d:%02d".format(minutes, seconds)
 }
 
 private fun repeatModeShortLabel(mode: Int): String {

@@ -6,11 +6,13 @@ import android.media.AudioManager
 import android.net.Uri
 import android.os.Bundle
 import android.os.Build
+import android.os.SystemClock
 import android.Manifest
 import android.app.SearchManager
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
+import android.graphics.Bitmap
 import android.widget.Toast
 import java.util.Locale
 import androidx.activity.ComponentActivity
@@ -105,6 +107,7 @@ class MainActivity : ComponentActivity() {
     private var showPlaylistSaveFolderPrompt by mutableStateOf(false)
     private var trackVoiceIntroEnabled by mutableStateOf(false)
     private var trackVoiceOutroEnabled by mutableStateOf(false)
+    private var nowPlayingArt by mutableStateOf<Bitmap?>(null)
 
     private val bluetoothPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -126,6 +129,9 @@ class MainActivity : ComponentActivity() {
 
         override fun onMetadataChanged(metadata: MediaMetadataCompat?) {
             lastMetadata = metadata
+            nowPlayingArt =
+                metadata?.getBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART)
+                    ?: metadata?.getBitmap(MediaMetadataCompat.METADATA_KEY_ART)
             pushPlaybackState()
         }
 
@@ -319,6 +325,9 @@ class MainActivity : ComponentActivity() {
                     onQueueItemSelected = { queueId ->
                         mediaController?.transportControls?.skipToQueueItem(queueId)
                     },
+                    onSeekTo = { positionMs ->
+                        mediaController?.transportControls?.seekTo(positionMs)
+                    },
                     onCreatePlaylist = { count -> viewModel.createRandomPlaylist(count) },
                     onPlaylistMessageDismissed = { viewModel.clearPlaylistMessage() },
                     onFolderMessageDismissed = { viewModel.clearFolderMessage() },
@@ -401,6 +410,7 @@ class MainActivity : ComponentActivity() {
                     onRefreshBluetoothDiagnostics = {
                         refreshBluetoothState()
                     },
+                    nowPlayingArt = nowPlayingArt,
                     showPlaylistSaveFolderPrompt = showPlaylistSaveFolderPrompt,
                     onDismissPlaylistSaveFolderPrompt = {
                         showPlaylistSaveFolderPrompt = false
@@ -490,7 +500,26 @@ class MainActivity : ComponentActivity() {
         val state = lastPlaybackState?.state ?: PlaybackStateCompat.STATE_NONE
         val mediaId = lastMetadata?.getString(MediaMetadataCompat.METADATA_KEY_MEDIA_ID)
         val trackName = lastMetadata?.getString(MediaMetadataCompat.METADATA_KEY_TITLE)
-        viewModel.updatePlaybackState(state, mediaId, trackName)
+        val artistName = lastMetadata?.getString(MediaMetadataCompat.METADATA_KEY_ARTIST)
+        val durationMs = lastMetadata?.getLong(MediaMetadataCompat.METADATA_KEY_DURATION) ?: 0L
+        val positionMs = (lastPlaybackState?.position ?: 0L).coerceAtLeast(0L)
+        val updatedAtMs = (lastPlaybackState?.lastPositionUpdateTime ?: SystemClock.elapsedRealtime())
+            .coerceAtLeast(0L)
+        val speed = lastPlaybackState?.playbackSpeed ?: if (state == PlaybackStateCompat.STATE_PLAYING) {
+            1f
+        } else {
+            0f
+        }
+        viewModel.updatePlaybackState(
+            state = state,
+            mediaId = mediaId,
+            trackName = trackName,
+            artistName = artistName,
+            positionMs = positionMs,
+            positionUpdatedAtElapsedMs = updatedAtMs,
+            playbackSpeed = speed,
+            durationMs = durationMs
+        )
     }
 
     private fun pushQueueState() {

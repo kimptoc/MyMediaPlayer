@@ -148,7 +148,12 @@ class MainViewModelTest {
         viewModel.updatePlaybackState(
             PlaybackStateCompat.STATE_PLAYING,
             "content://test/song1",
-            "Song One"
+            "Song One",
+            "Artist One",
+            10_000L,
+            1_000L,
+            1f,
+            180_000L
         )
         val state = viewModel.uiState.value
 
