@@ -7,13 +7,16 @@ class GenreBucketsTest {
 
     @Test
     fun bucketGenre_groupsCommonSubgenres() {
-        assertEquals("Rock", bucketGenre("Alternative Rock"))
+        assertEquals("Rock/Metal", bucketGenre("Alternative Rock"))
         assertEquals("Hip-Hop/Rap", bucketGenre("Hip-Hop"))
         assertEquals("R&B/Soul", bucketGenre("Soul"))
-        assertEquals("Jazz", bucketGenre("Smooth Jazz"))
-        assertEquals("Blues", bucketGenre("Delta Blues"))
-        assertEquals("Electronic", bucketGenre("Drum and Bass"))
-        assertEquals("Soundtrack", bucketGenre("Original Soundtrack"))
+        assertEquals("Jazz/Blues", bucketGenre("Smooth Jazz"))
+        assertEquals("Jazz/Blues", bucketGenre("Delta Blues"))
+        assertEquals("Electronic/Dance", bucketGenre("Drum and Bass"))
+        assertEquals("Other", bucketGenre("Original Soundtrack"))
+        assertEquals("Country/Folk", bucketGenre("Bluegrass"))
+        assertEquals("Latin", bucketGenre("Reggaeton"))
+        assertEquals("Other", bucketGenre("Post-Blackgaze-Experimental"))
         assertEquals("Other", bucketGenre(null))
     }
 }
