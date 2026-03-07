@@ -1178,9 +1178,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val needle = query.trim().lowercase()
         if (needle.isBlank()) return emptyList()
         return files.filter { file ->
-            val title = file.title ?: file.displayName
             val haystack = listOfNotNull(
-                title,
+                file.cleanTitle,
                 file.artist,
                 file.album,
                 file.genre
@@ -1218,7 +1217,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
                     .sortedWith(
                         compareByDescending<Pair<MediaFileInfo, Int>> { it.second }
-                            .thenBy { (it.first.title ?: it.first.displayName).lowercase(Locale.US) }
+                            .thenBy { it.first.cleanTitle.lowercase(Locale.US) }
                     )
                     .map { it.first }
             }
@@ -1226,7 +1225,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 files.sortedWith(
                     compareBy<MediaFileInfo> { current.lastPlayedAt[it.uriString] != null }
                         .thenBy { current.lastPlayedAt[it.uriString] ?: Long.MIN_VALUE }
-                        .thenBy { (it.title ?: it.displayName).lowercase(Locale.US) }
+                        .thenBy { it.cleanTitle.lowercase(Locale.US) }
                 )
             }
             else -> emptyList()

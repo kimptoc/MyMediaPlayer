@@ -60,6 +60,7 @@ class MediaCacheService {
             MediaStore.Audio.Media.TITLE,
             MediaStore.Audio.Media.ARTIST,
             MediaStore.Audio.Media.ALBUM,
+            MediaStore.Audio.Media.RELATIVE_PATH,
             MediaStore.Audio.Media.DURATION,
             MediaStore.Audio.Media.YEAR,
             MediaStore.Audio.Media.DATE_ADDED
@@ -80,6 +81,7 @@ class MediaCacheService {
             val titleIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
             val artistIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
             val albumIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
+            val relativePathIndex = cursor.getColumnIndex(MediaStore.Audio.Media.RELATIVE_PATH)
             val durationIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
             val yearIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.YEAR)
             val addedIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
@@ -94,6 +96,11 @@ class MediaCacheService {
                 val title = cursor.getString(titleIndex)
                 val artist = cursor.getString(artistIndex)
                 val album = cursor.getString(albumIndex)
+                val relativePath = if (relativePathIndex >= 0 && !cursor.isNull(relativePathIndex)) {
+                    cursor.getString(relativePathIndex)
+                } else {
+                    null
+                }
                 val durationMs = if (cursor.isNull(durationIndex)) null else cursor.getLong(durationIndex)
                 val year = if (cursor.isNull(yearIndex)) null else cursor.getInt(yearIndex)
                 val addedAtMs = if (cursor.isNull(addedIndex)) {
@@ -109,7 +116,7 @@ class MediaCacheService {
                         title = title,
                         artist = artist,
                         album = album,
-                        genre = null,
+                        genre = normalizeGenre(inferGenreFromPath(relativePath)),
                         durationMs = durationMs,
                         year = year,
                         addedAtMs = addedAtMs
@@ -195,6 +202,39 @@ class MediaCacheService {
         return genresByAudioId
     }
 
+    fun enrichGenresFromMediaStore(context: Context) {
+        val resolver = context.contentResolver
+        // Build audioId → displayName map from MediaStore
+        val audioIdByName = mutableMapOf<String, Long>()
+        resolver.query(
+            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+            arrayOf(MediaStore.Audio.Media._ID, MediaStore.Audio.Media.DISPLAY_NAME),
+            "${MediaStore.Audio.Media.IS_MUSIC} != 0",
+            null,
+            null
+        )?.use { cursor ->
+            val idIdx = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
+            val nameIdx = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)
+            while (cursor.moveToNext()) {
+                val name = cursor.getString(nameIdx) ?: continue
+                audioIdByName[name] = cursor.getLong(idIdx)
+            }
+        }
+        if (audioIdByName.isEmpty()) return
+
+        val genresByAudioId = loadWholeDriveGenres(context, audioIdByName.values.toSet())
+        if (genresByAudioId.isEmpty()) return
+
+        synchronized(cacheLock) {
+            for (i in _cachedFiles.indices) {
+                val file = _cachedFiles[i]
+                val audioId = audioIdByName[file.displayName] ?: continue
+                val genre = genresByAudioId[audioId] ?: continue
+                _cachedFiles[i] = file.copy(genre = normalizeGenre(genre))
+            }
+        }
+    }
+
     private val _cachedFiles = mutableListOf<MediaFileInfo>()
     val cachedFiles: List<MediaFileInfo>
         get() = synchronized(cacheLock) { _cachedFiles.toList() }
@@ -273,7 +313,9 @@ class MediaCacheService {
                             title = metadata?.title ?: candidate.name,
                             artist = metadata?.artist,
                             album = metadata?.album?.ifBlank { null } ?: candidate.parentFolderName,
-                            genre = normalizeGenre(metadata?.genre),
+                            genre = normalizeGenre(
+                                metadata?.genre ?: inferGenreFromPath(candidate.parentFolderName)
+                            ),
                             durationMs = durationMs,
                             year = yearValue,
                             addedAtMs = candidate.lastModified
@@ -325,6 +367,9 @@ class MediaCacheService {
             return null
         }
         val files = dao.getAllFiles().map {
+            val genre = it.genre ?: normalizeGenre(
+                inferGenreFromPath(Uri.decode(it.uriString))
+            )
             MediaFileInfo(
                 uriString = it.uriString,
                 displayName = it.displayName,
@@ -332,7 +377,7 @@ class MediaCacheService {
                 title = it.title,
                 artist = it.artist,
                 album = it.album,
-                genre = it.genre,
+                genre = genre,
                 durationMs = it.durationMs,
                 year = it.year,
                 addedAtMs = it.addedAtMs
@@ -653,9 +698,8 @@ class MediaCacheService {
         if (needle.isBlank()) return emptyList()
         val snapshot = synchronized(cacheLock) { _cachedFiles.toList() }
         return snapshot.filter { file ->
-            val title = file.title ?: file.displayName
             val haystack = listOfNotNull(
-                title,
+                file.cleanTitle,
                 file.artist,
                 file.album,
                 file.genre
@@ -681,6 +725,36 @@ class MediaCacheService {
             ?.trim()
             .orEmpty()
         return if (primary.isBlank()) "Other" else primary
+    }
+
+    private fun inferGenreFromPath(pathLike: String?): String? {
+        val normalized = pathLike
+            ?.replace('\\', '/')
+            ?.lowercase(Locale.US)
+            ?.trim()
+            .orEmpty()
+        if (normalized.isBlank()) return null
+        return when {
+            normalized.contains("hip hop") || normalized.contains("hip-hop") ||
+                normalized.contains("/rap") || normalized.contains("trap") -> "Hip-Hop"
+            normalized.contains("r&b") || normalized.contains("rnb") ||
+                normalized.contains("soul") || normalized.contains("motown") -> "R&B"
+            normalized.contains("electronic") || normalized.contains("edm") ||
+                normalized.contains("house") || normalized.contains("techno") ||
+                normalized.contains("trance") || normalized.contains("dubstep") -> "Electronic"
+            normalized.contains("rock") || normalized.contains("metal") ||
+                normalized.contains("punk") || normalized.contains("grunge") -> "Rock"
+            normalized.contains("country") || normalized.contains("bluegrass") -> "Country"
+            normalized.contains("folk") || normalized.contains("americana") -> "Folk"
+            normalized.contains("classical") || normalized.contains("orchestra") ||
+                normalized.contains("opera") || normalized.contains("baroque") -> "Classical"
+            normalized.contains("jazz") -> "Jazz"
+            normalized.contains("blues") -> "Blues"
+            normalized.contains("latin") || normalized.contains("reggaeton") ||
+                normalized.contains("salsa") || normalized.contains("bachata") -> "Latin"
+            normalized.contains("pop") -> "Pop"
+            else -> null
+        }
     }
 
     private fun decadeLabel(year: Int?): String {

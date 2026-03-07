@@ -912,7 +912,7 @@ fun MainScreen(
 
     if (showAddToPlaylistDialog) {
         val files = pendingAddFiles
-        val firstName = files.firstOrNull()?.title ?: files.firstOrNull()?.displayName ?: "songs"
+        val firstName = files.firstOrNull()?.cleanTitle ?: "songs"
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { showAddToPlaylistDialog = false },
             title = { Text("Add to playlist") },
@@ -1794,7 +1794,7 @@ private fun PlaylistsSection(
                     editableSongs.withIndex().filter { indexed ->
                         val file = indexed.value
                         val haystack = listOfNotNull(
-                            file.title ?: file.displayName,
+                            file.cleanTitle,
                             file.artist,
                             file.album
                         ).joinToString(" ").lowercase()
@@ -1883,7 +1883,7 @@ private fun PlaylistsSection(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     Text(
-                                        text = file.title ?: file.displayName,
+                                        text = file.cleanTitle,
                                         modifier = Modifier.weight(1f),
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
@@ -2297,7 +2297,7 @@ fun FileCard(
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text(
-                text = file.title ?: file.displayName,
+                text = file.cleanTitle,
                 style = MaterialTheme.typography.bodyLarge
             )
             val secondary = buildSongDetails(file)

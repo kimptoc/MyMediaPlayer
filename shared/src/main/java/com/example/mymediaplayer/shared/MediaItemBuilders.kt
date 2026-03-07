@@ -41,7 +41,7 @@ internal fun buildSongItems(
     return songs.map { fileInfo ->
         val builder = MediaDescriptionCompat.Builder()
             .setMediaId(fileInfo.uriString)
-            .setTitle(fileInfo.title ?: fileInfo.displayName)
+            .setTitle(fileInfo.cleanTitle)
             .setSubtitle(fileInfo.artist)
         if (defaultIconUri != null) {
             builder.setIconUri(defaultIconUri)

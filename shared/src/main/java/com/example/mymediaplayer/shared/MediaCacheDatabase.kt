@@ -88,7 +88,7 @@ interface MediaCacheDao {
 
 @Database(
     entities = [MediaFileEntity::class, PlaylistEntity::class, ScanStateEntity::class],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class MediaCacheDatabase : RoomDatabase() {
@@ -112,6 +112,7 @@ abstract class MediaCacheDatabase : RoomDatabase() {
                     "media_cache.db"
                 )
                     .addMigrations(MIGRATION_1_2)
+                    .fallbackToDestructiveMigration()
                     .build()
                     .also { instance = it }
             }

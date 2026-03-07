@@ -11,4 +11,8 @@ data class MediaFileInfo(
     val durationMs: Long? = null,
     val year: Int? = null,
     val addedAtMs: Long? = null
-)
+) {
+    val cleanTitle: String
+        get() = title?.takeIf { it.isNotBlank() }
+            ?: displayName.substringBeforeLast('.')
+}

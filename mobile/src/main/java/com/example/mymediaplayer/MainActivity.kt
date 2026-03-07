@@ -76,6 +76,13 @@ class MainActivity : ComponentActivity() {
         private const val EXTRA_URIS = "uris"
         private const val EXTRA_NAMES = "names"
         private const val EXTRA_SIZES = "sizes"
+        private const val EXTRA_TITLES = "titles"
+        private const val EXTRA_ARTISTS = "artists"
+        private const val EXTRA_ALBUMS = "albums"
+        private const val EXTRA_GENRES = "genres"
+        private const val EXTRA_DURATIONS = "durations"
+        private const val EXTRA_YEARS = "years"
+        private const val EXTRA_ADDED_AT = "added_at"
         private const val EXTRA_PLAYLIST_URIS = "playlist_uris"
         private const val EXTRA_PLAYLIST_NAMES = "playlist_names"
         private const val EXTRA_SEARCH_URIS = "search_uris"
@@ -591,11 +598,25 @@ class MainActivity : ComponentActivity() {
 
         val names = files.map { it.displayName }
         val sizes = files.map { it.sizeBytes }.toLongArray()
+        val titles = files.map { it.title.orEmpty() }
+        val artists = files.map { it.artist.orEmpty() }
+        val albums = files.map { it.album.orEmpty() }
+        val genres = files.map { it.genre.orEmpty() }
+        val durations = files.map { it.durationMs ?: -1L }.toLongArray()
+        val years = files.map { it.year ?: 0 }.toIntArray()
+        val addedAt = files.map { it.addedAtMs ?: -1L }.toLongArray()
 
         val bundle = Bundle().apply {
             putStringArrayList(EXTRA_URIS, ArrayList(uris))
             putStringArrayList(EXTRA_NAMES, ArrayList(names))
             putLongArray(EXTRA_SIZES, sizes)
+            putStringArrayList(EXTRA_TITLES, ArrayList(titles))
+            putStringArrayList(EXTRA_ARTISTS, ArrayList(artists))
+            putStringArrayList(EXTRA_ALBUMS, ArrayList(albums))
+            putStringArrayList(EXTRA_GENRES, ArrayList(genres))
+            putLongArray(EXTRA_DURATIONS, durations)
+            putIntArray(EXTRA_YEARS, years)
+            putLongArray(EXTRA_ADDED_AT, addedAt)
         }
         controller.transportControls.sendCustomAction(ACTION_SET_MEDIA_FILES, bundle)
         lastSentUris = uris
