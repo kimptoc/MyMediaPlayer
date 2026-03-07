@@ -1768,11 +1768,12 @@ class MyMusicService : MediaBrowserServiceCompat() {
             val playlistUri = Uri.decode(resolvedMediaId.removePrefix(PLAYLIST_PREFIX))
             val playlistInfo = mediaCacheService.discoveredPlaylists.firstOrNull {
                 it.uriString == playlistUri
-            } ?: return
+            }
+            val playlistUriToRead = playlistInfo?.uriString ?: playlistUri
             val playlistTracks = enrichFromCache(
                 playlistService.readPlaylist(
                     this,
-                    Uri.parse(playlistInfo.uriString)
+                    Uri.parse(playlistUriToRead)
                 )
             )
             if (playlistTracks.isEmpty()) {
@@ -1781,7 +1782,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
             }
             playlistQueue = playlistTracks
             currentQueueIndex = 0
-            currentPlaylistName = playlistInfo.displayName.removeSuffix(".m3u")
+            currentPlaylistName = playlistInfo?.displayName?.removeSuffix(".m3u")
+                ?: Uri.parse(playlistUriToRead).lastPathSegment?.removeSuffix(".m3u")
+                ?: "Playlist"
             updateSessionQueue()
             playTrack(playlistQueue[currentQueueIndex])
             savePlaybackSnapshot()
