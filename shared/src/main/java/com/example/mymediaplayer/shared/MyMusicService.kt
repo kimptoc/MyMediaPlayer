@@ -40,6 +40,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -1641,7 +1643,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         return result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
     }
 
-    private fun handlePlayFromMediaId(resolvedMediaId: String) {
+    private suspend fun handlePlayFromMediaId(resolvedMediaId: String) {
         if (resolvedMediaId.startsWith(ACTION_PLAY_ALL_PREFIX) ||
             resolvedMediaId.startsWith(ACTION_SHUFFLE_PREFIX)
         ) {
@@ -1652,12 +1654,15 @@ class MyMusicService : MediaBrowserServiceCompat() {
             val tracks = when {
                 listKey == SONGS_ID -> mediaCacheService.cachedFiles
                 listKey == PLAYLISTS_ID -> {
-                    val all = mutableListOf<MediaFileInfo>()
-                    for (playlist in mediaCacheService.discoveredPlaylists) {
-                        all += playlistService.readPlaylist(
-                            this,
-                            Uri.parse(playlist.uriString)
-                        )
+                    val all = kotlinx.coroutines.coroutineScope {
+                        mediaCacheService.discoveredPlaylists.map { playlist ->
+                            async(Dispatchers.IO) {
+                                playlistService.readPlaylist(
+                                    this@MyMusicService,
+                                    Uri.parse(playlist.uriString)
+                                )
+                            }
+                        }.awaitAll().flatten()
                     }
                     enrichFromCache(all)
                 }
