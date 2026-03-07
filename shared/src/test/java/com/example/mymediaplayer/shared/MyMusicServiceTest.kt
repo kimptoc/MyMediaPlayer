@@ -289,7 +289,7 @@ class MyMusicServiceTest {
 
         val entries = service.playlistEntriesForBrowse(discovered)
 
-        assertTrue(entries.size >= 6)
+        assertEquals(6, entries.size)
         assertEquals("User One", entries[0].title)
         assertEquals("User Two", entries[1].title)
         assertTrue(entries[0].mediaId.startsWith("playlist:"))
