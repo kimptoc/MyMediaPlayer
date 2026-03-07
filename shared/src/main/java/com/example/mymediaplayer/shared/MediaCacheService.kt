@@ -142,6 +142,8 @@ class MediaCacheService {
         synchronized(cacheLock) {
             _cachedFiles.clear()
             _cachedFiles.addAll(out)
+            _cachedFilesByUri.clear()
+            _cachedFilesByUri.putAll(out.associateBy { it.uriString })
             _discoveredPlaylists.clear()
             albumArtistIndexed = false
         }
@@ -231,6 +233,7 @@ class MediaCacheService {
                 val audioId = audioIdByName[file.displayName] ?: continue
                 val genre = genresByAudioId[audioId] ?: continue
                 _cachedFiles[i] = file.copy(genre = normalizeGenre(genre))
+                _cachedFilesByUri[file.uriString] = _cachedFiles[i]
             }
         }
     }
@@ -238,6 +241,9 @@ class MediaCacheService {
     private val _cachedFiles = mutableListOf<MediaFileInfo>()
     val cachedFiles: List<MediaFileInfo>
         get() = synchronized(cacheLock) { _cachedFiles.toList() }
+
+    private val _cachedFilesByUri = mutableMapOf<String, MediaFileInfo>()
+    fun getFileIndexByUri(): Map<String, MediaFileInfo> = synchronized(cacheLock) { _cachedFilesByUri.toMap() }
 
     private val _discoveredPlaylists = mutableListOf<PlaylistInfo>()
     val discoveredPlaylists: List<PlaylistInfo>
@@ -331,6 +337,7 @@ class MediaCacheService {
             }
             synchronized(cacheLock) {
                 _cachedFiles.addAll(accepted)
+                _cachedFilesByUri.putAll(accepted.associateBy { it.uriString })
                 albumArtistIndexed = false
             }
             for (result in accepted) {
@@ -392,6 +399,8 @@ class MediaCacheService {
         synchronized(cacheLock) {
             _cachedFiles.clear()
             _cachedFiles.addAll(files)
+            _cachedFilesByUri.clear()
+            _cachedFilesByUri.putAll(files.associateBy { it.uriString })
             _discoveredPlaylists.clear()
             _discoveredPlaylists.addAll(playlists)
             albumArtistIndexed = false
@@ -434,6 +443,7 @@ class MediaCacheService {
         synchronized(cacheLock) {
             if (_cachedFiles.size < MAX_CACHE_SIZE) {
                 _cachedFiles.add(fileInfo)
+                _cachedFilesByUri[fileInfo.uriString] = fileInfo
                 albumArtistIndexed = false
             }
         }
@@ -633,6 +643,7 @@ class MediaCacheService {
     fun clearFiles() {
         synchronized(cacheLock) {
             _cachedFiles.clear()
+            _cachedFilesByUri.clear()
             clearMetadataIndexes()
         }
     }
@@ -646,6 +657,7 @@ class MediaCacheService {
     fun clearCache() {
         synchronized(cacheLock) {
             _cachedFiles.clear()
+            _cachedFilesByUri.clear()
             _discoveredPlaylists.clear()
             clearMetadataIndexes()
         }
