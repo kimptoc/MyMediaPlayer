@@ -42,6 +42,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.util.concurrent.atomic.AtomicReference
 
 class MyMusicService : MediaBrowserServiceCompat() {
 
@@ -136,6 +137,11 @@ class MyMusicService : MediaBrowserServiceCompat() {
         private const val FOCUS_TITLE = "vnd.android.cursor.item/audio"
     }
 
+    private data class PendingSpeechAction(
+        val utteranceId: String,
+        val onComplete: () -> Unit
+    )
+
     private lateinit var session: MediaSessionCompat
     private var mediaPlayer: MediaPlayer? = null
     private val mediaCacheService = MediaCacheService()
@@ -170,8 +176,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
     private var textToSpeech: TextToSpeech? = null
     private var ttsReady: Boolean = false
     private var ttsInitializing: Boolean = false
-    private var pendingIntroUtteranceId: String? = null
-    private var pendingIntroCompletion: (() -> Unit)? = null
+    private val pendingSpeechAction = AtomicReference<PendingSpeechAction?>(null)
     private var trackVoiceIntroEnabled: Boolean = false
     private var trackVoiceOutroEnabled: Boolean = false
     private var lastIntroTemplateIndex: Int = -1
@@ -1270,12 +1275,13 @@ class MyMusicService : MediaBrowserServiceCompat() {
         val artist = fileInfo.artist?.takeIf { it.isNotBlank() }
         val introText = buildIntroAnnouncement(artist, title).toSpeakableText()
         val utteranceId = "track_intro_${SystemClock.elapsedRealtime()}"
-        pendingIntroUtteranceId = utteranceId
-        pendingIntroCompletion = onComplete
+        val action = PendingSpeechAction(utteranceId, onComplete)
+        pendingSpeechAction.set(action)
         val result = tts.speak(introText, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
         if (result == TextToSpeech.ERROR) {
-            clearPendingIntro()
-            onComplete()
+            if (pendingSpeechAction.compareAndSet(action, null)) {
+                onComplete()
+            }
         }
     }
 
@@ -1299,12 +1305,13 @@ class MyMusicService : MediaBrowserServiceCompat() {
         val artist = fileInfo.artist?.takeIf { it.isNotBlank() }
         val outroText = buildOutroAnnouncement(artist, title).toSpeakableText()
         val utteranceId = "track_outro_${SystemClock.elapsedRealtime()}"
-        pendingIntroUtteranceId = utteranceId
-        pendingIntroCompletion = onComplete
+        val action = PendingSpeechAction(utteranceId, onComplete)
+        pendingSpeechAction.set(action)
         val result = tts.speak(outroText, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
         if (result == TextToSpeech.ERROR) {
-            clearPendingIntro()
-            onComplete()
+            if (pendingSpeechAction.compareAndSet(action, null)) {
+                onComplete()
+            }
         }
     }
 
@@ -1403,21 +1410,22 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 override fun onStart(utteranceId: String?) = Unit
 
                 override fun onDone(utteranceId: String?) {
-                    if (utteranceId == pendingIntroUtteranceId) {
-                        val completion = pendingIntroCompletion
-                        clearPendingIntro()
-                        completion?.invoke()
-                    }
+                    runPendingSpeechCompletion(utteranceId)
                 }
 
                 override fun onError(utteranceId: String?) {
-                    if (utteranceId == pendingIntroUtteranceId) {
-                        val completion = pendingIntroCompletion
-                        clearPendingIntro()
-                        completion?.invoke()
-                    }
+                    runPendingSpeechCompletion(utteranceId)
                 }
             })
+        }
+    }
+
+    private fun runPendingSpeechCompletion(utteranceId: String?) {
+        if (utteranceId.isNullOrBlank()) return
+        val action = pendingSpeechAction.get() ?: return
+        if (action.utteranceId != utteranceId) return
+        if (pendingSpeechAction.compareAndSet(action, null)) {
+            action.onComplete.invoke()
         }
     }
 
@@ -1442,15 +1450,20 @@ class MyMusicService : MediaBrowserServiceCompat() {
     private fun String.toSpeakableText(): String {
         return this
             .replace("&", " and ")
+            .replace("+", " plus ")
+            .replace("@", " at ")
+            .replace("#", " number ")
             .replace("/", " ")
             .replace("_", " ")
+            .replace(Regex("[-–—]"), " ")
+            .replace(Regex("[\\[\\]{}()<>\"'`~^*|\\\\]"), " ")
+            .replace(Regex("[^\\p{L}\\p{N}\\s.,!?]"), " ")
             .replace(Regex("\\s+"), " ")
             .trim()
     }
 
     private fun clearPendingIntro() {
-        pendingIntroUtteranceId = null
-        pendingIntroCompletion = null
+        pendingSpeechAction.set(null)
         runCatching { textToSpeech?.stop() }
     }
 
