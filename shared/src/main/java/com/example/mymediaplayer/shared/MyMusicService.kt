@@ -17,6 +17,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.provider.MediaStore
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
@@ -75,6 +76,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         private const val PREFS_NAME = "mymediaplayer_prefs"
         private const val KEY_TREE_URI = "tree_uri"
         private const val KEY_SCAN_LIMIT = "scan_limit"
+        private const val KEY_SCAN_WHOLE_DRIVE = "scan_whole_drive"
         private const val KEY_RESUME_MEDIA_URI = "resume_media_uri"
         private const val KEY_RESUME_QUEUE_URIS = "resume_queue_uris"
         private const val KEY_RESUME_QUEUE_INDEX = "resume_queue_index"
@@ -1107,13 +1109,19 @@ class MyMusicService : MediaBrowserServiceCompat() {
         if (isScanning) return
         if (mediaCacheService.cachedFiles.isNotEmpty()) return
         val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-        val uriString = prefs.getString(KEY_TREE_URI, null) ?: return
         val limit = prefs.getInt(KEY_SCAN_LIMIT, MediaCacheService.MAX_CACHE_SIZE)
-        val uri = Uri.parse(uriString)
-        val hasPermission = contentResolver.persistedUriPermissions.any {
-            it.uri == uri && it.isReadPermission
+        val wholeDriveMode = prefs.getBoolean(KEY_SCAN_WHOLE_DRIVE, false)
+        val uri = if (wholeDriveMode) {
+            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+        } else {
+            val uriString = prefs.getString(KEY_TREE_URI, null) ?: return
+            val parsed = Uri.parse(uriString)
+            val hasPermission = contentResolver.persistedUriPermissions.any {
+                it.uri == parsed && it.isReadPermission
+            }
+            if (!hasPermission) return
+            parsed
         }
-        if (!hasPermission) return
 
         serviceScope.launch {
             val persisted = mediaCacheService.loadPersistedCache(this@MyMusicService, uri, limit)
@@ -1133,13 +1141,23 @@ class MyMusicService : MediaBrowserServiceCompat() {
             isScanning = true
             try {
                 var lastNotify = 0
-                mediaCacheService.scanDirectory(this@MyMusicService, uri, limit) { songsFound, _ ->
+                val progress: (Int, Int) -> Unit = { songsFound, _ ->
                     if (songsFound - lastNotify >= 200) {
                         lastNotify = songsFound
                         notifyChildrenChanged(SONGS_ALL_ID)
                     }
                 }
-                mediaCacheService.enrichGenresFromMediaStore(this@MyMusicService)
+                if (wholeDriveMode) {
+                    mediaCacheService.scanWholeDevice(this@MyMusicService, limit, progress)
+                } else {
+                    mediaCacheService.scanDirectory(
+                        this@MyMusicService,
+                        uri,
+                        limit,
+                        onProgress = progress
+                    )
+                    mediaCacheService.enrichGenresFromMediaStore(this@MyMusicService)
+                }
                 mediaCacheService.buildAlbumArtistIndexesFromCache()
                 mediaCacheService.persistCache(this@MyMusicService, uri, limit)
             } finally {
