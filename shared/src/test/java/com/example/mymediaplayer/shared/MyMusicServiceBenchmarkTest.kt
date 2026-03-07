@@ -5,7 +5,6 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import kotlin.system.measureTimeMillis
 import org.junit.Assert.assertTrue
-import java.io.File
 
 @RunWith(RobolectricTestRunner::class)
 class MyMusicServiceBenchmarkTest {
