@@ -821,6 +821,14 @@ class MyMusicService : MediaBrowserServiceCompat() {
                         )
                     )
                 }
+                items += mediaCacheService.discoveredPlaylists.map { playlist ->
+                    val description = MediaDescriptionCompat.Builder()
+                        .setMediaId(PLAYLIST_PREFIX + Uri.encode(playlist.uriString))
+                        .setTitle(playlist.displayName.removeSuffix(".m3u"))
+                        .setIconUri(resourceIconUri(R.drawable.ic_auto_playlists))
+                        .build()
+                    MediaItem(description, MediaItem.FLAG_BROWSABLE)
+                }
                 val smartPlaylists = listOf(
                     SMART_PLAYLIST_FAVORITES to "Favorites",
                     SMART_PLAYLIST_RECENTLY_ADDED to "Recently Added",
@@ -831,14 +839,6 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     val description = MediaDescriptionCompat.Builder()
                         .setMediaId(SMART_PLAYLIST_PREFIX + Uri.encode(smart.first))
                         .setTitle(smart.second)
-                        .setIconUri(resourceIconUri(R.drawable.ic_auto_playlists))
-                        .build()
-                    MediaItem(description, MediaItem.FLAG_BROWSABLE)
-                }
-                items += mediaCacheService.discoveredPlaylists.map { playlist ->
-                    val description = MediaDescriptionCompat.Builder()
-                        .setMediaId(PLAYLIST_PREFIX + Uri.encode(playlist.uriString))
-                        .setTitle(playlist.displayName.removeSuffix(".m3u"))
                         .setIconUri(resourceIconUri(R.drawable.ic_auto_playlists))
                         .build()
                     MediaItem(description, MediaItem.FLAG_BROWSABLE)

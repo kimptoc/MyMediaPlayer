@@ -588,7 +588,7 @@ fun MainScreen(
                         )
                     }
                     PlaylistsSection(
-                        playlists = smartPlaylists + uiState.scan.discoveredPlaylists,
+                        playlists = uiState.scan.discoveredPlaylists + smartPlaylists,
                         selectedPlaylist = uiState.playlist.selectedPlaylist,
                         playlistSongs = uiState.playlist.playlistSongs,
                         isLoading = uiState.playlist.isPlaylistLoading,
