@@ -718,8 +718,7 @@ fun MainScreen(
                         onClearCategorySelection = onClearCategorySelection,
                         enableAlphaIndex = true,
                         songs = uiState.library.filteredSongs,
-                        isPlaying = uiState.playback.isPlaying ||
-                            (uiState.playback.isPlayingPlaylist && uiState.playback.isPlaying),
+                        isPlaying = false,
                         isPlayingPlaylist = uiState.playback.isPlayingPlaylist,
                         hasNext = uiState.playback.hasNext,
                         hasPrev = uiState.playback.hasPrev,
