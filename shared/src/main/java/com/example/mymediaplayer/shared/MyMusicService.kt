@@ -860,24 +860,10 @@ class MyMusicService : MediaBrowserServiceCompat() {
                         )
                     )
                 }
-                items += mediaCacheService.discoveredPlaylists.map { playlist ->
+                items += playlistEntriesForBrowse(mediaCacheService.discoveredPlaylists).map { entry ->
                     val description = MediaDescriptionCompat.Builder()
-                        .setMediaId(PLAYLIST_PREFIX + Uri.encode(playlist.uriString))
-                        .setTitle(playlist.displayName.removeSuffix(".m3u"))
-                        .setIconUri(resourceIconUri(R.drawable.ic_auto_playlists))
-                        .build()
-                    MediaItem(description, MediaItem.FLAG_BROWSABLE)
-                }
-                val smartPlaylists = listOf(
-                    SMART_PLAYLIST_FAVORITES to "Favorites",
-                    SMART_PLAYLIST_RECENTLY_ADDED to "Recently Added",
-                    SMART_PLAYLIST_MOST_PLAYED to "Most Played",
-                    SMART_PLAYLIST_NOT_HEARD_RECENTLY to "Haven't Heard In A While"
-                )
-                items += smartPlaylists.map { smart ->
-                    val description = MediaDescriptionCompat.Builder()
-                        .setMediaId(SMART_PLAYLIST_PREFIX + Uri.encode(smart.first))
-                        .setTitle(smart.second)
+                        .setMediaId(entry.mediaId)
+                        .setTitle(entry.title)
                         .setIconUri(resourceIconUri(R.drawable.ic_auto_playlists))
                         .build()
                     MediaItem(description, MediaItem.FLAG_BROWSABLE)
@@ -952,6 +938,33 @@ class MyMusicService : MediaBrowserServiceCompat() {
         result.sort()
         if (hasOther) result.add("#")
         return result
+    }
+
+    internal data class PlaylistBrowseEntry(
+        val mediaId: String,
+        val title: String
+    )
+
+    @VisibleForTesting
+    internal fun playlistEntriesForBrowse(discoveredPlaylists: List<PlaylistInfo>): List<PlaylistBrowseEntry> {
+        val discoveredEntries = discoveredPlaylists.map { playlist ->
+            PlaylistBrowseEntry(
+                mediaId = PLAYLIST_PREFIX + Uri.encode(playlist.uriString),
+                title = playlist.displayName.removeSuffix(".m3u")
+            )
+        }
+        val smartEntries = listOf(
+            SMART_PLAYLIST_FAVORITES to "Favorites",
+            SMART_PLAYLIST_RECENTLY_ADDED to "Recently Added",
+            SMART_PLAYLIST_MOST_PLAYED to "Most Played",
+            SMART_PLAYLIST_NOT_HEARD_RECENTLY to "Haven't Heard In A While"
+        ).map { smart ->
+            PlaylistBrowseEntry(
+                mediaId = SMART_PLAYLIST_PREFIX + Uri.encode(smart.first),
+                title = smart.second
+            )
+        }
+        return discoveredEntries + smartEntries
     }
 
     private fun filterByLetter(values: List<String>, letter: String): List<String> {
