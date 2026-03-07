@@ -660,9 +660,9 @@ class MainActivity : ComponentActivity() {
     ) {
         val controller = mediaController ?: return
         if (songs.isEmpty()) return
+        sendFilesToServiceIfNeeded(viewModel.uiState.value.scan.scannedFiles)
         if (songs.size > MAX_MEDIA_FILES_FOR_BUNDLE) {
             val target = if (shuffle) songs.random() else songs.first()
-            sendFilesToServiceIfNeeded(viewModel.uiState.value.scan.scannedFiles)
             controller.transportControls.playFromMediaId(target.uriString, null)
             return
         }
