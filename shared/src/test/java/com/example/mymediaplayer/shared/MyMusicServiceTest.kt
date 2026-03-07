@@ -6,6 +6,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertNotNull
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -270,5 +271,44 @@ class MyMusicServiceTest {
         assertTrue(actions and PlaybackStateCompat.ACTION_PLAY != 0L)
         assertTrue(actions and PlaybackStateCompat.ACTION_PLAY_FROM_MEDIA_ID != 0L)
         assertTrue(actions and PlaybackStateCompat.ACTION_SEEK_TO == 0L)
+    }
+
+    @Test
+    fun playlistEntriesForBrowse_putsUserPlaylistsBeforeSmartPlaylists() {
+        val service = MyMusicService()
+        val discovered = listOf(
+            PlaylistInfo(
+                uriString = "content://playlists/user_one.m3u",
+                displayName = "User One.m3u"
+            ),
+            PlaylistInfo(
+                uriString = "content://playlists/user_two.m3u",
+                displayName = "User Two.m3u"
+            )
+        )
+
+        val entries = service.playlistEntriesForBrowse(discovered)
+
+        assertTrue(entries.size >= 6)
+        assertEquals("User One", entries[0].title)
+        assertEquals("User Two", entries[1].title)
+        assertTrue(entries[0].mediaId.startsWith("playlist:"))
+        assertTrue(entries[1].mediaId.startsWith("playlist:"))
+        assertEquals("Favorites", entries[2].title)
+        assertTrue(entries[2].mediaId.startsWith("smart_playlist:"))
+    }
+
+    @Test
+    fun playlistEntriesForBrowse_includesSmartPlaylistsWhenNoUserPlaylists() {
+        val service = MyMusicService()
+
+        val entries = service.playlistEntriesForBrowse(emptyList())
+
+        assertEquals(4, entries.size)
+        assertEquals("Favorites", entries[0].title)
+        assertEquals("Recently Added", entries[1].title)
+        assertEquals("Most Played", entries[2].title)
+        assertEquals("Haven't Heard In A While", entries[3].title)
+        assertNotNull(entries.firstOrNull { it.mediaId.endsWith("favorites") })
     }
 }
