@@ -94,6 +94,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         private const val ACTION_REFRESH_LIBRARY = "REFRESH_LIBRARY"
         private const val ACTION_SET_PLAYLISTS = "SET_PLAYLISTS"
         private const val ACTION_PLAY_SEARCH_LIST = "PLAY_SEARCH_LIST"
+        private const val ACTION_PLAY_UI_LIST = "PLAY_UI_LIST"
         private const val ACTION_SET_TRACK_VOICE_INTRO = "SET_TRACK_VOICE_INTRO"
         private const val ACTION_SET_TRACK_VOICE_OUTRO = "SET_TRACK_VOICE_OUTRO"
         const val ACTION_BT_AUTOPLAY = "BT_AUTOPLAY"
@@ -113,6 +114,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
         private const val EXTRA_PLAYLIST_NAMES = "playlist_names"
         private const val EXTRA_SEARCH_URIS = "search_uris"
         private const val EXTRA_SEARCH_SHUFFLE = "search_shuffle"
+        private const val EXTRA_LIST_URIS = "list_uris"
+        private const val EXTRA_LIST_SHUFFLE = "list_shuffle"
+        private const val EXTRA_LIST_TITLE = "list_title"
         private const val EXTRA_TRACK_VOICE_INTRO_ENABLED = "track_voice_intro_enabled"
         private const val EXTRA_TRACK_VOICE_OUTRO_ENABLED = "track_voice_outro_enabled"
 
@@ -388,24 +392,24 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     if (extras == null) return
                     val uris = extras.getStringArrayList(EXTRA_SEARCH_URIS) ?: return
                     val shuffle = extras.getBoolean(EXTRA_SEARCH_SHUFFLE, false)
-                    if (uris.isEmpty()) return
-                    val snapshot = mediaCacheService.cachedFiles
-                    val lookup = snapshot.associateBy { it.uriString }
-                    val list = uris.map { uri ->
-                        lookup[uri] ?: MediaFileInfo(
-                            uriString = uri,
-                            displayName = uri,
-                            sizeBytes = 0L,
-                            title = uri
-                        )
-                    }
-                    lastSearchQuery = null
-                    lastSearchResults = list
-                    playlistQueue = if (shuffle) list.shuffled() else list
-                    currentQueueIndex = 0
-                    currentPlaylistName = "Search Results"
-                    updateSessionQueue()
-                    playTrack(playlistQueue[currentQueueIndex])
+                    playProvidedUriList(
+                        uris = uris,
+                        shuffle = shuffle,
+                        queueTitle = "Search Results",
+                        setSearchResults = true
+                    )
+                }
+                ACTION_PLAY_UI_LIST -> {
+                    if (extras == null) return
+                    val uris = extras.getStringArrayList(EXTRA_LIST_URIS) ?: return
+                    val shuffle = extras.getBoolean(EXTRA_LIST_SHUFFLE, false)
+                    val queueTitle = extras.getString(EXTRA_LIST_TITLE).orEmpty()
+                    playProvidedUriList(
+                        uris = uris,
+                        shuffle = shuffle,
+                        queueTitle = if (queueTitle.isNotBlank()) queueTitle else "All Songs",
+                        setSearchResults = false
+                    )
                 }
                 ACTION_SET_PLAYLISTS -> {
                     if (extras == null) return
@@ -494,6 +498,32 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
         restorePlaybackSnapshot()
         loadCachedTreeIfAvailable()
+    }
+
+    private fun playProvidedUriList(
+        uris: List<String>,
+        shuffle: Boolean,
+        queueTitle: String,
+        setSearchResults: Boolean
+    ) {
+        if (uris.isEmpty()) return
+        val snapshot = mediaCacheService.cachedFiles
+        val lookup = snapshot.associateBy { it.uriString }
+        val list = uris.map { uri ->
+            lookup[uri] ?: MediaFileInfo(
+                uriString = uri,
+                displayName = uri,
+                sizeBytes = 0L,
+                title = uri
+            )
+        }
+        lastSearchQuery = null
+        lastSearchResults = if (setSearchResults) list else emptyList()
+        playlistQueue = if (shuffle) list.shuffled() else list
+        currentQueueIndex = 0
+        currentPlaylistName = queueTitle
+        updateSessionQueue()
+        playTrack(playlistQueue[currentQueueIndex])
     }
 
     override fun onDestroy() {

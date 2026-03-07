@@ -68,6 +68,7 @@ class MainActivity : ComponentActivity() {
         private const val ACTION_REFRESH_LIBRARY = "REFRESH_LIBRARY"
         private const val ACTION_SET_PLAYLISTS = "SET_PLAYLISTS"
         private const val ACTION_PLAY_SEARCH_LIST = "PLAY_SEARCH_LIST"
+        private const val ACTION_PLAY_UI_LIST = "PLAY_UI_LIST"
         private const val ACTION_SHUFFLE_PREFIX = "action:shuffle:"
         private const val SMART_PLAYLIST_PREFIX = "smart_playlist:"
         private const val PLAYLIST_URI_PREFIX = "playlist_uri:"
@@ -87,6 +88,9 @@ class MainActivity : ComponentActivity() {
         private const val EXTRA_PLAYLIST_NAMES = "playlist_names"
         private const val EXTRA_SEARCH_URIS = "search_uris"
         private const val EXTRA_SEARCH_SHUFFLE = "search_shuffle"
+        private const val EXTRA_LIST_URIS = "list_uris"
+        private const val EXTRA_LIST_SHUFFLE = "list_shuffle"
+        private const val EXTRA_LIST_TITLE = "list_title"
         private const val EXTRA_TRACK_VOICE_INTRO_ENABLED = "track_voice_intro_enabled"
         private const val EXTRA_TRACK_VOICE_OUTRO_ENABLED = "track_voice_outro_enabled"
         private const val MAX_MEDIA_FILES_FOR_BUNDLE = 500
@@ -358,23 +362,18 @@ class MainActivity : ComponentActivity() {
                         viewModel.savePlaylistEdits(playlist, songs)
                     },
                     onPlaySongs = { songs ->
-                        if (songs.isNotEmpty()) {
-                            sendFilesToServiceIfNeeded(uiState.value.scan.scannedFiles)
-                            mediaController?.transportControls?.playFromMediaId(
-                                songs.first().uriString,
-                                null
-                            )
-                        }
+                        playUiList(
+                            songs = songs,
+                            shuffle = false,
+                            queueTitle = queueTitleForCurrentUiList(uiState.value)
+                        )
                     },
                     onShuffleSongs = { songs ->
-                        if (songs.isNotEmpty()) {
-                            sendFilesToServiceIfNeeded(uiState.value.scan.scannedFiles)
-                            val random = songs.random()
-                            mediaController?.transportControls?.playFromMediaId(
-                                random.uriString,
-                                null
-                            )
-                        }
+                        playUiList(
+                            songs = songs,
+                            shuffle = true,
+                            queueTitle = queueTitleForCurrentUiList(uiState.value)
+                        )
                     },
                     onPlaySearchResults = { songs ->
                         playSearchResults(songs, shuffle = false)
@@ -652,6 +651,39 @@ class MainActivity : ComponentActivity() {
             putBoolean(EXTRA_SEARCH_SHUFFLE, shuffle)
         }
         controller.transportControls.sendCustomAction(ACTION_PLAY_SEARCH_LIST, bundle)
+    }
+
+    private fun playUiList(
+        songs: List<com.example.mymediaplayer.shared.MediaFileInfo>,
+        shuffle: Boolean,
+        queueTitle: String
+    ) {
+        val controller = mediaController ?: return
+        if (songs.isEmpty()) return
+        if (songs.size > MAX_MEDIA_FILES_FOR_BUNDLE) {
+            val target = if (shuffle) songs.random() else songs.first()
+            sendFilesToServiceIfNeeded(viewModel.uiState.value.scan.scannedFiles)
+            controller.transportControls.playFromMediaId(target.uriString, null)
+            return
+        }
+        val uris = songs.map { it.uriString }
+        val bundle = Bundle().apply {
+            putStringArrayList(EXTRA_LIST_URIS, ArrayList(uris))
+            putBoolean(EXTRA_LIST_SHUFFLE, shuffle)
+            putString(EXTRA_LIST_TITLE, queueTitle)
+        }
+        controller.transportControls.sendCustomAction(ACTION_PLAY_UI_LIST, bundle)
+    }
+
+    private fun queueTitleForCurrentUiList(state: MainUiState): String {
+        val lib = state.library
+        return when (lib.selectedTab) {
+            LibraryTab.Albums -> lib.selectedAlbum ?: "Albums"
+            LibraryTab.Genres -> lib.selectedGenre ?: "Genres"
+            LibraryTab.Artists -> lib.selectedArtist ?: "Artists"
+            LibraryTab.Decades -> lib.selectedDecade ?: "Decades"
+            else -> "All Songs"
+        }
     }
 
     private fun sendTrackVoiceIntroSettingToService() {
