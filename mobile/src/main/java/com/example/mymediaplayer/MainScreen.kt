@@ -469,8 +469,7 @@ fun MainScreen(
                         title = "Search Results (${visibleSearchResults.size})",
                         songs = visibleSearchResults,
                         favoriteUris = uiState.favoriteUris,
-                        isPlaying = uiState.playback.isPlaying ||
-                            (uiState.playback.isPlayingPlaylist && uiState.playback.isPlaying),
+                        isPlaying = false,
                         isPlayingPlaylist = uiState.playback.isPlayingPlaylist,
                         hasNext = uiState.playback.hasNext,
                         hasPrev = uiState.playback.hasPrev,
@@ -544,8 +543,7 @@ fun MainScreen(
                         },
                         songs = songsForTab,
                         favoriteUris = uiState.favoriteUris,
-                        isPlaying = uiState.playback.isPlaying ||
-                            (uiState.playback.isPlayingPlaylist && uiState.playback.isPlaying),
+                        isPlaying = false,
                         isPlayingPlaylist = uiState.playback.isPlayingPlaylist,
                         hasNext = uiState.playback.hasNext,
                         hasPrev = uiState.playback.hasPrev,
@@ -594,8 +592,7 @@ fun MainScreen(
                         selectedPlaylist = uiState.playlist.selectedPlaylist,
                         playlistSongs = uiState.playlist.playlistSongs,
                         isLoading = uiState.playlist.isPlaylistLoading,
-                        isPlaying = uiState.playback.isPlaying ||
-                            (uiState.playback.isPlayingPlaylist && uiState.playback.isPlaying),
+                        isPlaying = false,
                         isPlayingPlaylist = uiState.playback.isPlayingPlaylist,
                         queueTitle = uiState.playback.queueTitle,
                         hasNext = uiState.playback.hasNext,
@@ -661,8 +658,7 @@ fun MainScreen(
                             }
                         },
                         songs = uiState.library.filteredSongs,
-                        isPlaying = uiState.playback.isPlaying ||
-                            (uiState.playback.isPlayingPlaylist && uiState.playback.isPlaying),
+                        isPlaying = false,
                         isPlayingPlaylist = uiState.playback.isPlayingPlaylist,
                         hasNext = uiState.playback.hasNext,
                         hasPrev = uiState.playback.hasPrev,
@@ -692,8 +688,7 @@ fun MainScreen(
                         onClearCategorySelection = onClearCategorySelection,
                         enableAlphaIndex = false,
                         songs = uiState.library.filteredSongs,
-                        isPlaying = uiState.playback.isPlaying ||
-                            (uiState.playback.isPlayingPlaylist && uiState.playback.isPlaying),
+                        isPlaying = false,
                         isPlayingPlaylist = uiState.playback.isPlayingPlaylist,
                         hasNext = uiState.playback.hasNext,
                         hasPrev = uiState.playback.hasPrev,
@@ -753,7 +748,7 @@ fun MainScreen(
                         onCategorySelected = onDecadeSelected,
                         onClearCategorySelection = onClearCategorySelection,
                         songs = uiState.library.filteredSongs,
-                        isPlaying = uiState.playback.isPlaying,
+                        isPlaying = false,
                         isPlayingPlaylist = uiState.playback.isPlayingPlaylist,
                         hasNext = uiState.playback.hasNext,
                         hasPrev = uiState.playback.hasPrev,
