@@ -570,8 +570,7 @@ class MediaCacheService {
     internal fun isSupportedAudioFile(nameLowercase: String, mimeType: String?): Boolean {
         val mime = mimeType?.lowercase(Locale.US).orEmpty()
         if (mime.startsWith("audio/")) {
-            if (mime.contains("mpegurl") || mime.contains("x-mpegurl")) return false
-            return true
+            return !mime.contains("mpegurl") && !mime.contains("x-mpegurl")
         }
         if (mime == "application/ogg" || mime == "application/x-ogg") return true
         return SUPPORTED_AUDIO_EXTENSIONS.any { nameLowercase.endsWith(it) }
