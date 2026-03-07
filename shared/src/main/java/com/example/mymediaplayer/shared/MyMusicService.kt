@@ -1225,7 +1225,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
     private fun enrichFromCache(files: List<MediaFileInfo>): List<MediaFileInfo> {
         if (files.isEmpty()) return files
-        val byUri = mediaCacheService.cachedFiles.associateBy { it.uriString }
+        val byUri = mediaCacheService.getFileIndexByUri()
         return files.map { file -> byUri[file.uriString] ?: file }
     }
 
@@ -2598,7 +2598,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
             queueUrisRaw.split('\n').filter { it.isNotBlank() }
         }
         if (queueUris.isNotEmpty()) {
-            val byUri = mediaCacheService.cachedFiles.associateBy { it.uriString }
+            val byUri = mediaCacheService.getFileIndexByUri()
             playlistQueue = queueUris.map { uri ->
                 byUri[uri] ?: MediaFileInfo(
                     uriString = uri,
