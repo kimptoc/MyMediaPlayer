@@ -42,6 +42,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.util.concurrent.atomic.AtomicReference
 
 class MyMusicService : MediaBrowserServiceCompat() {
 
@@ -121,6 +122,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
         private const val EXTRA_TRACK_VOICE_OUTRO_ENABLED = "track_voice_outro_enabled"
 
         private const val MAX_CONSECUTIVE_PLAYBACK_ERRORS = 3
+        private const val TTS_SPEECH_RATE = 0.93f
+        private const val TTS_PITCH = 1.04f
 
         private const val NOW_PLAYING_CHANNEL_ID = "now_playing"
         private const val NOW_PLAYING_NOTIFICATION_ID = 1001
@@ -137,6 +140,11 @@ class MyMusicService : MediaBrowserServiceCompat() {
         private const val FOCUS_GENRE = "vnd.android.cursor.dir/genre"
         private const val FOCUS_TITLE = "vnd.android.cursor.item/audio"
     }
+
+    private data class PendingSpeechAction(
+        val utteranceId: String,
+        val onComplete: () -> Unit
+    )
 
     private lateinit var session: MediaSessionCompat
     private var mediaPlayer: MediaPlayer? = null
@@ -172,8 +180,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
     private var textToSpeech: TextToSpeech? = null
     private var ttsReady: Boolean = false
     private var ttsInitializing: Boolean = false
-    private var pendingIntroUtteranceId: String? = null
-    private var pendingIntroCompletion: (() -> Unit)? = null
+    private val pendingSpeechAction = AtomicReference<PendingSpeechAction?>(null)
     private var trackVoiceIntroEnabled: Boolean = false
     private var trackVoiceOutroEnabled: Boolean = false
     private var lastIntroTemplateIndex: Int = -1
@@ -1296,14 +1303,15 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }
         val title = fileInfo.cleanTitle
         val artist = fileInfo.artist?.takeIf { it.isNotBlank() }
-        val introText = buildIntroAnnouncement(artist, title)
+        val introText = buildIntroAnnouncement(artist, title).toSpeakableText()
         val utteranceId = "track_intro_${SystemClock.elapsedRealtime()}"
-        pendingIntroUtteranceId = utteranceId
-        pendingIntroCompletion = onComplete
+        val action = PendingSpeechAction(utteranceId, onComplete)
+        pendingSpeechAction.set(action)
         val result = tts.speak(introText, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
         if (result == TextToSpeech.ERROR) {
-            clearPendingIntro()
-            onComplete()
+            if (pendingSpeechAction.compareAndSet(action, null)) {
+                onComplete()
+            }
         }
     }
 
@@ -1325,14 +1333,15 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }
         val title = fileInfo.cleanTitle
         val artist = fileInfo.artist?.takeIf { it.isNotBlank() }
-        val outroText = buildOutroAnnouncement(artist, title)
+        val outroText = buildOutroAnnouncement(artist, title).toSpeakableText()
         val utteranceId = "track_outro_${SystemClock.elapsedRealtime()}"
-        pendingIntroUtteranceId = utteranceId
-        pendingIntroCompletion = onComplete
+        val action = PendingSpeechAction(utteranceId, onComplete)
+        pendingSpeechAction.set(action)
         val result = tts.speak(outroText, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
         if (result == TextToSpeech.ERROR) {
-            clearPendingIntro()
-            onComplete()
+            if (pendingSpeechAction.compareAndSet(action, null)) {
+                onComplete()
+            }
         }
     }
 
@@ -1359,9 +1368,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
         )
         lastIntroTemplateIndex = pickedIndex
         return if (artist != null) {
-            String.format(java.util.Locale.US, pickedTemplate, title, artist)
+            String.format(java.util.Locale.getDefault(), pickedTemplate, title, artist)
         } else {
-            String.format(java.util.Locale.US, pickedTemplate, title)
+            String.format(java.util.Locale.getDefault(), pickedTemplate, title)
         }
     }
 
@@ -1388,9 +1397,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
         )
         lastOutroTemplateIndex = pickedIndex
         return if (artist != null) {
-            String.format(java.util.Locale.US, pickedTemplate, title, artist)
+            String.format(java.util.Locale.getDefault(), pickedTemplate, title, artist)
         } else {
-            String.format(java.util.Locale.US, pickedTemplate, title)
+            String.format(java.util.Locale.getDefault(), pickedTemplate, title)
         }
     }
 
@@ -1422,31 +1431,69 @@ class MyMusicService : MediaBrowserServiceCompat() {
             val result = tts.setLanguage(locale)
             ttsReady = result != TextToSpeech.LANG_MISSING_DATA &&
                 result != TextToSpeech.LANG_NOT_SUPPORTED
+            if (ttsReady) {
+                tts.setSpeechRate(TTS_SPEECH_RATE)
+                tts.setPitch(TTS_PITCH)
+                selectNaturalVoiceIfAvailable(tts, locale)
+            }
             tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                 override fun onStart(utteranceId: String?) = Unit
 
                 override fun onDone(utteranceId: String?) {
-                    if (utteranceId == pendingIntroUtteranceId) {
-                        val completion = pendingIntroCompletion
-                        clearPendingIntro()
-                        completion?.invoke()
-                    }
+                    runPendingSpeechCompletion(utteranceId)
                 }
 
                 override fun onError(utteranceId: String?) {
-                    if (utteranceId == pendingIntroUtteranceId) {
-                        val completion = pendingIntroCompletion
-                        clearPendingIntro()
-                        completion?.invoke()
-                    }
+                    runPendingSpeechCompletion(utteranceId)
                 }
             })
         }
     }
 
+    private fun runPendingSpeechCompletion(utteranceId: String?) {
+        if (utteranceId.isNullOrBlank()) return
+        val action = pendingSpeechAction.get() ?: return
+        if (action.utteranceId != utteranceId) return
+        if (pendingSpeechAction.compareAndSet(action, null)) {
+            action.onComplete.invoke()
+        }
+    }
+
+    private fun selectNaturalVoiceIfAvailable(tts: TextToSpeech, locale: java.util.Locale) {
+        val current = tts.voice
+        val candidates = tts.voices?.filter { voice ->
+            val vLocale = voice.locale ?: return@filter false
+            if (!vLocale.language.equals(locale.language, ignoreCase = true)) return@filter false
+            if (voice.features?.contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED) == true) {
+                return@filter false
+            }
+            true
+        }.orEmpty()
+        if (candidates.isEmpty()) return
+        val best = candidates.maxWithOrNull(
+            compareBy<android.speech.tts.Voice>({ it.quality }, { -it.latency })
+        ) ?: return
+        if (current?.name == best.name) return
+        runCatching { tts.voice = best }
+    }
+
+    private fun String.toSpeakableText(): String {
+        return this
+            .replace("&", " and ")
+            .replace("+", " plus ")
+            .replace("@", " at ")
+            .replace("#", " number ")
+            .replace("/", " ")
+            .replace("_", " ")
+            .replace(Regex("[-–—]"), " ")
+            .replace(Regex("[\\[\\]{}()<>\"'`~^*|\\\\]"), " ")
+            .replace(Regex("[^\\p{L}\\p{N}\\s.,!?]"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+    }
+
     private fun clearPendingIntro() {
-        pendingIntroUtteranceId = null
-        pendingIntroCompletion = null
+        pendingSpeechAction.set(null)
         runCatching { textToSpeech?.stop() }
     }
 
