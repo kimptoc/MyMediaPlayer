@@ -37,7 +37,7 @@ internal class AnnouncementPreGenerator(
     companion object {
         private const val TAG = "AnnouncementPreGen"
         private const val CLAUDE_MODEL = "claude-haiku-4-5-20251001"
-        private const val READY_TIMEOUT_MS = 2000L
+        private const val READY_TIMEOUT_MS = 5000L
     }
 
     private data class CacheKey(val uri: String, val isIntro: Boolean)
@@ -53,10 +53,12 @@ internal class AnnouncementPreGenerator(
      * Evicts any cached entries that are no longer needed to keep the cache small.
      */
     fun schedulePreGeneration(current: MediaFileInfo, next: MediaFileInfo?) {
+        scheduleOne(current, isIntro = true)
         scheduleOne(current, isIntro = false)
         if (next != null) scheduleOne(next, isIntro = true)
 
         val keysToKeep = setOfNotNull(
+            CacheKey(current.uriString, true),
             CacheKey(current.uriString, false),
             next?.let { CacheKey(it.uriString, true) },
         )
@@ -69,11 +71,24 @@ internal class AnnouncementPreGenerator(
      * Android TTS when null is returned.
      */
     suspend fun getReadyAudio(track: MediaFileInfo, isIntro: Boolean): File? {
-        val deferred = cache[CacheKey(track.uriString, isIntro)] ?: return null
+        val key = CacheKey(track.uriString, isIntro)
+        val deferred = cache[key]
+        if (deferred == null) {
+            Log.d(TAG, "No cached job for ${track.cleanTitle} (intro=$isIntro) - no cache entry")
+            return null
+        }
+        if (!deferred.isCompleted) {
+            Log.d(TAG, "Job not yet complete for ${track.cleanTitle} (intro=$isIntro)")
+        }
+        val startTime = System.currentTimeMillis()
         return try {
-            withTimeout(READY_TIMEOUT_MS) { deferred.await() }
+            withTimeout(READY_TIMEOUT_MS) { deferred.await() }.also {
+                val elapsed = System.currentTimeMillis() - startTime
+                Log.d(TAG, "Pre-generated audio ready in ${elapsed}ms for ${track.cleanTitle}")
+            }
         } catch (_: TimeoutCancellationException) {
-            Log.d(TAG, "Pre-generated audio not ready within ${READY_TIMEOUT_MS}ms — falling back to TTS")
+            val elapsed = System.currentTimeMillis() - startTime
+            Log.d(TAG, "Pre-generated audio timed out after ${elapsed}ms (timeout=${READY_TIMEOUT_MS}ms) for ${track.cleanTitle} — falling back to TTS")
             null
         }
     }
@@ -99,6 +114,7 @@ internal class AnnouncementPreGenerator(
         val key = CacheKey(track.uriString, isIntro)
         // Only start generation if there is no existing entry for this key.
         val deferred = scope.async(Dispatchers.IO, start = CoroutineStart.LAZY) {
+            Log.d(TAG, "Starting cloud generation for: ${track.cleanTitle} (intro=$isIntro)")
             generateAudio(track.cleanTitle, track.artist?.takeIf { it.isNotBlank() }, isIntro)
         }
         if (cache.putIfAbsent(key, deferred) == null) {
@@ -129,13 +145,30 @@ internal class AnnouncementPreGenerator(
             return null
         }
 
-        val prefs = ApiKeyStore.getPrefs(context) ?: return null
+        val prefs = ApiKeyStore.getPrefs(context)
+        if (prefs == null) {
+            Log.d(TAG, "No encrypted prefs — skipping cloud pre-generation")
+            return null
+        }
         val claudeKey = prefs.getString(ApiKeyStore.KEY_CLAUDE, null)?.takeIf { it.isNotBlank() }
-            ?: return null
+        if (claudeKey == null) {
+            Log.d(TAG, "No Claude key — skipping cloud pre-generation")
+            return null
+        }
         val ttsKey = prefs.getString(ApiKeyStore.KEY_CLOUD_TTS, null)?.takeIf { it.isNotBlank() }
-            ?: return null
+        if (ttsKey == null) {
+            Log.d(TAG, "No TTS key — skipping cloud pre-generation")
+            return null
+        }
 
-        val text = fetchClaudeText(title, artist, isIntro, claudeKey) ?: return null
+        Log.d(TAG, "Calling Claude API for: $title")
+        val text = fetchClaudeText(title, artist, isIntro, claudeKey)
+        if (text == null) {
+            Log.d(TAG, "Claude API returned null")
+            return null
+        }
+        Log.d(TAG, "Claude returned: $text")
+        Log.d(TAG, "Calling Google TTS API")
         return fetchGoogleTtsAudio(text, ttsKey)
     }
 
