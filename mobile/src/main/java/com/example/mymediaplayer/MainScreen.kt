@@ -1244,7 +1244,15 @@ fun MainScreen(
 
     if (showCloudAnnouncementSettingsDialog) {
         var claudeKeyInput by remember { mutableStateOf(cloudAnnouncementClaudeKey) }
-        var ttsKeyInput by remember { mutableStateOf(cloudAnnouncementTtsKey) }
+                    TextField(
+                        value = claudeKeyInput,
+                        onValueChange = { claudeKeyInput = it },
+                        label = { Text("Claude API key") },
+                        placeholder = { Text("sk-ant-…") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth()
+                    ),
         AlertDialog(
             onDismissRequest = { showCloudAnnouncementSettingsDialog = false },
             title = { Text("AI Announcement Settings") },
