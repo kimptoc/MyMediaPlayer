@@ -41,6 +41,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -133,7 +134,9 @@ fun MainScreen(
     onSetPlaylistSaveFolderNow: () -> Unit,
     cloudAnnouncementClaudeKey: String,
     cloudAnnouncementTtsKey: String,
-    onSaveCloudAnnouncementKeys: (claudeKey: String, ttsKey: String) -> Unit,
+    onSaveCloudAnnouncementKeys: (claudeKey: String, ttsKey: String, onValidated: () -> Unit) -> Unit,
+    debugCloudAnnouncements: Boolean,
+    onSetDebugCloudAnnouncements: (Boolean) -> Unit,
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     var menuExpanded by remember { mutableStateOf(false) }
@@ -1272,13 +1275,32 @@ fun MainScreen(
                         visualTransformation = PasswordVisualTransformation(),
                         modifier = Modifier.fillMaxWidth()
                     )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Debug mode", style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                "Show toast when cloud TTS is used",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = debugCloudAnnouncements,
+                            onCheckedChange = onSetDebugCloudAnnouncements
+                        )
+                    }
                 }
             },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        onSaveCloudAnnouncementKeys(claudeKeyInput.trim(), ttsKeyInput.trim())
-                        showCloudAnnouncementSettingsDialog = false
+                        onSaveCloudAnnouncementKeys(claudeKeyInput.trim(), ttsKeyInput.trim()) {
+                            showCloudAnnouncementSettingsDialog = false
+                        }
                     }
                 ) { Text("Save") }
             },

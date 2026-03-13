@@ -37,7 +37,7 @@ internal class AnnouncementPreGenerator(
     companion object {
         private const val TAG = "AnnouncementPreGen"
         private const val CLAUDE_MODEL = "claude-haiku-4-5-20251001"
-        private const val READY_TIMEOUT_MS = 500L
+        private const val READY_TIMEOUT_MS = 2000L
     }
 
     private data class CacheKey(val uri: String, val isIntro: Boolean)
