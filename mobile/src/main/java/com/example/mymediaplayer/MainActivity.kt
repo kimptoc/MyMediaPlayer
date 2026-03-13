@@ -31,6 +31,7 @@ import android.support.v4.media.MediaDescriptionCompat
 import android.support.v4.media.session.MediaControllerCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
+import com.example.mymediaplayer.shared.ApiKeyStore
 import com.example.mymediaplayer.shared.MediaCacheService
 import com.example.mymediaplayer.shared.MyMusicService
 import com.example.mymediaplayer.shared.PlaylistInfo
@@ -55,6 +56,7 @@ class MainActivity : ComponentActivity() {
         private const val NOTIF_PROMPT_DENIED = 3
         private const val KEY_TRACK_VOICE_INTRO_ENABLED = "track_voice_intro_enabled"
         private const val KEY_TRACK_VOICE_OUTRO_ENABLED = "track_voice_outro_enabled"
+        private const val KEY_DEBUG_CLOUD_ANNOUNCEMENTS = "debug_cloud_announcements"
         private const val KEY_BT_AUTOPLAY_ENABLED = "bt_autoplay_enabled"
         private const val KEY_BT_AUTOPLAY_ADDRESSES = "bt_autoplay_addresses"
         private const val KEY_BT_AUTOPLAY_DEVICES = "bt_autoplay_devices"
@@ -74,6 +76,7 @@ class MainActivity : ComponentActivity() {
         private const val PLAYLIST_URI_PREFIX = "playlist_uri:"
         private const val ACTION_SET_TRACK_VOICE_INTRO = "SET_TRACK_VOICE_INTRO"
         private const val ACTION_SET_TRACK_VOICE_OUTRO = "SET_TRACK_VOICE_OUTRO"
+        private const val ACTION_SET_DEBUG_CLOUD = "SET_DEBUG_CLOUD"
         private const val EXTRA_URIS = "uris"
         private const val EXTRA_NAMES = "names"
         private const val EXTRA_SIZES = "sizes"
@@ -118,6 +121,9 @@ class MainActivity : ComponentActivity() {
     private var showPlaylistSaveFolderPrompt by mutableStateOf(false)
     private var trackVoiceIntroEnabled by mutableStateOf(false)
     private var trackVoiceOutroEnabled by mutableStateOf(false)
+    private var cloudAnnouncementClaudeKey by mutableStateOf("")
+    private var cloudAnnouncementTtsKey by mutableStateOf("")
+    private var debugCloudAnnouncements by mutableStateOf(false)
     private var nowPlayingArt by mutableStateOf<Bitmap?>(null)
 
     private val bluetoothPermissionLauncher =
@@ -252,6 +258,13 @@ class MainActivity : ComponentActivity() {
             .getBoolean(KEY_TRACK_VOICE_INTRO_ENABLED, false)
         trackVoiceOutroEnabled = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
             .getBoolean(KEY_TRACK_VOICE_OUTRO_ENABLED, false)
+        debugCloudAnnouncements = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+            .getBoolean(KEY_DEBUG_CLOUD_ANNOUNCEMENTS, false)
+        val encryptedPrefs = com.example.mymediaplayer.shared.ApiKeyStore.getPrefs(this)
+        cloudAnnouncementClaudeKey = encryptedPrefs
+            ?.getString(com.example.mymediaplayer.shared.ApiKeyStore.KEY_CLAUDE, "") ?: ""
+        cloudAnnouncementTtsKey = encryptedPrefs
+            ?.getString(com.example.mymediaplayer.shared.ApiKeyStore.KEY_CLOUD_TTS, "") ?: ""
         refreshBluetoothState()
         maybeRequestPostNotifications()
 
@@ -424,6 +437,39 @@ class MainActivity : ComponentActivity() {
                     onSetPlaylistSaveFolderNow = {
                         showPlaylistSaveFolderPrompt = false
                         openPlaylistDocumentTree.launch(null)
+                    },
+                    cloudAnnouncementClaudeKey = cloudAnnouncementClaudeKey,
+                    cloudAnnouncementTtsKey = cloudAnnouncementTtsKey,
+                    onSaveCloudAnnouncementKeys = { claude, tts, onValidated ->
+                        cloudAnnouncementClaudeKey = claude
+                        cloudAnnouncementTtsKey = tts
+                        ApiKeyStore.getPrefs(this)
+                            ?.edit()
+                            ?.putString(ApiKeyStore.KEY_CLAUDE, claude)
+                            ?.putString(ApiKeyStore.KEY_CLOUD_TTS, tts)
+                            ?.apply()
+                        lifecycleScope.launch {
+                            val (claudeResult, ttsResult) = ApiKeyStore.validateKeys(this@MainActivity)
+                            val claudeMsg = when (claudeResult) {
+                                is ApiKeyStore.ValidationResult.Success -> "Claude API: OK"
+                                is ApiKeyStore.ValidationResult.Error -> "Claude API: ${claudeResult.message}"
+                            }
+                            val ttsMsg = when (ttsResult) {
+                                is ApiKeyStore.ValidationResult.Success -> "Google TTS: OK"
+                                is ApiKeyStore.ValidationResult.Error -> "Google TTS: ${ttsResult.message}"
+                            }
+                            Toast.makeText(this@MainActivity, "$claudeMsg\n$ttsMsg", Toast.LENGTH_LONG).show()
+                            onValidated()
+                        }
+                    },
+                    debugCloudAnnouncements = debugCloudAnnouncements,
+                    onSetDebugCloudAnnouncements = { enabled ->
+                        debugCloudAnnouncements = enabled
+                        getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                            .edit()
+                            .putBoolean(KEY_DEBUG_CLOUD_ANNOUNCEMENTS, enabled)
+                            .apply()
+                        sendDebugCloudSettingToService(enabled)
                     },
                     onPlayPlaylist = { playlist ->
                         sendFilesToServiceIfNeeded(uiState.value.scan.scannedFiles)
@@ -700,6 +746,14 @@ class MainActivity : ComponentActivity() {
             putBoolean(EXTRA_TRACK_VOICE_OUTRO_ENABLED, trackVoiceOutroEnabled)
         }
         controller.transportControls.sendCustomAction(ACTION_SET_TRACK_VOICE_OUTRO, bundle)
+    }
+
+    private fun sendDebugCloudSettingToService(enabled: Boolean) {
+        val controller = mediaController ?: return
+        val bundle = Bundle().apply {
+            putBoolean("debug_cloud_enabled", enabled)
+        }
+        controller.transportControls.sendCustomAction(ACTION_SET_DEBUG_CLOUD, bundle)
     }
 
     private fun handleIncomingIntent(intent: Intent?) {

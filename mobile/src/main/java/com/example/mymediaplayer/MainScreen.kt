@@ -41,6 +41,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -54,6 +55,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.mymediaplayer.shared.bucketGenre
@@ -129,7 +131,12 @@ fun MainScreen(
     nowPlayingArt: Bitmap?,
     showPlaylistSaveFolderPrompt: Boolean,
     onDismissPlaylistSaveFolderPrompt: () -> Unit,
-    onSetPlaylistSaveFolderNow: () -> Unit
+    onSetPlaylistSaveFolderNow: () -> Unit,
+    cloudAnnouncementClaudeKey: String,
+    cloudAnnouncementTtsKey: String,
+    onSaveCloudAnnouncementKeys: (claudeKey: String, ttsKey: String, onValidated: () -> Unit) -> Unit,
+    debugCloudAnnouncements: Boolean,
+    onSetDebugCloudAnnouncements: (Boolean) -> Unit,
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     var menuExpanded by remember { mutableStateOf(false) }
@@ -155,6 +162,7 @@ fun MainScreen(
     var showExpandedNowPlayingDialog by remember { mutableStateOf(false) }
     var showBluetoothDiagnosticsDialog by remember { mutableStateOf(false) }
     var showManageTrustedBluetoothDialog by remember { mutableStateOf(false) }
+    var showCloudAnnouncementSettingsDialog by remember { mutableStateOf(false) }
     var songsFavoritesOnly by rememberSaveable { mutableStateOf(false) }
     var searchFavoritesOnly by rememberSaveable { mutableStateOf(false) }
 
@@ -259,6 +267,13 @@ fun MainScreen(
                             onClick = {
                                 menuExpanded = false
                                 onToggleTrackVoiceOutro()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("AI Announcement Settings") },
+                            onClick = {
+                                menuExpanded = false
+                                showCloudAnnouncementSettingsDialog = true
                             }
                         )
                         DropdownMenuItem(
@@ -1226,6 +1241,72 @@ fun MainScreen(
             dismissButton = {
                 TextButton(onClick = { showBluetoothDiagnosticsDialog = false }) {
                     Text("Close")
+                }
+            }
+        )
+    }
+
+    if (showCloudAnnouncementSettingsDialog) {
+        var claudeKeyInput by remember { mutableStateOf(cloudAnnouncementClaudeKey) }
+        var ttsKeyInput by remember { mutableStateOf(cloudAnnouncementTtsKey) }
+        AlertDialog(
+            onDismissRequest = { showCloudAnnouncementSettingsDialog = false },
+            title = { Text("AI Announcement Settings") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        "API keys for cloud-generated announcements. Leave blank to use on-device TTS.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    TextField(
+                        value = claudeKeyInput,
+                        onValueChange = { claudeKeyInput = it },
+                        label = { Text("Claude API key") },
+                        placeholder = { Text("sk-ant-…") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    TextField(
+                        value = ttsKeyInput,
+                        onValueChange = { ttsKeyInput = it },
+                        label = { Text("Google Cloud TTS key") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Debug mode", style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                "Show toast when cloud TTS is used",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = debugCloudAnnouncements,
+                            onCheckedChange = onSetDebugCloudAnnouncements
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onSaveCloudAnnouncementKeys(claudeKeyInput.trim(), ttsKeyInput.trim()) {
+                            showCloudAnnouncementSettingsDialog = false
+                        }
+                    }
+                ) { Text("Save") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCloudAnnouncementSettingsDialog = false }) {
+                    Text("Cancel")
                 }
             }
         )
