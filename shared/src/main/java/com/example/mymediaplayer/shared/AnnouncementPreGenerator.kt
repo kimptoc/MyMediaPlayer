@@ -164,12 +164,12 @@ internal class AnnouncementPreGenerator(
         }
 
         Log.d(TAG, "Calling Kilo API for: $title")
-        val text = fetchKiloText(title, artist, isIntro, kiloKey)
+        var text = fetchKiloText(title, artist, isIntro, kiloKey)
         if (text == null) {
-            Log.d(TAG, "Kilo API returned null")
-            return null
+            Log.d(TAG, "Kilo API returned null, using stock phrase")
+            text = getStockPhrase(title, artist, isIntro)
         }
-        Log.d(TAG, "Kilo returned: $text")
+        Log.d(TAG, "Using text: $text")
 
         if (!useCloudTts) {
             Log.d(TAG, "No TTS key — will use on-device TTS")
@@ -178,6 +178,24 @@ internal class AnnouncementPreGenerator(
 
         Log.d(TAG, "Calling Google TTS API")
         return fetchGoogleTtsAudio(text, ttsKey)
+    }
+
+    private fun getStockPhrase(title: String, artist: String?, isIntro: Boolean): String {
+        val artistName = artist ?: "Unknown"
+        return if (isIntro) {
+            listOf(
+                "Up next: $title by $artistName",
+                "Here's $title by $artistName",
+                "$title is coming up by $artistName",
+                "Now playing: $title by $artistName",
+            ).random()
+        } else {
+            listOf(
+                "That was $title by $artistName",
+                "Thanks for listening to $title by $artistName",
+                "$title is done by $artistName",
+            ).random()
+        }
     }
 
     private suspend fun fetchKiloText(
