@@ -456,7 +456,7 @@ class MainActivity : ComponentActivity() {
                             }
                             val ttsMsg = when (ttsResult) {
                                 is ApiKeyStore.ValidationResult.Success -> "Google TTS: OK"
-                                is ApiKeyStore.ValidationResult.Error -> "Google TTS: ${ttsResult.message}"
+                                is ApiKeyStore.ValidationResult.Error -> "Google TTS: Not configured (using on-device)"
                             }
                             Toast.makeText(this@MainActivity, "$kiloMsg\n$ttsMsg", Toast.LENGTH_LONG).show()
                             onValidated()

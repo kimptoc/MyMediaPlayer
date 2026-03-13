@@ -155,7 +155,7 @@ internal class AnnouncementPreGenerator(
         val kiloKey = prefs.getString(ApiKeyStore.KEY_KILO, null)?.takeIf { it.isNotBlank() }
         val ttsKey = prefs.getString(ApiKeyStore.KEY_CLOUD_TTS, null)?.takeIf { it.isNotBlank() }
 
-        val useKilo = kiloKey != null || true
+        val useKilo = true // Kilo supports anonymous mode
         val useCloudTts = ttsKey != null
 
         if (!useKilo && !useCloudTts) {
@@ -164,11 +164,9 @@ internal class AnnouncementPreGenerator(
         }
 
         Log.d(TAG, "Calling Kilo API for: $title")
-        var text = fetchKiloText(title, artist, isIntro, kiloKey)
-        if (text == null) {
-            Log.d(TAG, "Kilo API returned null, using stock phrase")
-            text = getStockPhrase(title, artist, isIntro)
-        }
+        val textFromApi = fetchKiloText(title, artist, isIntro, kiloKey)
+        Log.d(TAG, "Kilo returned: $textFromApi")
+        val text = textFromApi ?: getStockPhrase(title, artist, isIntro)
         Log.d(TAG, "Using text: $text")
 
         if (!useCloudTts) {
@@ -177,7 +175,7 @@ internal class AnnouncementPreGenerator(
         }
 
         Log.d(TAG, "Calling Google TTS API")
-        return fetchGoogleTtsAudio(text, ttsKey)
+        return fetchGoogleTtsAudio(text!!, ttsKey)
     }
 
     private fun getStockPhrase(title: String, artist: String?, isIntro: Boolean): String {
@@ -215,7 +213,7 @@ internal class AnnouncementPreGenerator(
         val authHeader = if (isAnon) "Bearer anonymous" else "Bearer $apiKey"
         val model = if (isAnon) "kilo/auto-free" else "anthropic/claude-sonnet-4-6"
 
-        runCatching {
+        try {
             val conn = URL("$KILO_ENDPOINT/chat/completions")
                 .openConnection() as HttpURLConnection
             conn.connectTimeout = 15_000
@@ -244,22 +242,33 @@ internal class AnnouncementPreGenerator(
             val responseCode = conn.responseCode
             if (responseCode != 200) {
                 val errorBody = conn.errorStream?.bufferedReader()?.readText() ?: "no error body"
-                Log.w(TAG, "Kilo API returned HTTP $responseCode: $errorBody")
-                return@runCatching null
+                Log.w(TAG, "Kilo HTTP $responseCode: $errorBody")
+                return@withContext null
             }
 
-            val responseJson = JSONObject(conn.inputStream.bufferedReader().readText())
+            val responseText = conn.inputStream.bufferedReader().readText()
+            if (responseText.isBlank()) {
+                Log.w(TAG, "Kilo response empty")
+                return@withContext null
+            }
+
+            val responseJson = JSONObject(responseText)
+            if (!responseJson.has("choices") || responseJson.getJSONArray("choices").length() == 0) {
+                Log.w(TAG, "Kilo no choices: $responseText")
+                return@withContext null
+            }
             val message = responseJson.getJSONArray("choices").getJSONObject(0).getJSONObject("message")
             var content = message.optString("content", null)
             if (content.isNullOrBlank()) {
                 content = message.optString("reasoning", null)
             }
-            content?.trim() ?: run {
-                Log.w(TAG, "Kilo response has no content or reasoning")
-                null
+            if (content.isNullOrBlank()) {
+                Log.w(TAG, "Kilo no content: $responseText")
+                return@withContext null
             }
-        }.getOrElse { e ->
-            Log.w(TAG, "Kilo API call failed: ${e.message}")
+            content.trim()
+        } catch (e: Exception) {
+            Log.e(TAG, "Kilo API exception: ${e.message}", e)
             null
         }
     }

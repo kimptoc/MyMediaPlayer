@@ -54,7 +54,7 @@ object ApiKeyStore {
         val ttsResult = if (ttsKey != null) {
             validateTtsKey(ttsKey)
         } else {
-            ValidationResult.Error("No Google TTS key configured")
+            ValidationResult.Success
         }
 
         Pair(kiloResult, ttsResult)
