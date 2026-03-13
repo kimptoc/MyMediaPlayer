@@ -189,6 +189,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
     private var trackVoiceOutroEnabled: Boolean = false
     private var lastIntroTemplateIndex: Int = -1
     private var lastOutroTemplateIndex: Int = -1
+    private var announcementPreGenerator: AnnouncementPreGenerator? = null
+    private var announcementPlayer: MediaPlayer? = null
+    private val announcementJobRef = java.util.concurrent.atomic.AtomicReference<kotlinx.coroutines.Job?>(null)
 
     private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
         when (focusChange) {
@@ -506,6 +509,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         if (trackVoiceIntroEnabled || trackVoiceOutroEnabled) {
             ensureTextToSpeechInitialized()
         }
+        announcementPreGenerator = AnnouncementPreGenerator(this, serviceScope)
 
         restorePlaybackSnapshot()
         loadCachedTreeIfAvailable()
@@ -553,6 +557,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
         session.setCallback(null)
         session.isActive = false
         session.release()
+        announcementPreGenerator?.cancelAll()
+        announcementPreGenerator = null
         clearPendingIntro()
         textToSpeech?.shutdown()
         textToSpeech = null
@@ -1246,6 +1252,10 @@ class MyMusicService : MediaBrowserServiceCompat() {
         currentMediaId = fileInfo.uriString
         savePlaybackSnapshot()
 
+        if (trackVoiceIntroEnabled || trackVoiceOutroEnabled) {
+            announcementPreGenerator?.schedulePreGeneration(fileInfo, peekNextQueueTrack())
+        }
+
         val player = MediaPlayer()
         try {
             val uri = Uri.parse(fileInfo.uriString)
@@ -1328,24 +1338,19 @@ class MyMusicService : MediaBrowserServiceCompat() {
             onComplete()
             return
         }
-        ensureTextToSpeechInitialized()
-        val tts = textToSpeech
-        if (!ttsReady || tts == null) {
-            onComplete()
-            return
-        }
         val title = fileInfo.cleanTitle
         val artist = fileInfo.artist?.takeIf { it.isNotBlank() }
-        val introText = buildIntroAnnouncement(artist, title)
-        val utteranceId = "track_intro_${SystemClock.elapsedRealtime()}"
-        val action = PendingSpeechAction(utteranceId, onComplete)
-        pendingSpeechAction.set(action)
-        val result = tts.speak(introText, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
-        if (result == TextToSpeech.ERROR) {
-            if (pendingSpeechAction.compareAndSet(action, null)) {
-                onComplete()
+        val job = serviceScope.launch {
+            val audioFile = announcementPreGenerator?.getReadyAudio(fileInfo, isIntro = true)
+            mainHandler.post {
+                if (audioFile != null) {
+                    playAnnouncementFile(audioFile, onComplete)
+                } else {
+                    speakWithTts(buildIntroAnnouncement(artist, title), onComplete)
+                }
             }
         }
+        announcementJobRef.set(job)
     }
 
     private fun maybeSpeakTrackFinishedThenAdvance(fileInfo: MediaFileInfo) {
@@ -1358,19 +1363,68 @@ class MyMusicService : MediaBrowserServiceCompat() {
             onComplete()
             return
         }
+        val title = fileInfo.cleanTitle
+        val artist = fileInfo.artist?.takeIf { it.isNotBlank() }
+        val job = serviceScope.launch {
+            val audioFile = announcementPreGenerator?.getReadyAudio(fileInfo, isIntro = false)
+            mainHandler.post {
+                if (audioFile != null) {
+                    playAnnouncementFile(audioFile, onComplete)
+                } else {
+                    speakWithTts(buildOutroAnnouncement(artist, title), onComplete)
+                }
+            }
+        }
+        announcementJobRef.set(job)
+    }
+
+    /** Plays a pre-generated audio file for an announcement, then calls [onComplete]. */
+    private fun playAnnouncementFile(file: File, onComplete: () -> Unit) {
+        releaseAnnouncementPlayer()
+        val player = MediaPlayer()
+        runCatching {
+            player.setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build()
+            )
+            player.setDataSource(file.absolutePath)
+            player.setOnCompletionListener {
+                releaseAnnouncementPlayer()
+                onComplete()
+            }
+            player.setOnErrorListener { _, _, _ ->
+                releaseAnnouncementPlayer()
+                onComplete()
+                true
+            }
+            player.prepare()
+            player.start()
+            announcementPlayer = player
+        }.onFailure {
+            runCatching { player.release() }
+            onComplete()
+        }
+    }
+
+    private fun releaseAnnouncementPlayer() {
+        runCatching { announcementPlayer?.release() }
+        announcementPlayer = null
+    }
+
+    /** Speaks [ssml] via Android TTS, calling [onComplete] when done or on error. */
+    private fun speakWithTts(ssml: String, onComplete: () -> Unit) {
         ensureTextToSpeechInitialized()
         val tts = textToSpeech
         if (!ttsReady || tts == null) {
             onComplete()
             return
         }
-        val title = fileInfo.cleanTitle
-        val artist = fileInfo.artist?.takeIf { it.isNotBlank() }
-        val outroText = buildOutroAnnouncement(artist, title)
-        val utteranceId = "track_outro_${SystemClock.elapsedRealtime()}"
+        val utteranceId = "announcement_${SystemClock.elapsedRealtime()}"
         val action = PendingSpeechAction(utteranceId, onComplete)
         pendingSpeechAction.set(action)
-        val result = tts.speak(outroText, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
+        val result = tts.speak(ssml, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
         if (result == TextToSpeech.ERROR) {
             if (pendingSpeechAction.compareAndSet(action, null)) {
                 onComplete()
@@ -1514,6 +1568,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
         .replace("'", "&apos;")
 
     private fun clearPendingIntro() {
+        announcementJobRef.getAndSet(null)?.cancel()
+        releaseAnnouncementPlayer()
         pendingSpeechAction.set(null)
         runCatching { textToSpeech?.stop() }
     }
@@ -1564,6 +1620,15 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }
         Log.w("MyMusicService", "Unable to recover playback error: $message")
         handleStop()
+    }
+
+    private fun peekNextQueueTrack(): MediaFileInfo? {
+        val nextIndex = currentQueueIndex + 1
+        return when {
+            nextIndex < playlistQueue.size -> playlistQueue[nextIndex]
+            repeatMode == PlaybackStateCompat.REPEAT_MODE_ALL && playlistQueue.isNotEmpty() -> playlistQueue[0]
+            else -> null
+        }
     }
 
     private fun onTrackCompleted() {
