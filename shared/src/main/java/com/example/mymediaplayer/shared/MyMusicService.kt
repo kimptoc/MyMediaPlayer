@@ -1340,10 +1340,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         val utteranceId = "track_intro_${SystemClock.elapsedRealtime()}"
         val action = PendingSpeechAction(utteranceId, onComplete)
         pendingSpeechAction.set(action)
-        val params = Bundle().apply {
-            putString(TextToSpeech.Engine.KEY_FEATURE_UTTERANCE_PARAM_SSML, "true")
-        }
-        val result = tts.speak(introText, TextToSpeech.QUEUE_FLUSH, params, utteranceId)
+        val result = tts.speak(introText, TextToSpeech.QUEUE_FLUSH, Bundle.EMPTY, utteranceId)
         if (result == TextToSpeech.ERROR) {
             if (pendingSpeechAction.compareAndSet(action, null)) {
                 onComplete()
@@ -1373,10 +1370,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         val utteranceId = "track_outro_${SystemClock.elapsedRealtime()}"
         val action = PendingSpeechAction(utteranceId, onComplete)
         pendingSpeechAction.set(action)
-        val params = Bundle().apply {
-            putString(TextToSpeech.Engine.KEY_FEATURE_UTTERANCE_PARAM_SSML, "true")
-        }
-        val result = tts.speak(outroText, TextToSpeech.QUEUE_FLUSH, params, utteranceId)
+        val result = tts.speak(outroText, TextToSpeech.QUEUE_FLUSH, Bundle.EMPTY, utteranceId)
         if (result == TextToSpeech.ERROR) {
             if (pendingSpeechAction.compareAndSet(action, null)) {
                 onComplete()
