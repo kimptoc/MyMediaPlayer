@@ -118,6 +118,8 @@ class MainActivity : ComponentActivity() {
     private var showPlaylistSaveFolderPrompt by mutableStateOf(false)
     private var trackVoiceIntroEnabled by mutableStateOf(false)
     private var trackVoiceOutroEnabled by mutableStateOf(false)
+    private var cloudAnnouncementClaudeKey by mutableStateOf("")
+    private var cloudAnnouncementTtsKey by mutableStateOf("")
     private var nowPlayingArt by mutableStateOf<Bitmap?>(null)
 
     private val bluetoothPermissionLauncher =
@@ -252,6 +254,13 @@ class MainActivity : ComponentActivity() {
             .getBoolean(KEY_TRACK_VOICE_INTRO_ENABLED, false)
         trackVoiceOutroEnabled = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
             .getBoolean(KEY_TRACK_VOICE_OUTRO_ENABLED, false)
+        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        cloudAnnouncementClaudeKey = prefs.getString(
+            com.example.mymediaplayer.shared.AnnouncementPreGenerator.PREF_CLAUDE_API_KEY, ""
+        ) ?: ""
+        cloudAnnouncementTtsKey = prefs.getString(
+            com.example.mymediaplayer.shared.AnnouncementPreGenerator.PREF_CLOUD_TTS_API_KEY, ""
+        ) ?: ""
         refreshBluetoothState()
         maybeRequestPostNotifications()
 
@@ -424,6 +433,23 @@ class MainActivity : ComponentActivity() {
                     onSetPlaylistSaveFolderNow = {
                         showPlaylistSaveFolderPrompt = false
                         openPlaylistDocumentTree.launch(null)
+                    },
+                    cloudAnnouncementClaudeKey = cloudAnnouncementClaudeKey,
+                    cloudAnnouncementTtsKey = cloudAnnouncementTtsKey,
+                    onSaveCloudAnnouncementKeys = { claude, tts ->
+                        cloudAnnouncementClaudeKey = claude
+                        cloudAnnouncementTtsKey = tts
+                        getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                            .edit()
+                            .putString(
+                                com.example.mymediaplayer.shared.AnnouncementPreGenerator.PREF_CLAUDE_API_KEY,
+                                claude
+                            )
+                            .putString(
+                                com.example.mymediaplayer.shared.AnnouncementPreGenerator.PREF_CLOUD_TTS_API_KEY,
+                                tts
+                            )
+                            .apply()
                     },
                     onPlayPlaylist = { playlist ->
                         sendFilesToServiceIfNeeded(uiState.value.scan.scannedFiles)
