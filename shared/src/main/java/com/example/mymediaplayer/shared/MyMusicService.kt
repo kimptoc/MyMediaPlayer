@@ -1336,7 +1336,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }
         val title = fileInfo.cleanTitle
         val artist = fileInfo.artist?.takeIf { it.isNotBlank() }
-        val introText = buildIntroAnnouncement(artist, title).toSpeakableText()
+        val introText = buildIntroAnnouncement(artist, title)
         val utteranceId = "track_intro_${SystemClock.elapsedRealtime()}"
         val action = PendingSpeechAction(utteranceId, onComplete)
         pendingSpeechAction.set(action)
@@ -1366,7 +1366,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }
         val title = fileInfo.cleanTitle
         val artist = fileInfo.artist?.takeIf { it.isNotBlank() }
-        val outroText = buildOutroAnnouncement(artist, title).toSpeakableText()
+        val outroText = buildOutroAnnouncement(artist, title)
         val utteranceId = "track_outro_${SystemClock.elapsedRealtime()}"
         val action = PendingSpeechAction(utteranceId, onComplete)
         pendingSpeechAction.set(action)
@@ -1379,61 +1379,57 @@ class MyMusicService : MediaBrowserServiceCompat() {
     }
 
     private fun buildIntroAnnouncement(artist: String?, title: String): String {
-        val templates = listOf(
-            "Now playing %s by %s.",
-            "Up next, %s from %s.",
-            "Here comes %s by %s.",
-            "Let's hear %s by %s.",
-            "Coming up, %s from %s.",
-            "This is %s by %s."
-        )
-        val soloTemplates = listOf(
-            "Now playing %s.",
-            "Up next, %s.",
-            "Here comes %s.",
-            "Let's hear %s.",
-            "Coming up, %s.",
-            "This is %s."
-        )
-        val (pickedIndex, pickedTemplate) = pickTemplate(
-            templates = if (artist != null) templates else soloTemplates,
-            previousIndex = lastIntroTemplateIndex
-        )
-        lastIntroTemplateIndex = pickedIndex
-        return if (artist != null) {
-            String.format(java.util.Locale.getDefault(), pickedTemplate, title, artist)
+        val t = title.toSsmlSafe()
+        val templates = if (artist != null) {
+            val a = artist.toSsmlSafe()
+            listOf(
+                """<speak>Now playing <emphasis level="moderate">$t</emphasis><break time="150ms"/> by $a.</speak>""",
+                """<speak>Up next,<break time="100ms"/> <emphasis level="moderate">$t</emphasis> from $a.</speak>""",
+                """<speak>Here comes <emphasis level="moderate">$t</emphasis><break time="100ms"/> by $a.</speak>""",
+                """<speak>Let's hear <emphasis level="moderate">$t</emphasis><break time="100ms"/> by $a.</speak>""",
+                """<speak>Coming up,<break time="100ms"/> <emphasis level="moderate">$t</emphasis> from $a.</speak>""",
+                """<speak>This is <emphasis level="moderate">$t</emphasis><break time="100ms"/> by $a.</speak>"""
+            )
         } else {
-            String.format(java.util.Locale.getDefault(), pickedTemplate, title)
+            listOf(
+                """<speak>Now playing <emphasis level="moderate">$t</emphasis>.</speak>""",
+                """<speak>Up next,<break time="100ms"/> <emphasis level="moderate">$t</emphasis>.</speak>""",
+                """<speak>Here comes <emphasis level="moderate">$t</emphasis>.</speak>""",
+                """<speak>Let's hear <emphasis level="moderate">$t</emphasis>.</speak>""",
+                """<speak>Coming up,<break time="100ms"/> <emphasis level="moderate">$t</emphasis>.</speak>""",
+                """<speak>This is <emphasis level="moderate">$t</emphasis>.</speak>"""
+            )
         }
+        val (pickedIndex, pickedTemplate) = pickTemplate(templates, lastIntroTemplateIndex)
+        lastIntroTemplateIndex = pickedIndex
+        return pickedTemplate
     }
 
     private fun buildOutroAnnouncement(artist: String?, title: String): String {
-        val templates = listOf(
-            "That was %s by %s.",
-            "You just heard %s from %s.",
-            "That was %s by %s just now.",
-            "We just finished %s by %s.",
-            "That wraps up %s from %s.",
-            "Recently played: %s by %s."
-        )
-        val soloTemplates = listOf(
-            "That was %s.",
-            "You just heard %s.",
-            "That was %s just now.",
-            "We just finished %s.",
-            "That wraps up %s.",
-            "Recently played: %s."
-        )
-        val (pickedIndex, pickedTemplate) = pickTemplate(
-            templates = if (artist != null) templates else soloTemplates,
-            previousIndex = lastOutroTemplateIndex
-        )
-        lastOutroTemplateIndex = pickedIndex
-        return if (artist != null) {
-            String.format(java.util.Locale.getDefault(), pickedTemplate, title, artist)
+        val t = title.toSsmlSafe()
+        val templates = if (artist != null) {
+            val a = artist.toSsmlSafe()
+            listOf(
+                """<speak>That was <emphasis level="moderate">$t</emphasis><break time="100ms"/> by $a.</speak>""",
+                """<speak>You just heard <emphasis level="moderate">$t</emphasis><break time="100ms"/> from $a.</speak>""",
+                """<speak>That was <emphasis level="moderate">$t</emphasis> by $a<break time="100ms"/> just now.</speak>""",
+                """<speak>We just finished <emphasis level="moderate">$t</emphasis><break time="100ms"/> by $a.</speak>""",
+                """<speak>That wraps up <emphasis level="moderate">$t</emphasis><break time="100ms"/> from $a.</speak>""",
+                """<speak>Recently played:<break time="150ms"/> <emphasis level="moderate">$t</emphasis> by $a.</speak>"""
+            )
         } else {
-            String.format(java.util.Locale.getDefault(), pickedTemplate, title)
+            listOf(
+                """<speak>That was <emphasis level="moderate">$t</emphasis>.</speak>""",
+                """<speak>You just heard <emphasis level="moderate">$t</emphasis>.</speak>""",
+                """<speak>That was <emphasis level="moderate">$t</emphasis><break time="100ms"/> just now.</speak>""",
+                """<speak>We just finished <emphasis level="moderate">$t</emphasis>.</speak>""",
+                """<speak>That wraps up <emphasis level="moderate">$t</emphasis>.</speak>""",
+                """<speak>Recently played:<break time="150ms"/> <emphasis level="moderate">$t</emphasis>.</speak>"""
+            )
         }
+        val (pickedIndex, pickedTemplate) = pickTemplate(templates, lastOutroTemplateIndex)
+        lastOutroTemplateIndex = pickedIndex
+        return pickedTemplate
     }
 
     private fun pickTemplate(templates: List<String>, previousIndex: Int): Pair<Int, String> {
@@ -1510,20 +1506,12 @@ class MyMusicService : MediaBrowserServiceCompat() {
         runCatching { tts.voice = best }
     }
 
-    private fun String.toSpeakableText(): String {
-        return this
-            .replace("&", " and ")
-            .replace("+", " plus ")
-            .replace("@", " at ")
-            .replace("#", " number ")
-            .replace("/", " ")
-            .replace("_", " ")
-            .replace(Regex("[-–—]"), " ")
-            .replace(Regex("[\\[\\]{}()<>\"'`~^*|\\\\]"), " ")
-            .replace(Regex("[^\\p{L}\\p{N}\\s.,!?]"), " ")
-            .replace(Regex("\\s+"), " ")
-            .trim()
-    }
+    private fun String.toSsmlSafe(): String = this
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace("\"", "&quot;")
+        .replace("'", "&apos;")
 
     private fun clearPendingIntro() {
         pendingSpeechAction.set(null)
