@@ -28,6 +28,7 @@ dependencies {
     implementation libs.androidx.room.ktx
     kapt libs.androidx.room.compiler
     implementation libs.kotlinx.coroutines.android
+    implementation libs.androidx.security.crypto
     testImplementation libs.junit
     testImplementation libs.androidx.test.core
     testImplementation libs.robolectric

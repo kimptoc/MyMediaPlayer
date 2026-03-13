@@ -27,8 +27,8 @@ import java.util.concurrent.ConcurrentHashMap
  * Google Cloud Text-to-Speech to synthesise it into an MP3. Falls back to Android TTS
  * (handled by the caller) when the network is unavailable or either API key is missing.
  *
- * API keys are stored in SharedPreferences under [PREF_CLAUDE_API_KEY] and
- * [PREF_CLOUD_TTS_API_KEY].
+ * API keys are stored via [ApiKeyStore] in an [androidx.security.crypto.EncryptedSharedPreferences]
+ * file backed by the Android Keystore.
  */
 internal class AnnouncementPreGenerator(
     private val context: Context,
@@ -36,9 +36,6 @@ internal class AnnouncementPreGenerator(
 ) {
     companion object {
         private const val TAG = "AnnouncementPreGen"
-        internal const val PREF_CLAUDE_API_KEY = "claude_api_key"
-        internal const val PREF_CLOUD_TTS_API_KEY = "cloud_tts_api_key"
-        private const val PREFS_NAME = "mymediaplayer_prefs"
         private const val CLAUDE_MODEL = "claude-haiku-4-5-20251001"
         private const val READY_TIMEOUT_MS = 500L
     }
@@ -132,10 +129,10 @@ internal class AnnouncementPreGenerator(
             return null
         }
 
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val claudeKey = prefs.getString(PREF_CLAUDE_API_KEY, null)?.takeIf { it.isNotBlank() }
+        val prefs = ApiKeyStore.getPrefs(context) ?: return null
+        val claudeKey = prefs.getString(ApiKeyStore.KEY_CLAUDE, null)?.takeIf { it.isNotBlank() }
             ?: return null
-        val ttsKey = prefs.getString(PREF_CLOUD_TTS_API_KEY, null)?.takeIf { it.isNotBlank() }
+        val ttsKey = prefs.getString(ApiKeyStore.KEY_CLOUD_TTS, null)?.takeIf { it.isNotBlank() }
             ?: return null
 
         val text = fetchClaudeText(title, artist, isIntro, claudeKey) ?: return null

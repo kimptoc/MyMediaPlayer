@@ -254,13 +254,11 @@ class MainActivity : ComponentActivity() {
             .getBoolean(KEY_TRACK_VOICE_INTRO_ENABLED, false)
         trackVoiceOutroEnabled = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
             .getBoolean(KEY_TRACK_VOICE_OUTRO_ENABLED, false)
-        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-        cloudAnnouncementClaudeKey = prefs.getString(
-            com.example.mymediaplayer.shared.AnnouncementPreGenerator.PREF_CLAUDE_API_KEY, ""
-        ) ?: ""
-        cloudAnnouncementTtsKey = prefs.getString(
-            com.example.mymediaplayer.shared.AnnouncementPreGenerator.PREF_CLOUD_TTS_API_KEY, ""
-        ) ?: ""
+        val encryptedPrefs = com.example.mymediaplayer.shared.ApiKeyStore.getPrefs(this)
+        cloudAnnouncementClaudeKey = encryptedPrefs
+            ?.getString(com.example.mymediaplayer.shared.ApiKeyStore.KEY_CLAUDE, "") ?: ""
+        cloudAnnouncementTtsKey = encryptedPrefs
+            ?.getString(com.example.mymediaplayer.shared.ApiKeyStore.KEY_CLOUD_TTS, "") ?: ""
         refreshBluetoothState()
         maybeRequestPostNotifications()
 
@@ -439,17 +437,11 @@ class MainActivity : ComponentActivity() {
                     onSaveCloudAnnouncementKeys = { claude, tts ->
                         cloudAnnouncementClaudeKey = claude
                         cloudAnnouncementTtsKey = tts
-                        getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-                            .edit()
-                            .putString(
-                                com.example.mymediaplayer.shared.AnnouncementPreGenerator.PREF_CLAUDE_API_KEY,
-                                claude
-                            )
-                            .putString(
-                                com.example.mymediaplayer.shared.AnnouncementPreGenerator.PREF_CLOUD_TTS_API_KEY,
-                                tts
-                            )
-                            .apply()
+                        com.example.mymediaplayer.shared.ApiKeyStore.getPrefs(this)
+                            ?.edit()
+                            ?.putString(com.example.mymediaplayer.shared.ApiKeyStore.KEY_CLAUDE, claude)
+                            ?.putString(com.example.mymediaplayer.shared.ApiKeyStore.KEY_CLOUD_TTS, tts)
+                            ?.apply()
                     },
                     onPlayPlaylist = { playlist ->
                         sendFilesToServiceIfNeeded(uiState.value.scan.scannedFiles)
