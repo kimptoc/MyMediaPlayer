@@ -66,6 +66,6 @@ internal class NetworkQualityChecker(private val context: Context) {
         private const val TAG = "NetworkQualityChecker"
         private const val CACHE_TTL_MS = 60_000L
         private const val PING_TIMEOUT_MS = 2_000
-        private const val GOOD_LATENCY_THRESHOLD_MS = 800L
+        private const val GOOD_LATENCY_THRESHOLD_MS = 200L
     }
 }
