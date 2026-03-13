@@ -23,7 +23,7 @@ import java.util.concurrent.ConcurrentHashMap
  * Pre-generates announcement audio for upcoming track intros and outros while the current
  * song is playing, so there is no delay at track boundaries.
  *
- * When network quality is good, uses the Claude API to write a natural radio-DJ line and
+ * When network quality is good, uses the Kilo API to write a natural radio-DJ line and
  * Google Cloud Text-to-Speech to synthesise it into an MP3. Falls back to Android TTS
  * (handled by the caller) when the network is unavailable or either API key is missing.
  *
@@ -36,7 +36,8 @@ internal class AnnouncementPreGenerator(
 ) {
     companion object {
         private const val TAG = "AnnouncementPreGen"
-        private const val CLAUDE_MODEL = "claude-haiku-4-5-20251001"
+        private const val KILO_ENDPOINT = "https://api.kilo.ai/api/gateway"
+        private const val KILO_MODEL_ANON = "kilo/auto-free"
         private const val READY_TIMEOUT_MS = 5000L
     }
 
@@ -150,33 +151,40 @@ internal class AnnouncementPreGenerator(
             Log.d(TAG, "No encrypted prefs — skipping cloud pre-generation")
             return null
         }
-        val claudeKey = prefs.getString(ApiKeyStore.KEY_CLAUDE, null)?.takeIf { it.isNotBlank() }
-        if (claudeKey == null) {
-            Log.d(TAG, "No Claude key — skipping cloud pre-generation")
-            return null
-        }
+
+        val kiloKey = prefs.getString(ApiKeyStore.KEY_KILO, null)?.takeIf { it.isNotBlank() }
         val ttsKey = prefs.getString(ApiKeyStore.KEY_CLOUD_TTS, null)?.takeIf { it.isNotBlank() }
-        if (ttsKey == null) {
-            Log.d(TAG, "No TTS key — skipping cloud pre-generation")
+
+        val useKilo = kiloKey != null || true
+        val useCloudTts = ttsKey != null
+
+        if (!useKilo && !useCloudTts) {
+            Log.d(TAG, "No Kilo or TTS key — skipping cloud pre-generation")
             return null
         }
 
-        Log.d(TAG, "Calling Claude API for: $title")
-        val text = fetchClaudeText(title, artist, isIntro, claudeKey)
+        Log.d(TAG, "Calling Kilo API for: $title")
+        val text = fetchKiloText(title, artist, isIntro, kiloKey)
         if (text == null) {
-            Log.d(TAG, "Claude API returned null")
+            Log.d(TAG, "Kilo API returned null")
             return null
         }
-        Log.d(TAG, "Claude returned: $text")
+        Log.d(TAG, "Kilo returned: $text")
+
+        if (!useCloudTts) {
+            Log.d(TAG, "No TTS key — will use on-device TTS")
+            return null
+        }
+
         Log.d(TAG, "Calling Google TTS API")
         return fetchGoogleTtsAudio(text, ttsKey)
     }
 
-    private suspend fun fetchClaudeText(
+    private suspend fun fetchKiloText(
         title: String,
         artist: String?,
         isIntro: Boolean,
-        apiKey: String,
+        apiKey: String?,
     ): String? = withContext(Dispatchers.IO) {
         val artistName = artist ?: "Unknown"
         val prompt = if (isIntro) {
@@ -185,20 +193,26 @@ internal class AnnouncementPreGenerator(
             "Radio outro for \"$title\" by $artistName. Include both artist and song. Max 8 words total. Examples: \"That was $title by $artistName\", \"Thanks for listening to $title\". Just the text, no quotes."
         }
 
+        val isAnon = apiKey.isNullOrBlank()
+        val authHeader = if (isAnon) "Bearer anonymous" else "Bearer $apiKey"
+        val model = if (isAnon) "kilo/auto-free" else "anthropic/claude-sonnet-4-6"
+
         runCatching {
-            val conn = URL("https://api.anthropic.com/v1/messages")
+            val conn = URL("$KILO_ENDPOINT/chat/completions")
                 .openConnection() as HttpURLConnection
-            conn.connectTimeout = 5_000
-            conn.readTimeout = 8_000
+            conn.connectTimeout = 15_000
+            conn.readTimeout = 20_000
             conn.requestMethod = "POST"
-            conn.setRequestProperty("x-api-key", apiKey)
-            conn.setRequestProperty("anthropic-version", "2023-06-01")
+            conn.setRequestProperty("Authorization", authHeader)
             conn.setRequestProperty("content-type", "application/json")
             conn.doOutput = true
 
             val body = JSONObject().apply {
-                put("model", CLAUDE_MODEL)
-                put("max_tokens", 80)
+                put("model", model)
+                put("max_tokens", 150)
+                put("reasoning", JSONObject().apply {
+                    put("effort", "low")
+                })
                 put("messages", JSONArray().put(
                     JSONObject().apply {
                         put("role", "user")
@@ -209,18 +223,25 @@ internal class AnnouncementPreGenerator(
 
             OutputStreamWriter(conn.outputStream).use { it.write(body) }
 
-            if (conn.responseCode != 200) {
-                Log.w(TAG, "Claude API returned HTTP ${conn.responseCode}")
+            val responseCode = conn.responseCode
+            if (responseCode != 200) {
+                val errorBody = conn.errorStream?.bufferedReader()?.readText() ?: "no error body"
+                Log.w(TAG, "Kilo API returned HTTP $responseCode: $errorBody")
                 return@runCatching null
             }
 
-            JSONObject(conn.inputStream.bufferedReader().readText())
-                .getJSONArray("content")
-                .getJSONObject(0)
-                .getString("text")
-                .trim()
+            val responseJson = JSONObject(conn.inputStream.bufferedReader().readText())
+            val message = responseJson.getJSONArray("choices").getJSONObject(0).getJSONObject("message")
+            var content = message.optString("content", null)
+            if (content.isNullOrBlank()) {
+                content = message.optString("reasoning", null)
+            }
+            content?.trim() ?: run {
+                Log.w(TAG, "Kilo response has no content or reasoning")
+                null
+            }
         }.getOrElse { e ->
-            Log.w(TAG, "Claude API call failed: ${e.message}")
+            Log.w(TAG, "Kilo API call failed: ${e.message}")
             null
         }
     }

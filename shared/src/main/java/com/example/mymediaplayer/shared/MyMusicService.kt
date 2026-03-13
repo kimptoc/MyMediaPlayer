@@ -1361,20 +1361,19 @@ class MyMusicService : MediaBrowserServiceCompat() {
             mainHandler.post {
                 if (audioFile != null) {
                     if (debugCloudAnnouncementsEnabled) {
-                        Toast.makeText(this@MyMusicService, "Using cloud intro (Claude + Google TTS)", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@MyMusicService, "Using cloud intro (Kilo + Google TTS)", Toast.LENGTH_SHORT).show()
                     }
                     playAnnouncementFile(audioFile, onComplete)
                 } else {
                     if (debugCloudAnnouncementsEnabled) {
                         val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-                        val keysConfigured = ApiKeyStore.getPrefs(this@MyMusicService)?.let { p ->
-                            p.getString(ApiKeyStore.KEY_CLAUDE, null)?.isNotBlank() == true &&
+                        val hasTtsKey = ApiKeyStore.getPrefs(this@MyMusicService)?.let { p ->
                             p.getString(ApiKeyStore.KEY_CLOUD_TTS, null)?.isNotBlank() == true
                         } ?: false
-                        val msg = if (keysConfigured) {
+                        val msg = if (hasTtsKey) {
                             "Android TTS (cloud gen timed out - increase timeout)"
                         } else {
-                            "Android TTS (no API keys configured)"
+                            "Android TTS (no TTS key - using on-device)"
                         }
                         Toast.makeText(this@MyMusicService, msg, Toast.LENGTH_SHORT).show()
                     }
@@ -1404,19 +1403,18 @@ class MyMusicService : MediaBrowserServiceCompat() {
             mainHandler.post {
                 if (audioFile != null) {
                     if (debugCloudAnnouncementsEnabled) {
-                        Toast.makeText(this@MyMusicService, "Using cloud outro (Claude + Google TTS)", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this@MyMusicService, "Using cloud outro (Kilo + Google TTS)", Toast.LENGTH_SHORT).show()
                     }
                     playAnnouncementFile(audioFile, onComplete)
                 } else {
                     if (debugCloudAnnouncementsEnabled) {
-                        val keysConfigured = ApiKeyStore.getPrefs(this@MyMusicService)?.let { p ->
-                            p.getString(ApiKeyStore.KEY_CLAUDE, null)?.isNotBlank() == true &&
+                        val hasTtsKey = ApiKeyStore.getPrefs(this@MyMusicService)?.let { p ->
                             p.getString(ApiKeyStore.KEY_CLOUD_TTS, null)?.isNotBlank() == true
                         } ?: false
-                        val msg = if (keysConfigured) {
+                        val msg = if (hasTtsKey) {
                             "Android TTS (cloud gen timed out - increase timeout)"
                         } else {
-                            "Android TTS (no API keys configured)"
+                            "Android TTS (no TTS key - using on-device)"
                         }
                         Toast.makeText(this@MyMusicService, msg, Toast.LENGTH_SHORT).show()
                     }
