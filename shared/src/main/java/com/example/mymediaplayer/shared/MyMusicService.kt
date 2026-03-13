@@ -1392,9 +1392,11 @@ class MyMusicService : MediaBrowserServiceCompat() {
             }
         }
         if (!trackVoiceOutroEnabled) {
+            Log.d("MyMusicService", "Track outro disabled, skipping")
             onComplete()
             return
         }
+        Log.d("MyMusicService", "Track outro enabled, getting pre-generated audio for: ${fileInfo.cleanTitle}")
         val title = fileInfo.cleanTitle
         val artist = fileInfo.artist?.takeIf { it.isNotBlank() }
         val job = serviceScope.launch {

@@ -180,9 +180,9 @@ internal class AnnouncementPreGenerator(
     ): String? = withContext(Dispatchers.IO) {
         val who = if (artist != null) "$title by $artist" else title
         val prompt = if (isIntro) {
-            "Write a very short, 3-5 word intro for $who. Like \"Up next: $title\" or just the song title. No extra words."
+            "Write a very short 2-3 word intro for $who. Examples: \"Here's $title\", \"$title coming up\", \"Up next: $title\". Just the words, no explanation."
         } else {
-            "Write a very short, 2-4 word outro for $who. Like \"Thanks for listening\" or just the song title. No extra words."
+            "Write a very short 2-4 word outro after $who. Examples: \"Thanks for listening\", \"That was $title\", \"Good stuff\". Just the words, no explanation."
         }
 
         runCatching {
