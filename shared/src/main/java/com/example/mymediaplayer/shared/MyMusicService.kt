@@ -45,6 +45,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.io.File
 import java.util.concurrent.atomic.AtomicReference
 
 class MyMusicService : MediaBrowserServiceCompat() {
@@ -1424,10 +1425,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         val utteranceId = "announcement_${SystemClock.elapsedRealtime()}"
         val action = PendingSpeechAction(utteranceId, onComplete)
         pendingSpeechAction.set(action)
-        val params = Bundle().apply {
-            putString(TextToSpeech.Engine.KEY_FEATURE_UTTERANCE_PARAM_SSML, "true")
-        }
-        val result = tts.speak(ssml, TextToSpeech.QUEUE_FLUSH, params, utteranceId)
+        val result = tts.speak(ssml, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
         if (result == TextToSpeech.ERROR) {
             if (pendingSpeechAction.compareAndSet(action, null)) {
                 onComplete()
