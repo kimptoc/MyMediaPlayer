@@ -1424,7 +1424,10 @@ class MyMusicService : MediaBrowserServiceCompat() {
         val utteranceId = "announcement_${SystemClock.elapsedRealtime()}"
         val action = PendingSpeechAction(utteranceId, onComplete)
         pendingSpeechAction.set(action)
-        val result = tts.speak(ssml, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
+        val params = Bundle().apply {
+            putString(TextToSpeech.Engine.KEY_FEATURE_UTTERANCE_PARAM_SSML, "true")
+        }
+        val result = tts.speak(ssml, TextToSpeech.QUEUE_FLUSH, params, utteranceId)
         if (result == TextToSpeech.ERROR) {
             if (pendingSpeechAction.compareAndSet(action, null)) {
                 onComplete()
