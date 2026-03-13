@@ -54,6 +54,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.mymediaplayer.shared.bucketGenre
@@ -1244,30 +1245,14 @@ fun MainScreen(
 
     if (showCloudAnnouncementSettingsDialog) {
         var claudeKeyInput by remember { mutableStateOf(cloudAnnouncementClaudeKey) }
-                    TextField(
-                        value = claudeKeyInput,
-                        onValueChange = { claudeKeyInput = it },
-                        label = { Text("Claude API key") },
-                        placeholder = { Text("sk-ant-…") },
-                        singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
-                        modifier = Modifier.fillMaxWidth()
-                    ),
+        var ttsKeyInput by remember { mutableStateOf(cloudAnnouncementTtsKey) }
         AlertDialog(
             onDismissRequest = { showCloudAnnouncementSettingsDialog = false },
             title = { Text("AI Announcement Settings") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        "API keys for cloud-generated announcements. " +
-                    TextField(
-                        value = ttsKeyInput,
-                        onValueChange = { ttsKeyInput = it },
-                        label = { Text("Google Cloud TTS key") },
-                        singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
-                        modifier = Modifier.fillMaxWidth()
-                    ),
+                        "API keys for cloud-generated announcements. Leave blank to use on-device TTS.",
                         style = MaterialTheme.typography.bodySmall
                     )
                     TextField(
@@ -1276,6 +1261,7 @@ fun MainScreen(
                         label = { Text("Claude API key") },
                         placeholder = { Text("sk-ant-…") },
                         singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
                         modifier = Modifier.fillMaxWidth()
                     )
                     TextField(
@@ -1283,6 +1269,7 @@ fun MainScreen(
                         onValueChange = { ttsKeyInput = it },
                         label = { Text("Google Cloud TTS key") },
                         singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
