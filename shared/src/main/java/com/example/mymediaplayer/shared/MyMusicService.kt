@@ -367,7 +367,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     mediaCacheService.clearFiles()
                     val count = minOf(uris.size, names.size, sizes.size)
                     for (i in 0 until count) {
-                        val title = titles?.getOrNull(i).orEmpty().ifBlank { names[i] }
+                        val title = titles?.getOrNull(i).orEmpty().ifBlank { names[i].substringBeforeLast('.') }
                         val artist = artists?.getOrNull(i).orEmpty().ifBlank { null }
                         val album = albums?.getOrNull(i).orEmpty().ifBlank { null }
                         val genre = genres?.getOrNull(i).orEmpty().ifBlank { null }
@@ -1283,6 +1283,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                         .build()
                 )
                 setDataSource(this@MyMusicService, uri)
+                var enrichedFileInfo = fileInfo
                 setOnPreparedListener {
                     consecutivePlaybackErrors = 0
                     val pending = pendingResumePositionMs
@@ -1291,11 +1292,20 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     }
                     pendingResumePositionMs = null
                     unduckIfNeeded()
-                    updateMetadata(fileInfo)
-                    maybeSpeakTrackIntroThenStart(fileInfo, this)
+                    val runtimeMetadata = MediaMetadataHelper.extractMetadata(this@MyMusicService, fileInfo.uriString)
+                    if (runtimeMetadata != null) {
+                        enrichedFileInfo = fileInfo.copy(
+                            title = runtimeMetadata.title?.takeIf { it.isNotBlank() } ?: fileInfo.title,
+                            artist = runtimeMetadata.artist?.takeIf { it.isNotBlank() } ?: fileInfo.artist,
+                            album = runtimeMetadata.album?.takeIf { it.isNotBlank() } ?: fileInfo.album
+                        )
+                    }
+                    updateMetadata(enrichedFileInfo)
+                    maybeSpeakTrackIntroThenStart(enrichedFileInfo, this)
                 }
                 setOnCompletionListener {
-                    maybeSpeakTrackFinishedThenAdvance(fileInfo)
+                    Log.d("MyMusicService", "Track completed: ${enrichedFileInfo.cleanTitle}, calling maybeSpeakTrackFinished")
+                    maybeSpeakTrackFinishedThenAdvance(enrichedFileInfo)
                 }
                 setOnErrorListener { _, what, extra ->
                     Log.e(

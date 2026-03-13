@@ -312,11 +312,15 @@ class MediaCacheService {
                         }
                         val yearValue = metadata?.year?.toIntOrNull() ?: fallbackYear
                         val durationMs = metadata?.durationMs?.toLongOrNull()
+                        val resolvedTitle = metadata?.title ?: candidate.name.substringBeforeLast('.')
+                        if (metadata?.title == null) {
+                            android.util.Log.w("MediaCacheService", "No metadata title for ${candidate.name} (uri=${candidate.uri}), using fallback: $resolvedTitle")
+                        }
                         MediaFileInfo(
                             uriString = candidate.uri.toString(),
                             displayName = candidate.name,
                             sizeBytes = candidate.size,
-                            title = metadata?.title ?: candidate.name,
+                            title = resolvedTitle,
                             artist = metadata?.artist,
                             album = metadata?.album?.ifBlank { null } ?: candidate.parentFolderName,
                             genre = normalizeGenre(

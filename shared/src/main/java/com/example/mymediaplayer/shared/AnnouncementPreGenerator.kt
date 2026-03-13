@@ -166,7 +166,13 @@ internal class AnnouncementPreGenerator(
         Log.d(TAG, "Calling Kilo API for: $title")
         val textFromApi = fetchKiloText(title, artist, isIntro, kiloKey)
         Log.d(TAG, "Kilo returned: $textFromApi")
-        val text = textFromApi ?: getStockPhrase(title, artist, isIntro)
+        val text = if (textFromApi != null) {
+            textFromApi
+        } else {
+            val fallback = getStockPhrase(title, artist, isIntro)
+            Log.d(TAG, "Using stock phrase: $fallback")
+            fallback
+        }
         Log.d(TAG, "Using text: $text")
 
         if (!useCloudTts) {
