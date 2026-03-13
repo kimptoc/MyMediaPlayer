@@ -1260,7 +1260,14 @@ fun MainScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
                         "API keys for cloud-generated announcements. " +
-                            "Leave blank to use on-device TTS.",
+                    TextField(
+                        value = ttsKeyInput,
+                        onValueChange = { ttsKeyInput = it },
+                        label = { Text("Google Cloud TTS key") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth()
+                    ),
                         style = MaterialTheme.typography.bodySmall
                     )
                     TextField(
