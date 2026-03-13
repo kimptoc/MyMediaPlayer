@@ -178,11 +178,11 @@ internal class AnnouncementPreGenerator(
         isIntro: Boolean,
         apiKey: String,
     ): String? = withContext(Dispatchers.IO) {
-        val who = if (artist != null) "$title by $artist" else title
+        val artistName = artist ?: "Unknown"
         val prompt = if (isIntro) {
-            "Write a very short 2-3 word intro for $who. Examples: \"Here's $title\", \"$title coming up\", \"Up next: $title\". Just the words, no explanation."
+            "Radio intro for \"$title\" by $artistName. Include both artist and song. Max 8 words total. Examples: \"Up next: $title by $artistName\", \"Here's $title from $artistName\". Just the text, no quotes."
         } else {
-            "Write a very short 2-4 word outro after $who. Examples: \"Thanks for listening\", \"That was $title\", \"Good stuff\". Just the words, no explanation."
+            "Radio outro for \"$title\" by $artistName. Include both artist and song. Max 8 words total. Examples: \"That was $title by $artistName\", \"Thanks for listening to $title\". Just the text, no quotes."
         }
 
         runCatching {
@@ -240,12 +240,14 @@ internal class AnnouncementPreGenerator(
                     put("input", JSONObject().put("text", text))
                     put("voice", JSONObject().apply {
                         put("languageCode", "en-US")
-                        put("name", "en-US-Neural2-F")
+                        val voices = listOf("en-US-Neural2-F", "en-US-Neural2-J", "en-US-Neural2-I")
+                        put("name", voices.random())
                     })
                     put("audioConfig", JSONObject().apply {
                         put("audioEncoding", "MP3")
-                        put("speakingRate", 0.95)
+                        put("speakingRate", 1.0)
                         put("pitch", 0.0)
+                        put("volumeGainDb", 1.0)
                     })
                 }.toString()
 
