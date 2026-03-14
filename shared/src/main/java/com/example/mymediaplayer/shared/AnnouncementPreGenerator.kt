@@ -30,6 +30,7 @@ import java.util.concurrent.ConcurrentHashMap
  * API keys are stored via [ApiKeyStore] in an [androidx.security.crypto.EncryptedSharedPreferences]
  * file backed by the Android Keystore.
  */
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 internal class AnnouncementPreGenerator(
     private val context: Context,
     private val scope: CoroutineScope,
@@ -155,33 +156,23 @@ internal class AnnouncementPreGenerator(
         val kiloKey = prefs.getString(ApiKeyStore.KEY_KILO, null)?.takeIf { it.isNotBlank() }
         val ttsKey = prefs.getString(ApiKeyStore.KEY_CLOUD_TTS, null)?.takeIf { it.isNotBlank() }
 
-        val useKilo = true // Kilo supports anonymous mode
-        val useCloudTts = ttsKey != null
-
-        if (!useKilo && !useCloudTts) {
-            Log.d(TAG, "No Kilo or TTS key — skipping cloud pre-generation")
+        if (ttsKey == null) {
+            Log.d(TAG, "No TTS key — will use on-device TTS")
             return null
         }
 
         Log.d(TAG, "Calling Kilo API for: $title")
         val textFromApi = fetchKiloText(title, artist, isIntro, kiloKey)
         Log.d(TAG, "Kilo returned: $textFromApi")
-        val text = if (textFromApi != null) {
-            textFromApi
-        } else {
+        val text = textFromApi ?: run {
             val fallback = getStockPhrase(title, artist, isIntro)
             Log.d(TAG, "Using stock phrase: $fallback")
             fallback
         }
         Log.d(TAG, "Using text: $text")
 
-        if (!useCloudTts) {
-            Log.d(TAG, "No TTS key — will use on-device TTS")
-            return null
-        }
-
         Log.d(TAG, "Calling Google TTS API")
-        return fetchGoogleTtsAudio(text!!, ttsKey)
+        return fetchGoogleTtsAudio(text, ttsKey)
     }
 
     private fun getStockPhrase(title: String, artist: String?, isIntro: Boolean): String {
@@ -264,7 +255,7 @@ internal class AnnouncementPreGenerator(
                 return@withContext null
             }
             val message = responseJson.getJSONArray("choices").getJSONObject(0).getJSONObject("message")
-            val content = message.optString("content", null)?.takeIf { it != "null" && it.isNotBlank() }
+            val content = message.optString("content")?.takeIf { it != "null" && it.isNotBlank() }
             if (content == null) {
                 Log.w(TAG, "Kilo no content: $responseText")
                 return@withContext null

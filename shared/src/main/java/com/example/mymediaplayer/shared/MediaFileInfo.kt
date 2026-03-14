@@ -13,9 +13,6 @@ data class MediaFileInfo(
     val addedAtMs: Long? = null
 ) {
     val cleanTitle: String
-        get() {
-            val raw = title?.takeIf { it.isNotBlank() }
-                ?: displayName.substringBeforeLast('.')
-            return raw.replaceFirst(Regex("""\.(mp3|m4a|flac|wav|ogg|aac|wma|opus)$""", RegexOption.IGNORE_CASE), "")
-        }
+        get() = title?.takeIf { it.isNotBlank() }
+            ?: displayName.substringBeforeLast('.')
 }

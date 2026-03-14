@@ -96,8 +96,8 @@ abstract class MediaCacheDatabase : RoomDatabase() {
 
     companion object {
         private val MIGRATION_1_2 = object : Migration(1, 2) {
-            override fun migrate(database: SupportSQLiteDatabase) {
-                database.execSQL("ALTER TABLE media_files ADD COLUMN addedAtMs INTEGER")
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE media_files ADD COLUMN addedAtMs INTEGER")
             }
         }
 
@@ -112,7 +112,7 @@ abstract class MediaCacheDatabase : RoomDatabase() {
                     "media_cache.db"
                 )
                     .addMigrations(MIGRATION_1_2)
-                    .fallbackToDestructiveMigration()
+                    .fallbackToDestructiveMigration(dropAllTables = true)
                     .build()
                     .also { instance = it }
             }
