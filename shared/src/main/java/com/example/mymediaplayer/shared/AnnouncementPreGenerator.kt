@@ -264,11 +264,8 @@ internal class AnnouncementPreGenerator(
                 return@withContext null
             }
             val message = responseJson.getJSONArray("choices").getJSONObject(0).getJSONObject("message")
-            var content = message.optString("content", null)
-            if (content.isNullOrBlank()) {
-                content = message.optString("reasoning", null)
-            }
-            if (content.isNullOrBlank()) {
+            val content = message.optString("content", null)?.takeIf { it != "null" && it.isNotBlank() }
+            if (content == null) {
                 Log.w(TAG, "Kilo no content: $responseText")
                 return@withContext null
             }

@@ -1279,7 +1279,18 @@ class MyMusicService : MediaBrowserServiceCompat() {
         } else fileInfo
 
         if (trackVoiceIntroEnabled || trackVoiceOutroEnabled) {
-            announcementPreGenerator?.schedulePreGeneration(enrichedFileInfo, peekNextQueueTrack())
+            val nextTrack = peekNextQueueTrack()
+            val enrichedNext = if (nextTrack != null) {
+                val nextMeta = MediaMetadataHelper.extractMetadata(this, nextTrack.uriString)
+                if (nextMeta != null) {
+                    nextTrack.copy(
+                        title = nextMeta.title?.takeIf { it.isNotBlank() } ?: nextTrack.title,
+                        artist = nextMeta.artist?.takeIf { it.isNotBlank() } ?: nextTrack.artist,
+                        album = nextMeta.album?.takeIf { it.isNotBlank() } ?: nextTrack.album
+                    )
+                } else nextTrack
+            } else null
+            announcementPreGenerator?.schedulePreGeneration(enrichedFileInfo, enrichedNext)
         }
 
         val player = MediaPlayer()
