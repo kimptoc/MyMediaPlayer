@@ -132,9 +132,9 @@ fun MainScreen(
     showPlaylistSaveFolderPrompt: Boolean,
     onDismissPlaylistSaveFolderPrompt: () -> Unit,
     onSetPlaylistSaveFolderNow: () -> Unit,
-    cloudAnnouncementClaudeKey: String,
+    cloudAnnouncementKiloKey: String,
     cloudAnnouncementTtsKey: String,
-    onSaveCloudAnnouncementKeys: (claudeKey: String, ttsKey: String, onValidated: () -> Unit) -> Unit,
+    onSaveCloudAnnouncementKeys: (kiloKey: String, ttsKey: String, onValidated: () -> Unit) -> Unit,
     debugCloudAnnouncements: Boolean,
     onSetDebugCloudAnnouncements: (Boolean) -> Unit,
 ) {
@@ -1247,7 +1247,7 @@ fun MainScreen(
     }
 
     if (showCloudAnnouncementSettingsDialog) {
-        var claudeKeyInput by remember { mutableStateOf(cloudAnnouncementClaudeKey) }
+        var kiloKeyInput by remember { mutableStateOf(cloudAnnouncementKiloKey) }
         var ttsKeyInput by remember { mutableStateOf(cloudAnnouncementTtsKey) }
         AlertDialog(
             onDismissRequest = { showCloudAnnouncementSettingsDialog = false },
@@ -1255,14 +1255,14 @@ fun MainScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        "API keys for cloud-generated announcements. Leave blank to use on-device TTS.",
+                        "API keys for cloud-generated announcements. Kilo works anonymously (no key needed). Google TTS key optional for higher quality.",
                         style = MaterialTheme.typography.bodySmall
                     )
                     TextField(
-                        value = claudeKeyInput,
-                        onValueChange = { claudeKeyInput = it },
-                        label = { Text("Claude API key") },
-                        placeholder = { Text("sk-ant-…") },
+                        value = kiloKeyInput,
+                        onValueChange = { kiloKeyInput = it },
+                        label = { Text("Kilo API key (optional)") },
+                        placeholder = { Text("Leave blank for anonymous") },
                         singleLine = true,
                         visualTransformation = PasswordVisualTransformation(),
                         modifier = Modifier.fillMaxWidth()
@@ -1270,7 +1270,7 @@ fun MainScreen(
                     TextField(
                         value = ttsKeyInput,
                         onValueChange = { ttsKeyInput = it },
-                        label = { Text("Google Cloud TTS key") },
+                        label = { Text("Google Cloud TTS key (optional)") },
                         singleLine = true,
                         visualTransformation = PasswordVisualTransformation(),
                         modifier = Modifier.fillMaxWidth()
@@ -1297,11 +1297,11 @@ fun MainScreen(
             },
             confirmButton = {
                 TextButton(
-                    onClick = {
-                        onSaveCloudAnnouncementKeys(claudeKeyInput.trim(), ttsKeyInput.trim()) {
-                            showCloudAnnouncementSettingsDialog = false
+                        onClick = {
+                            onSaveCloudAnnouncementKeys(kiloKeyInput.trim(), ttsKeyInput.trim()) {
+                                showCloudAnnouncementSettingsDialog = false
+                            }
                         }
-                    }
                 ) { Text("Save") }
             },
             dismissButton = {

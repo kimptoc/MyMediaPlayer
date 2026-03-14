@@ -20,16 +20,16 @@ import java.net.URL
  * so both preference keys and values are AES-256 encrypted at rest.
  *
  * Use [getPrefs] to obtain the [SharedPreferences] instance, then read/write via the
- * [KEY_CLAUDE] and [KEY_CLOUD_TTS] constants.
+ * [KEY_KILO] and [KEY_CLOUD_TTS] constants.
  */
 object ApiKeyStore {
 
-    const val KEY_CLAUDE = "claude_api_key"
+    const val KEY_KILO = "kilo_api_key"
     const val KEY_CLOUD_TTS = "cloud_tts_api_key"
 
     private const val TAG = "ApiKeyStore"
     private const val ENCRYPTED_PREFS_NAME = "mymediaplayer_api_keys"
-    private const val CLAUDE_MODEL = "claude-haiku-4-5-20251001"
+    private const val KILO_ENDPOINT = "https://api.kilo.ai/api/gateway"
 
     sealed class ValidationResult {
         data object Success : ValidationResult()
@@ -42,38 +42,37 @@ object ApiKeyStore {
             ValidationResult.Error("Encrypted storage unavailable")
         )
 
-        val claudeKey = prefs.getString(KEY_CLAUDE, null)?.takeIf { it.isNotBlank() }
+        val kiloKey = prefs.getString(KEY_KILO, null)?.takeIf { it.isNotBlank() }
         val ttsKey = prefs.getString(KEY_CLOUD_TTS, null)?.takeIf { it.isNotBlank() }
 
-        val claudeResult = if (claudeKey != null) {
-            validateClaudeKey(claudeKey)
+        val kiloResult = if (kiloKey != null) {
+            validateKiloKey(kiloKey)
         } else {
-            ValidationResult.Error("No Claude key configured")
+            ValidationResult.Success
         }
 
         val ttsResult = if (ttsKey != null) {
             validateTtsKey(ttsKey)
         } else {
-            ValidationResult.Error("No Google TTS key configured")
+            ValidationResult.Success
         }
 
-        Pair(claudeResult, ttsResult)
+        Pair(kiloResult, ttsResult)
     }
 
-    private suspend fun validateClaudeKey(apiKey: String): ValidationResult = withContext(Dispatchers.IO) {
+    private suspend fun validateKiloKey(apiKey: String): ValidationResult = withContext(Dispatchers.IO) {
         runCatching {
-            val conn = URL("https://api.anthropic.com/v1/messages")
+            val conn = URL("$KILO_ENDPOINT/chat/completions")
                 .openConnection() as HttpURLConnection
             conn.connectTimeout = 5_000
             conn.readTimeout = 8_000
             conn.requestMethod = "POST"
-            conn.setRequestProperty("x-api-key", apiKey)
-            conn.setRequestProperty("anthropic-version", "2023-06-01")
+            conn.setRequestProperty("Authorization", "Bearer $apiKey")
             conn.setRequestProperty("content-type", "application/json")
             conn.doOutput = true
 
             val body = JSONObject().apply {
-                put("model", CLAUDE_MODEL)
+                put("model", "anthropic/claude-sonnet-4-6")
                 put("max_tokens", 10)
                 put("messages", JSONArray().put(
                     JSONObject().apply {

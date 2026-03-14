@@ -121,7 +121,7 @@ class MainActivity : ComponentActivity() {
     private var showPlaylistSaveFolderPrompt by mutableStateOf(false)
     private var trackVoiceIntroEnabled by mutableStateOf(false)
     private var trackVoiceOutroEnabled by mutableStateOf(false)
-    private var cloudAnnouncementClaudeKey by mutableStateOf("")
+    private var cloudAnnouncementKiloKey by mutableStateOf("")
     private var cloudAnnouncementTtsKey by mutableStateOf("")
     private var debugCloudAnnouncements by mutableStateOf(false)
     private var nowPlayingArt by mutableStateOf<Bitmap?>(null)
@@ -261,8 +261,8 @@ class MainActivity : ComponentActivity() {
         debugCloudAnnouncements = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
             .getBoolean(KEY_DEBUG_CLOUD_ANNOUNCEMENTS, false)
         val encryptedPrefs = com.example.mymediaplayer.shared.ApiKeyStore.getPrefs(this)
-        cloudAnnouncementClaudeKey = encryptedPrefs
-            ?.getString(com.example.mymediaplayer.shared.ApiKeyStore.KEY_CLAUDE, "") ?: ""
+        cloudAnnouncementKiloKey = encryptedPrefs
+            ?.getString(com.example.mymediaplayer.shared.ApiKeyStore.KEY_KILO, "") ?: ""
         cloudAnnouncementTtsKey = encryptedPrefs
             ?.getString(com.example.mymediaplayer.shared.ApiKeyStore.KEY_CLOUD_TTS, "") ?: ""
         refreshBluetoothState()
@@ -438,27 +438,27 @@ class MainActivity : ComponentActivity() {
                         showPlaylistSaveFolderPrompt = false
                         openPlaylistDocumentTree.launch(null)
                     },
-                    cloudAnnouncementClaudeKey = cloudAnnouncementClaudeKey,
+                    cloudAnnouncementKiloKey = cloudAnnouncementKiloKey,
                     cloudAnnouncementTtsKey = cloudAnnouncementTtsKey,
-                    onSaveCloudAnnouncementKeys = { claude, tts, onValidated ->
-                        cloudAnnouncementClaudeKey = claude
+                    onSaveCloudAnnouncementKeys = { kilo, tts, onValidated ->
+                        cloudAnnouncementKiloKey = kilo
                         cloudAnnouncementTtsKey = tts
                         ApiKeyStore.getPrefs(this)
                             ?.edit()
-                            ?.putString(ApiKeyStore.KEY_CLAUDE, claude)
+                            ?.putString(ApiKeyStore.KEY_KILO, kilo)
                             ?.putString(ApiKeyStore.KEY_CLOUD_TTS, tts)
                             ?.apply()
                         lifecycleScope.launch {
-                            val (claudeResult, ttsResult) = ApiKeyStore.validateKeys(this@MainActivity)
-                            val claudeMsg = when (claudeResult) {
-                                is ApiKeyStore.ValidationResult.Success -> "Claude API: OK"
-                                is ApiKeyStore.ValidationResult.Error -> "Claude API: ${claudeResult.message}"
+                            val (kiloResult, ttsResult) = ApiKeyStore.validateKeys(this@MainActivity)
+                            val kiloMsg = when (kiloResult) {
+                                is ApiKeyStore.ValidationResult.Success -> if (kilo.isBlank()) "Kilo API: Anonymous mode" else "Kilo API: OK"
+                                is ApiKeyStore.ValidationResult.Error -> "Kilo API: ${kiloResult.message}"
                             }
                             val ttsMsg = when (ttsResult) {
-                                is ApiKeyStore.ValidationResult.Success -> "Google TTS: OK"
-                                is ApiKeyStore.ValidationResult.Error -> "Google TTS: ${ttsResult.message}"
+                                is ApiKeyStore.ValidationResult.Success -> if (tts.isBlank()) "Google TTS: Using on-device" else "Google TTS: OK"
+                                is ApiKeyStore.ValidationResult.Error -> "Google TTS: Not configured (using on-device)"
                             }
-                            Toast.makeText(this@MainActivity, "$claudeMsg\n$ttsMsg", Toast.LENGTH_LONG).show()
+                            Toast.makeText(this@MainActivity, "$kiloMsg\n$ttsMsg", Toast.LENGTH_LONG).show()
                             onValidated()
                         }
                     },

@@ -23,20 +23,22 @@ import java.util.concurrent.ConcurrentHashMap
  * Pre-generates announcement audio for upcoming track intros and outros while the current
  * song is playing, so there is no delay at track boundaries.
  *
- * When network quality is good, uses the Claude API to write a natural radio-DJ line and
+ * When network quality is good, uses the Kilo API to write a natural radio-DJ line and
  * Google Cloud Text-to-Speech to synthesise it into an MP3. Falls back to Android TTS
  * (handled by the caller) when the network is unavailable or either API key is missing.
  *
  * API keys are stored via [ApiKeyStore] in an [androidx.security.crypto.EncryptedSharedPreferences]
  * file backed by the Android Keystore.
  */
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 internal class AnnouncementPreGenerator(
     private val context: Context,
     private val scope: CoroutineScope,
 ) {
     companion object {
         private const val TAG = "AnnouncementPreGen"
-        private const val CLAUDE_MODEL = "claude-haiku-4-5-20251001"
+        private const val KILO_ENDPOINT = "https://api.kilo.ai/api/gateway"
+        private const val KILO_MODEL_ANON = "kilo/auto-free"
         private const val READY_TIMEOUT_MS = 5000L
     }
 
@@ -150,33 +152,52 @@ internal class AnnouncementPreGenerator(
             Log.d(TAG, "No encrypted prefs — skipping cloud pre-generation")
             return null
         }
-        val claudeKey = prefs.getString(ApiKeyStore.KEY_CLAUDE, null)?.takeIf { it.isNotBlank() }
-        if (claudeKey == null) {
-            Log.d(TAG, "No Claude key — skipping cloud pre-generation")
-            return null
-        }
+
+        val kiloKey = prefs.getString(ApiKeyStore.KEY_KILO, null)?.takeIf { it.isNotBlank() }
         val ttsKey = prefs.getString(ApiKeyStore.KEY_CLOUD_TTS, null)?.takeIf { it.isNotBlank() }
+
         if (ttsKey == null) {
-            Log.d(TAG, "No TTS key — skipping cloud pre-generation")
+            Log.d(TAG, "No TTS key — will use on-device TTS")
             return null
         }
 
-        Log.d(TAG, "Calling Claude API for: $title")
-        val text = fetchClaudeText(title, artist, isIntro, claudeKey)
-        if (text == null) {
-            Log.d(TAG, "Claude API returned null")
-            return null
+        Log.d(TAG, "Calling Kilo API for: $title")
+        val textFromApi = fetchKiloText(title, artist, isIntro, kiloKey)
+        Log.d(TAG, "Kilo returned: $textFromApi")
+        val text = textFromApi ?: run {
+            val fallback = getStockPhrase(title, artist, isIntro)
+            Log.d(TAG, "Using stock phrase: $fallback")
+            fallback
         }
-        Log.d(TAG, "Claude returned: $text")
+        Log.d(TAG, "Using text: $text")
+
         Log.d(TAG, "Calling Google TTS API")
         return fetchGoogleTtsAudio(text, ttsKey)
     }
 
-    private suspend fun fetchClaudeText(
+    private fun getStockPhrase(title: String, artist: String?, isIntro: Boolean): String {
+        val artistName = artist ?: "Unknown"
+        return if (isIntro) {
+            listOf(
+                "Up next: $title by $artistName",
+                "Here's $title by $artistName",
+                "$title is coming up by $artistName",
+                "Now playing: $title by $artistName",
+            ).random()
+        } else {
+            listOf(
+                "That was $title by $artistName",
+                "Thanks for listening to $title by $artistName",
+                "$title is done by $artistName",
+            ).random()
+        }
+    }
+
+    private suspend fun fetchKiloText(
         title: String,
         artist: String?,
         isIntro: Boolean,
-        apiKey: String,
+        apiKey: String?,
     ): String? = withContext(Dispatchers.IO) {
         val artistName = artist ?: "Unknown"
         val prompt = if (isIntro) {
@@ -185,20 +206,26 @@ internal class AnnouncementPreGenerator(
             "Radio outro for \"$title\" by $artistName. Include both artist and song. Max 8 words total. Examples: \"That was $title by $artistName\", \"Thanks for listening to $title\". Just the text, no quotes."
         }
 
-        runCatching {
-            val conn = URL("https://api.anthropic.com/v1/messages")
+        val isAnon = apiKey.isNullOrBlank()
+        val authHeader = if (isAnon) "Bearer anonymous" else "Bearer $apiKey"
+        val model = if (isAnon) "kilo/auto-free" else "anthropic/claude-sonnet-4-6"
+
+        try {
+            val conn = URL("$KILO_ENDPOINT/chat/completions")
                 .openConnection() as HttpURLConnection
-            conn.connectTimeout = 5_000
-            conn.readTimeout = 8_000
+            conn.connectTimeout = 15_000
+            conn.readTimeout = 20_000
             conn.requestMethod = "POST"
-            conn.setRequestProperty("x-api-key", apiKey)
-            conn.setRequestProperty("anthropic-version", "2023-06-01")
+            conn.setRequestProperty("Authorization", authHeader)
             conn.setRequestProperty("content-type", "application/json")
             conn.doOutput = true
 
             val body = JSONObject().apply {
-                put("model", CLAUDE_MODEL)
-                put("max_tokens", 80)
+                put("model", model)
+                put("max_tokens", 150)
+                put("reasoning", JSONObject().apply {
+                    put("effort", "low")
+                })
                 put("messages", JSONArray().put(
                     JSONObject().apply {
                         put("role", "user")
@@ -209,18 +236,33 @@ internal class AnnouncementPreGenerator(
 
             OutputStreamWriter(conn.outputStream).use { it.write(body) }
 
-            if (conn.responseCode != 200) {
-                Log.w(TAG, "Claude API returned HTTP ${conn.responseCode}")
-                return@runCatching null
+            val responseCode = conn.responseCode
+            if (responseCode != 200) {
+                val errorBody = conn.errorStream?.bufferedReader()?.readText() ?: "no error body"
+                Log.w(TAG, "Kilo HTTP $responseCode: $errorBody")
+                return@withContext null
             }
 
-            JSONObject(conn.inputStream.bufferedReader().readText())
-                .getJSONArray("content")
-                .getJSONObject(0)
-                .getString("text")
-                .trim()
-        }.getOrElse { e ->
-            Log.w(TAG, "Claude API call failed: ${e.message}")
+            val responseText = conn.inputStream.bufferedReader().readText()
+            if (responseText.isBlank()) {
+                Log.w(TAG, "Kilo response empty")
+                return@withContext null
+            }
+
+            val responseJson = JSONObject(responseText)
+            if (!responseJson.has("choices") || responseJson.getJSONArray("choices").length() == 0) {
+                Log.w(TAG, "Kilo no choices: $responseText")
+                return@withContext null
+            }
+            val message = responseJson.getJSONArray("choices").getJSONObject(0).getJSONObject("message")
+            val content = message.optString("content")?.takeIf { it != "null" && it.isNotBlank() }
+            if (content == null) {
+                Log.w(TAG, "Kilo no content: $responseText")
+                return@withContext null
+            }
+            content.trim()
+        } catch (e: Exception) {
+            Log.e(TAG, "Kilo API exception: ${e.message}", e)
             null
         }
     }

@@ -367,7 +367,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     mediaCacheService.clearFiles()
                     val count = minOf(uris.size, names.size, sizes.size)
                     for (i in 0 until count) {
-                        val title = titles?.getOrNull(i).orEmpty().ifBlank { names[i] }
+                        val title = titles?.getOrNull(i).orEmpty().ifBlank { names[i].substringBeforeLast('.') }
                         val artist = artists?.getOrNull(i).orEmpty().ifBlank { null }
                         val album = albums?.getOrNull(i).orEmpty().ifBlank { null }
                         val genre = genres?.getOrNull(i).orEmpty().ifBlank { null }
@@ -1268,8 +1268,29 @@ class MyMusicService : MediaBrowserServiceCompat() {
         currentMediaId = fileInfo.uriString
         savePlaybackSnapshot()
 
+        // Enrich with ID3 tags before pre-generating announcements
+        val runtimeMetadata = MediaMetadataHelper.extractMetadata(this, fileInfo.uriString)
+        val enrichedFileInfo = if (runtimeMetadata != null) {
+            fileInfo.copy(
+                title = runtimeMetadata.title?.takeIf { it.isNotBlank() } ?: fileInfo.title,
+                artist = runtimeMetadata.artist?.takeIf { it.isNotBlank() } ?: fileInfo.artist,
+                album = runtimeMetadata.album?.takeIf { it.isNotBlank() } ?: fileInfo.album
+            )
+        } else fileInfo
+
         if (trackVoiceIntroEnabled || trackVoiceOutroEnabled) {
-            announcementPreGenerator?.schedulePreGeneration(fileInfo, peekNextQueueTrack())
+            val nextTrack = peekNextQueueTrack()
+            val enrichedNext = if (nextTrack != null) {
+                val nextMeta = MediaMetadataHelper.extractMetadata(this, nextTrack.uriString)
+                if (nextMeta != null) {
+                    nextTrack.copy(
+                        title = nextMeta.title?.takeIf { it.isNotBlank() } ?: nextTrack.title,
+                        artist = nextMeta.artist?.takeIf { it.isNotBlank() } ?: nextTrack.artist,
+                        album = nextMeta.album?.takeIf { it.isNotBlank() } ?: nextTrack.album
+                    )
+                } else nextTrack
+            } else null
+            announcementPreGenerator?.schedulePreGeneration(enrichedFileInfo, enrichedNext)
         }
 
         val player = MediaPlayer()
@@ -1291,11 +1312,12 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     }
                     pendingResumePositionMs = null
                     unduckIfNeeded()
-                    updateMetadata(fileInfo)
-                    maybeSpeakTrackIntroThenStart(fileInfo, this)
+                    updateMetadata(enrichedFileInfo)
+                    maybeSpeakTrackIntroThenStart(enrichedFileInfo, this)
                 }
                 setOnCompletionListener {
-                    maybeSpeakTrackFinishedThenAdvance(fileInfo)
+                    Log.d("MyMusicService", "Track completed: ${enrichedFileInfo.cleanTitle}, calling maybeSpeakTrackFinished")
+                    maybeSpeakTrackFinishedThenAdvance(enrichedFileInfo)
                 }
                 setOnErrorListener { _, what, extra ->
                     Log.e(
@@ -1361,20 +1383,19 @@ class MyMusicService : MediaBrowserServiceCompat() {
             mainHandler.post {
                 if (audioFile != null) {
                     if (debugCloudAnnouncementsEnabled) {
-                        Toast.makeText(this@MyMusicService, "Using cloud intro (Claude + Google TTS)", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@MyMusicService, "Using cloud intro (Kilo + Google TTS)", Toast.LENGTH_SHORT).show()
                     }
                     playAnnouncementFile(audioFile, onComplete)
                 } else {
                     if (debugCloudAnnouncementsEnabled) {
                         val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-                        val keysConfigured = ApiKeyStore.getPrefs(this@MyMusicService)?.let { p ->
-                            p.getString(ApiKeyStore.KEY_CLAUDE, null)?.isNotBlank() == true &&
+                        val hasTtsKey = ApiKeyStore.getPrefs(this@MyMusicService)?.let { p ->
                             p.getString(ApiKeyStore.KEY_CLOUD_TTS, null)?.isNotBlank() == true
                         } ?: false
-                        val msg = if (keysConfigured) {
+                        val msg = if (hasTtsKey) {
                             "Android TTS (cloud gen timed out - increase timeout)"
                         } else {
-                            "Android TTS (no API keys configured)"
+                            "Android TTS (no TTS key - using on-device)"
                         }
                         Toast.makeText(this@MyMusicService, msg, Toast.LENGTH_SHORT).show()
                     }
@@ -1404,19 +1425,18 @@ class MyMusicService : MediaBrowserServiceCompat() {
             mainHandler.post {
                 if (audioFile != null) {
                     if (debugCloudAnnouncementsEnabled) {
-                        Toast.makeText(this@MyMusicService, "Using cloud outro (Claude + Google TTS)", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this@MyMusicService, "Using cloud outro (Kilo + Google TTS)", Toast.LENGTH_SHORT).show()
                     }
                     playAnnouncementFile(audioFile, onComplete)
                 } else {
                     if (debugCloudAnnouncementsEnabled) {
-                        val keysConfigured = ApiKeyStore.getPrefs(this@MyMusicService)?.let { p ->
-                            p.getString(ApiKeyStore.KEY_CLAUDE, null)?.isNotBlank() == true &&
+                        val hasTtsKey = ApiKeyStore.getPrefs(this@MyMusicService)?.let { p ->
                             p.getString(ApiKeyStore.KEY_CLOUD_TTS, null)?.isNotBlank() == true
                         } ?: false
-                        val msg = if (keysConfigured) {
+                        val msg = if (hasTtsKey) {
                             "Android TTS (cloud gen timed out - increase timeout)"
                         } else {
-                            "Android TTS (no API keys configured)"
+                            "Android TTS (no TTS key - using on-device)"
                         }
                         Toast.makeText(this@MyMusicService, msg, Toast.LENGTH_SHORT).show()
                     }
