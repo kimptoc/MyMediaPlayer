@@ -1268,8 +1268,18 @@ class MyMusicService : MediaBrowserServiceCompat() {
         currentMediaId = fileInfo.uriString
         savePlaybackSnapshot()
 
+        // Enrich with ID3 tags before pre-generating announcements
+        val runtimeMetadata = MediaMetadataHelper.extractMetadata(this, fileInfo.uriString)
+        val enrichedFileInfo = if (runtimeMetadata != null) {
+            fileInfo.copy(
+                title = runtimeMetadata.title?.takeIf { it.isNotBlank() } ?: fileInfo.title,
+                artist = runtimeMetadata.artist?.takeIf { it.isNotBlank() } ?: fileInfo.artist,
+                album = runtimeMetadata.album?.takeIf { it.isNotBlank() } ?: fileInfo.album
+            )
+        } else fileInfo
+
         if (trackVoiceIntroEnabled || trackVoiceOutroEnabled) {
-            announcementPreGenerator?.schedulePreGeneration(fileInfo, peekNextQueueTrack())
+            announcementPreGenerator?.schedulePreGeneration(enrichedFileInfo, peekNextQueueTrack())
         }
 
         val player = MediaPlayer()
@@ -1283,7 +1293,6 @@ class MyMusicService : MediaBrowserServiceCompat() {
                         .build()
                 )
                 setDataSource(this@MyMusicService, uri)
-                var enrichedFileInfo = fileInfo
                 setOnPreparedListener {
                     consecutivePlaybackErrors = 0
                     val pending = pendingResumePositionMs
@@ -1292,14 +1301,6 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     }
                     pendingResumePositionMs = null
                     unduckIfNeeded()
-                    val runtimeMetadata = MediaMetadataHelper.extractMetadata(this@MyMusicService, fileInfo.uriString)
-                    if (runtimeMetadata != null) {
-                        enrichedFileInfo = fileInfo.copy(
-                            title = runtimeMetadata.title?.takeIf { it.isNotBlank() } ?: fileInfo.title,
-                            artist = runtimeMetadata.artist?.takeIf { it.isNotBlank() } ?: fileInfo.artist,
-                            album = runtimeMetadata.album?.takeIf { it.isNotBlank() } ?: fileInfo.album
-                        )
-                    }
                     updateMetadata(enrichedFileInfo)
                     maybeSpeakTrackIntroThenStart(enrichedFileInfo, this)
                 }
