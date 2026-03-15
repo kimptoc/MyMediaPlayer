@@ -114,11 +114,12 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
         @Synchronized
         fun getPrefs(context: Context): android.content.SharedPreferences {
-            if (prefsInstance != null) { return prefsInstance!! }
+            val existingPrefs = prefsInstance
+            if (existingPrefs != null) { return existingPrefs }
             val masterKey = androidx.security.crypto.MasterKey.Builder(context).setKeyScheme(androidx.security.crypto.MasterKey.KeyScheme.AES256_GCM).build()
             val encryptedPrefs = androidx.security.crypto.EncryptedSharedPreferences.create(context, "${PREFS_NAME}_encrypted", masterKey, androidx.security.crypto.EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV, androidx.security.crypto.EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM)
             val standardPrefsFile = File(context.applicationInfo.dataDir, "shared_prefs/${PREFS_NAME}.xml")
-            if (standardPrefsFile.exists()) {
+            if (standardPrefsFile.exists() && !encryptedPrefs.getBoolean("migration_completed", false)) {
                 val standardPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                 val editor = encryptedPrefs.edit()
                 for ((key, value) in standardPrefs.all) {
@@ -134,9 +135,13 @@ class MyMusicService : MediaBrowserServiceCompat() {
                         }
                     }
                 }
-                editor.apply()
-                standardPrefs.edit().clear().apply()
-                standardPrefsFile.delete()
+                try {
+                    editor.putBoolean("migration_completed", true).commit()
+                    standardPrefs.edit().clear().commit()
+                    standardPrefsFile.delete()
+                } catch (e: Exception) {
+                    // Log error - migration will retry on next app launch
+                }
             }
             prefsInstance = encryptedPrefs
             return encryptedPrefs
