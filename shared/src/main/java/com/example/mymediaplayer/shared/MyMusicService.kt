@@ -36,6 +36,8 @@ import androidx.media.MediaBrowserServiceCompat
 import android.graphics.BitmapFactory
 import androidx.core.content.ContextCompat
 import androidx.media.utils.MediaConstants
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -107,6 +109,43 @@ class MyMusicService : MediaBrowserServiceCompat() {
         private const val ACTION_SET_TRACK_VOICE_OUTRO = "SET_TRACK_VOICE_OUTRO"
         private const val ACTION_SET_DEBUG_CLOUD = "SET_DEBUG_CLOUD"
         const val ACTION_BT_AUTOPLAY = "BT_AUTOPLAY"
+
+        private var prefsInstance: android.content.SharedPreferences? = null
+
+        @Synchronized
+        fun getPrefs(context: Context): android.content.SharedPreferences {
+            val existingPrefs = prefsInstance
+            if (existingPrefs != null) { return existingPrefs }
+            val masterKey = androidx.security.crypto.MasterKey.Builder(context).setKeyScheme(androidx.security.crypto.MasterKey.KeyScheme.AES256_GCM).build()
+            val encryptedPrefs = androidx.security.crypto.EncryptedSharedPreferences.create(context, "${PREFS_NAME}_encrypted", masterKey, androidx.security.crypto.EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV, androidx.security.crypto.EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM)
+            val standardPrefsFile = File(context.applicationInfo.dataDir, "shared_prefs/${PREFS_NAME}.xml")
+            if (standardPrefsFile.exists() && !encryptedPrefs.getBoolean("migration_completed", false)) {
+                val standardPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                val editor = encryptedPrefs.edit()
+                for ((key, value) in standardPrefs.all) {
+                    when (value) {
+                        is String -> editor.putString(key, value)
+                        is Int -> editor.putInt(key, value)
+                        is Boolean -> editor.putBoolean(key, value)
+                        is Long -> editor.putLong(key, value)
+                        is Float -> editor.putFloat(key, value)
+                        is Set<*> -> {
+                            @Suppress("UNCHECKED_CAST")
+                            editor.putStringSet(key, value as Set<String>)
+                        }
+                    }
+                }
+                try {
+                    editor.putBoolean("migration_completed", true).commit()
+                    standardPrefs.edit().clear().commit()
+                    standardPrefsFile.delete()
+                } catch (e: Exception) {
+                    // Log error - migration will retry on next app launch
+                }
+            }
+            prefsInstance = encryptedPrefs
+            return encryptedPrefs
+        }
         private const val ACTION_MEDIA_PLAY_FROM_SEARCH = "android.media.action.MEDIA_PLAY_FROM_SEARCH"
 
         private const val EXTRA_URIS = "uris"
@@ -390,7 +429,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                         )
                     }
                     serviceScope.launch {
-                        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                        val prefs = getPrefs(this@MyMusicService)
                         val treeUriStr = prefs.getString(KEY_TREE_URI, null)
                         if (treeUriStr != null) {
                             val limit = prefs.getInt(KEY_SCAN_LIMIT, MediaCacheService.MAX_CACHE_SIZE)
@@ -452,7 +491,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 ACTION_SET_TRACK_VOICE_INTRO -> {
                     val enabled = extras?.getBoolean(EXTRA_TRACK_VOICE_INTRO_ENABLED) ?: false
                     trackVoiceIntroEnabled = enabled
-                    getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                    getPrefs(this@MyMusicService)
                         .edit()
                         .putBoolean(KEY_TRACK_VOICE_INTRO_ENABLED, enabled)
                         .apply()
@@ -465,7 +504,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 ACTION_SET_TRACK_VOICE_OUTRO -> {
                     val enabled = extras?.getBoolean(EXTRA_TRACK_VOICE_OUTRO_ENABLED) ?: false
                     trackVoiceOutroEnabled = enabled
-                    getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                    getPrefs(this@MyMusicService)
                         .edit()
                         .putBoolean(KEY_TRACK_VOICE_OUTRO_ENABLED, enabled)
                         .apply()
@@ -478,7 +517,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 ACTION_SET_DEBUG_CLOUD -> {
                     val enabled = extras?.getBoolean(EXTRA_DEBUG_CLOUD_ENABLED) ?: false
                     debugCloudAnnouncementsEnabled = enabled
-                    getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                    getPrefs(this@MyMusicService)
                         .edit()
                         .putBoolean(KEY_DEBUG_CLOUD_ANNOUNCEMENTS, enabled)
                         .apply()
@@ -516,11 +555,11 @@ class MyMusicService : MediaBrowserServiceCompat() {
         session.setRepeatMode(repeatMode)
         session.isActive = true
 
-        trackVoiceIntroEnabled = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        trackVoiceIntroEnabled = getPrefs(this@MyMusicService)
             .getBoolean(KEY_TRACK_VOICE_INTRO_ENABLED, false)
-        trackVoiceOutroEnabled = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        trackVoiceOutroEnabled = getPrefs(this@MyMusicService)
             .getBoolean(KEY_TRACK_VOICE_OUTRO_ENABLED, false)
-        debugCloudAnnouncementsEnabled = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        debugCloudAnnouncementsEnabled = getPrefs(this@MyMusicService)
             .getBoolean(KEY_DEBUG_CLOUD_ANNOUNCEMENTS, false)
         if (trackVoiceIntroEnabled || trackVoiceOutroEnabled) {
             ensureTextToSpeechInitialized()
@@ -1145,7 +1184,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
     private fun loadCachedTreeIfAvailable() {
         if (isScanning) return
         if (mediaCacheService.cachedFiles.isNotEmpty()) return
-        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        val prefs = getPrefs(this@MyMusicService)
         val limit = prefs.getInt(KEY_SCAN_LIMIT, MediaCacheService.MAX_CACHE_SIZE)
         val wholeDriveMode = prefs.getBoolean(KEY_SCAN_WHOLE_DRIVE, false)
         val uri = if (wholeDriveMode) {
@@ -1388,7 +1427,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     playAnnouncementFile(audioFile, onComplete)
                 } else {
                     if (debugCloudAnnouncementsEnabled) {
-                        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                        val prefs = getPrefs(this@MyMusicService)
                         val hasTtsKey = ApiKeyStore.getPrefs(this@MyMusicService)?.let { p ->
                             p.getString(ApiKeyStore.KEY_CLOUD_TTS, null)?.isNotBlank() == true
                         } ?: false
@@ -2213,7 +2252,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
     private suspend fun ensureCacheReadyForSearch() {
         if (mediaCacheService.cachedFiles.isNotEmpty()) return
-        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        val prefs = getPrefs(this@MyMusicService)
         val uriString = prefs.getString(KEY_TREE_URI, null) ?: return
         val limit = prefs.getInt(KEY_SCAN_LIMIT, MediaCacheService.MAX_CACHE_SIZE)
         val uri = Uri.parse(uriString)
@@ -2267,7 +2306,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         if (all.isEmpty()) return null
         return when (smartId) {
             SMART_PLAYLIST_FAVORITES -> {
-                val favorites = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                val favorites = getPrefs(this@MyMusicService)
                     .getStringSet(KEY_FAVORITE_URIS, emptySet())
                     ?.toSet()
                     ?: emptySet()
@@ -2278,7 +2317,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
             }
             SMART_PLAYLIST_MOST_PLAYED -> {
                 val playCounts = parsePlayCounts(
-                    getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getString(KEY_PLAY_COUNTS, null)
+                    getPrefs(this@MyMusicService).getString(KEY_PLAY_COUNTS, null)
                 )
                 all.mapNotNull { file ->
                     val plays = playCounts[file.uriString] ?: 0
@@ -2287,7 +2326,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
             }
             SMART_PLAYLIST_NOT_HEARD_RECENTLY -> {
                 val lastPlayedAt = parseLongMap(
-                    getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getString(KEY_LAST_PLAYED_AT, null)
+                    getPrefs(this@MyMusicService).getString(KEY_LAST_PLAYED_AT, null)
                 )
                 all.sortedWith(
                     compareBy<MediaFileInfo> { lastPlayedAt[it.uriString] != null }
@@ -2732,7 +2771,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
     }
 
     private fun restorePlaybackSnapshot() {
-        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        val prefs = getPrefs(this@MyMusicService)
         repeatMode = prefs.getInt(KEY_RESUME_REPEAT_MODE, PlaybackStateCompat.REPEAT_MODE_NONE)
         session.setRepeatMode(repeatMode)
 
@@ -2787,7 +2826,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
     private fun savePlaybackSnapshot(positionMsOverride: Long? = null) {
         val currentUri = currentMediaId ?: currentFileInfo?.uriString
         val position = positionMsOverride ?: currentPositionSafeMs()
-        getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        getPrefs(this@MyMusicService)
             .edit()
             .putString(KEY_RESUME_MEDIA_URI, currentUri)
             .putString(KEY_RESUME_QUEUE_URIS, playlistQueue.joinToString("\n") { it.uriString })
