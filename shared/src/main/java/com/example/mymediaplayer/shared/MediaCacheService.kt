@@ -561,7 +561,7 @@ class MediaCacheService {
                     candidates = candidates,
                     skippedReasons = skippedReasons
                 )
-                }
+            }
             }
         }
     }
