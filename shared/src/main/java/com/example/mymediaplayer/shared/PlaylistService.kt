@@ -11,8 +11,12 @@ import java.io.InputStreamReader
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.runBlocking
 
-class PlaylistService {
+open class PlaylistService {
 
     companion object {
         private const val TAG = "PlaylistService"
@@ -37,7 +41,7 @@ class PlaylistService {
         return writePlaylistWithName(context, treeUri, files, "playlist_$timestamp")
     }
 
-    fun writePlaylistWithName(
+    open fun writePlaylistWithName(
         context: Context,
         treeUri: Uri,
         files: List<MediaFileInfo>,
@@ -84,29 +88,40 @@ class PlaylistService {
 
     fun listPlaylistsInTree(context: Context, treeUri: Uri): List<PlaylistInfo> {
         val root = DocumentFile.fromTreeUri(context, treeUri) ?: return emptyList()
-        val out = mutableListOf<PlaylistInfo>()
-        val stack = ArrayDeque<DocumentFile>()
-        stack.add(root)
-        while (stack.isNotEmpty()) {
-            val node = stack.removeLast()
-            val children = runCatching { node.listFiles().toList() }.getOrNull() ?: continue
-            for (child in children) {
-                if (child.isDirectory) {
-                    stack.add(child)
-                    continue
+        val out = java.util.Collections.synchronizedList(mutableListOf<PlaylistInfo>())
+
+        runBlocking {
+            suspend fun traverse(node: DocumentFile) {
+                val children = runCatching { node.listFiles().toList() }.getOrNull() ?: return
+
+                val dirs = mutableListOf<DocumentFile>()
+                for (child in children) {
+                    if (child.isDirectory) {
+                        dirs.add(child)
+                    } else {
+                        val name = child.name ?: continue
+                        val lower = name.lowercase(Locale.US)
+                        if (lower.endsWith(".m3u") || lower.endsWith(".m3u8") || lower.endsWith(".pls")) {
+                            out.add(
+                                PlaylistInfo(
+                                    uriString = child.uri.toString(),
+                                    displayName = name
+                                )
+                            )
+                        }
+                    }
                 }
-                val name = child.name ?: continue
-                val lower = name.lowercase(Locale.US)
-                if (lower.endsWith(".m3u") || lower.endsWith(".m3u8") || lower.endsWith(".pls")) {
-                    out.add(
-                        PlaylistInfo(
-                            uriString = child.uri.toString(),
-                            displayName = name
-                        )
-                    )
-                }
+
+                dirs.map { dir ->
+                    async(Dispatchers.IO) {
+                        traverse(dir)
+                    }
+                }.awaitAll()
             }
+
+            traverse(root)
         }
+
         return out.sortedBy { it.displayName.lowercase(Locale.US) }
     }
 
@@ -265,35 +280,44 @@ class PlaylistService {
             BufferedReader(InputStreamReader(inputStream)).use { reader ->
                 var pendingTitle: String? = null
                 reader.lineSequence().forEach { line ->
-                    val trimmed = line.trim()
-                    if (trimmed.isEmpty()) return@forEach
-                    if (trimmed.startsWith("#EXTINF:", ignoreCase = true)) {
-                        val commaIndex = trimmed.indexOf(',')
-                        pendingTitle = if (commaIndex >= 0 && commaIndex + 1 < trimmed.length) {
-                            trimmed.substring(commaIndex + 1).trim().ifEmpty { null }
-                        } else {
-                            null
-                        }
-                        return@forEach
-                    }
-                    if (trimmed.startsWith("#")) return@forEach
-
-                    val uri = Uri.parse(trimmed)
-                    val name = pendingTitle ?: uri.lastPathSegment ?: "Unknown"
-                    results.add(
-                        MediaFileInfo(
-                            uriString = trimmed,
-                            displayName = name,
-                            sizeBytes = 0L,
-                            title = name
-                        )
-                    )
-                    pendingTitle = null
+                    pendingTitle = processPlaylistLine(line, pendingTitle, results)
                 }
             }
         } catch (e: IOException) {
             Log.e(TAG, "I/O error reading playlist content: $playlistUri", e)
         }
         return results
+    }
+
+    private fun processPlaylistLine(
+        line: String,
+        pendingTitle: String?,
+        results: MutableList<MediaFileInfo>
+    ): String? {
+        val trimmed = line.trim()
+        if (trimmed.isEmpty()) return pendingTitle
+
+        if (trimmed.startsWith("#EXTINF:", ignoreCase = true)) {
+            val commaIndex = trimmed.indexOf(',')
+            return if (commaIndex >= 0 && commaIndex + 1 < trimmed.length) {
+                trimmed.substring(commaIndex + 1).trim().ifEmpty { null }
+            } else {
+                null
+            }
+        }
+
+        if (trimmed.startsWith("#")) return pendingTitle
+
+        val uri = Uri.parse(trimmed)
+        val name = pendingTitle ?: uri.lastPathSegment ?: "Unknown"
+        results.add(
+            MediaFileInfo(
+                uriString = trimmed,
+                displayName = name,
+                sizeBytes = 0L,
+                title = name
+            )
+        )
+        return null
     }
 }
