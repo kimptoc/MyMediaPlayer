@@ -1,8 +1,6 @@
 package com.example.mymediaplayer.shared
 
 import android.content.Context
-import android.content.SharedPreferences
-import android.net.Uri
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
