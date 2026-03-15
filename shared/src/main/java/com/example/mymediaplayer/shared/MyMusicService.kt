@@ -189,6 +189,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         private const val FOCUS_TITLE = "vnd.android.cursor.item/audio"
 
         private val SEARCH_PREFIX_REGEX = Regex("^(?:\\s*(?:play|shuffle)\\b\\s*)+")
+        private val SHUFFLE_REGEX = Regex("\\bshuffle\\b")
     }
 
     private data class PendingSpeechAction(
@@ -2100,7 +2101,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         ensureCacheReadyForSearch()
         val raw = query?.trim().orEmpty()
         val lowered = raw.lowercase()
-        val wantsShuffle = Regex("\\bshuffle\\b").containsMatchIn(lowered)
+        val wantsShuffle = SHUFFLE_REGEX.containsMatchIn(lowered)
         val cleanedQuery = lowered.trim().replaceFirst(SEARCH_PREFIX_REGEX, "").trim()
 
         val mediaFocus = extras?.getString(EXTRA_MEDIA_FOCUS_KEY)?.trim().orEmpty()
