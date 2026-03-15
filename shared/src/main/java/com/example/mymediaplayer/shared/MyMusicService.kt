@@ -681,8 +681,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         result.sendResult(items)
     }
 
-    internal fun buildMediaItems(parentId: String): MutableList<MediaItem> {
-        val start = SystemClock.elapsedRealtime()
+    private fun buildMediaItemsForPrefix(parentId: String): MutableList<MediaItem>? {
         if (parentId.startsWith(SMART_PLAYLIST_PREFIX)) {
             val smartId = Uri.decode(parentId.removePrefix(SMART_PLAYLIST_PREFIX))
             val tracks = resolveSmartPlaylistTracksById(smartId) ?: emptyList()
@@ -788,7 +787,11 @@ class MyMusicService : MediaBrowserServiceCompat() {
             )
         }
 
-        val items = when (parentId) {
+        return null
+    }
+
+    private fun buildMediaItemsForId(parentId: String): MutableList<MediaItem> {
+        return when (parentId) {
             ROOT_ID -> {
                 val items = mutableListOf<MediaItem>()
                 items.add(
@@ -851,7 +854,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     )
                 }
                 items
-        }
+            }
             SONGS_ALL_ID -> {
                 val titles = mediaCacheService.cachedFiles.map { it.cleanTitle }
                 buildCategoryListItems(
@@ -942,6 +945,20 @@ class MyMusicService : MediaBrowserServiceCompat() {
             }
             else -> mutableListOf()
         }
+    }
+
+    internal fun buildMediaItems(parentId: String): MutableList<MediaItem> {
+        val start = SystemClock.elapsedRealtime()
+
+        val prefixItems = buildMediaItemsForPrefix(parentId)
+        if (prefixItems != null) {
+            val elapsed = SystemClock.elapsedRealtime() - start
+            Log.d("MyMusicService", "buildMediaItems($parentId) -> ${prefixItems.size} in ${elapsed}ms")
+            return prefixItems
+        }
+
+        val items = buildMediaItemsForId(parentId)
+
         val elapsed = SystemClock.elapsedRealtime() - start
         Log.d("MyMusicService", "buildMediaItems($parentId) -> ${items.size} in ${elapsed}ms")
         return items
