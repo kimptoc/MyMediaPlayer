@@ -252,43 +252,19 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         volumeControlStream = AudioManager.STREAM_MUSIC
-        bluetoothAutoPlayEnabled = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-            .getBoolean(KEY_BT_AUTOPLAY_ENABLED, false)
-        trackVoiceIntroEnabled = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-            .getBoolean(KEY_TRACK_VOICE_INTRO_ENABLED, false)
-        trackVoiceOutroEnabled = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-            .getBoolean(KEY_TRACK_VOICE_OUTRO_ENABLED, false)
-        debugCloudAnnouncements = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-            .getBoolean(KEY_DEBUG_CLOUD_ANNOUNCEMENTS, false)
-        val encryptedPrefs = com.example.mymediaplayer.shared.ApiKeyStore.getPrefs(this)
-        cloudAnnouncementKiloKey = encryptedPrefs
-            ?.getString(com.example.mymediaplayer.shared.ApiKeyStore.KEY_KILO, "") ?: ""
-        cloudAnnouncementTtsKey = encryptedPrefs
-            ?.getString(com.example.mymediaplayer.shared.ApiKeyStore.KEY_CLOUD_TTS, "") ?: ""
+
+        loadPreferences()
+
         refreshBluetoothState()
         maybeRequestPostNotifications()
 
         restoreLastTreeUri()
         showPlaylistSaveFolderPrompt = !hasValidPlaylistSaveFolder()
 
-        mediaBrowser = MediaBrowserCompat(
-            this,
-            ComponentName(this, MyMusicService::class.java),
-            connectionCallback,
-            null
-        ).apply { connect() }
+        setupMediaBrowser()
         handleIncomingIntent(intent)
 
-        lifecycleScope.launch {
-            viewModel.uiState.collect { state ->
-                if (state.scan.scannedFiles.isNotEmpty()) {
-                    sendFilesToServiceIfNeeded(state.scan.scannedFiles)
-                }
-                if (state.scan.discoveredPlaylists.isNotEmpty()) {
-                    sendPlaylistsToServiceIfNeeded(state.scan.discoveredPlaylists)
-                }
-            }
-        }
+        observeViewModel()
 
         setContent {
             MaterialTheme {
@@ -501,6 +477,44 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    private fun observeViewModel() {
+        lifecycleScope.launch {
+            viewModel.uiState.collect { state ->
+                if (state.scan.scannedFiles.isNotEmpty()) {
+                    sendFilesToServiceIfNeeded(state.scan.scannedFiles)
+                }
+                if (state.scan.discoveredPlaylists.isNotEmpty()) {
+                    sendPlaylistsToServiceIfNeeded(state.scan.discoveredPlaylists)
+                }
+            }
+        }
+    }
+
+    private fun setupMediaBrowser() {
+        mediaBrowser = MediaBrowserCompat(
+            this,
+            ComponentName(this, MyMusicService::class.java),
+            connectionCallback,
+            null
+        ).apply { connect() }
+    }
+
+    private fun loadPreferences() {
+        bluetoothAutoPlayEnabled = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+            .getBoolean(KEY_BT_AUTOPLAY_ENABLED, false)
+        trackVoiceIntroEnabled = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+            .getBoolean(KEY_TRACK_VOICE_INTRO_ENABLED, false)
+        trackVoiceOutroEnabled = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+            .getBoolean(KEY_TRACK_VOICE_OUTRO_ENABLED, false)
+        debugCloudAnnouncements = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+            .getBoolean(KEY_DEBUG_CLOUD_ANNOUNCEMENTS, false)
+        val encryptedPrefs = com.example.mymediaplayer.shared.ApiKeyStore.getPrefs(this)
+        cloudAnnouncementKiloKey = encryptedPrefs
+            ?.getString(com.example.mymediaplayer.shared.ApiKeyStore.KEY_KILO, "") ?: ""
+        cloudAnnouncementTtsKey = encryptedPrefs
+            ?.getString(com.example.mymediaplayer.shared.ApiKeyStore.KEY_CLOUD_TTS, "") ?: ""
     }
 
     private fun maybeRequestPostNotifications() {
