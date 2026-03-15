@@ -12,7 +12,7 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-class PlaylistService {
+open class PlaylistService {
 
     companion object {
         private const val TAG = "PlaylistService"
@@ -37,7 +37,7 @@ class PlaylistService {
         return writePlaylistWithName(context, treeUri, files, "playlist_$timestamp")
     }
 
-    fun writePlaylistWithName(
+    open fun writePlaylistWithName(
         context: Context,
         treeUri: Uri,
         files: List<MediaFileInfo>,
