@@ -265,35 +265,44 @@ class PlaylistService {
             BufferedReader(InputStreamReader(inputStream)).use { reader ->
                 var pendingTitle: String? = null
                 reader.lineSequence().forEach { line ->
-                    val trimmed = line.trim()
-                    if (trimmed.isEmpty()) return@forEach
-                    if (trimmed.startsWith("#EXTINF:", ignoreCase = true)) {
-                        val commaIndex = trimmed.indexOf(',')
-                        pendingTitle = if (commaIndex >= 0 && commaIndex + 1 < trimmed.length) {
-                            trimmed.substring(commaIndex + 1).trim().ifEmpty { null }
-                        } else {
-                            null
-                        }
-                        return@forEach
-                    }
-                    if (trimmed.startsWith("#")) return@forEach
-
-                    val uri = Uri.parse(trimmed)
-                    val name = pendingTitle ?: uri.lastPathSegment ?: "Unknown"
-                    results.add(
-                        MediaFileInfo(
-                            uriString = trimmed,
-                            displayName = name,
-                            sizeBytes = 0L,
-                            title = name
-                        )
-                    )
-                    pendingTitle = null
+                    pendingTitle = processPlaylistLine(line, pendingTitle, results)
                 }
             }
         } catch (e: IOException) {
             Log.e(TAG, "I/O error reading playlist content: $playlistUri", e)
         }
         return results
+    }
+
+    private fun processPlaylistLine(
+        line: String,
+        pendingTitle: String?,
+        results: MutableList<MediaFileInfo>
+    ): String? {
+        val trimmed = line.trim()
+        if (trimmed.isEmpty()) return pendingTitle
+
+        if (trimmed.startsWith("#EXTINF:", ignoreCase = true)) {
+            val commaIndex = trimmed.indexOf(',')
+            return if (commaIndex >= 0 && commaIndex + 1 < trimmed.length) {
+                trimmed.substring(commaIndex + 1).trim().ifEmpty { null }
+            } else {
+                null
+            }
+        }
+
+        if (trimmed.startsWith("#")) return pendingTitle
+
+        val uri = Uri.parse(trimmed)
+        val name = pendingTitle ?: uri.lastPathSegment ?: "Unknown"
+        results.add(
+            MediaFileInfo(
+                uriString = trimmed,
+                displayName = name,
+                sizeBytes = 0L,
+                title = name
+            )
+        )
+        return null
     }
 }
