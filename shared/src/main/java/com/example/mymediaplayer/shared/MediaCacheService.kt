@@ -516,51 +516,51 @@ class MediaCacheService {
                 if (!shouldContinue()) return
                 if (candidates.size >= effectiveCandidateLimit(deepScan)) return
 
-                    val childId = it.getString(idIndex)
-                    val name = it.getString(nameIndex) ?: "Unknown"
-                    val mimeType = it.getString(mimeIndex)
-                    val size = if (it.isNull(sizeIndex)) 0L else it.getLong(sizeIndex)
-                    val lastModified =
-                        if (it.isNull(modifiedIndex)) null else it.getLong(modifiedIndex)
+                val childId = it.getString(idIndex)
+                val name = it.getString(nameIndex) ?: "Unknown"
+                val mimeType = it.getString(mimeIndex)
+                val size = if (it.isNull(sizeIndex)) 0L else it.getLong(sizeIndex)
+                val lastModified =
+                    if (it.isNull(modifiedIndex)) null else it.getLong(modifiedIndex)
 
-                    if (mimeType == DocumentsContract.Document.MIME_TYPE_DIR) {
-                        toVisit.add(childId to name)
-                        foldersScanned += 1
-                        continue
-                    }
+                if (mimeType == DocumentsContract.Document.MIME_TYPE_DIR) {
+                    toVisit.add(childId to name)
+                    foldersScanned += 1
+                    continue
+                }
 
-                    val lowerName = name.lowercase(Locale.US)
-                    val isPlaylist = isSupportedPlaylistFile(lowerName, mimeType)
-                    if (isPlaylist &&
-                        synchronized(cacheLock) { _discoveredPlaylists.size < MAX_PLAYLIST_CACHE_SIZE }
-                    ) {
-                        val uri = DocumentsContract.buildDocumentUriUsingTree(treeUri, childId)
-                        synchronized(cacheLock) {
-                            if (_discoveredPlaylists.size < MAX_PLAYLIST_CACHE_SIZE) {
-                                _discoveredPlaylists.add(
-                                    PlaylistInfo(
-                                        uriString = uri.toString(),
-                                        displayName = name
-                                    )
+                val lowerName = name.lowercase(Locale.US)
+                val isPlaylist = isSupportedPlaylistFile(lowerName, mimeType)
+                if (isPlaylist &&
+                    synchronized(cacheLock) { _discoveredPlaylists.size < MAX_PLAYLIST_CACHE_SIZE }
+                ) {
+                    val uri = DocumentsContract.buildDocumentUriUsingTree(treeUri, childId)
+                    synchronized(cacheLock) {
+                        if (_discoveredPlaylists.size < MAX_PLAYLIST_CACHE_SIZE) {
+                            _discoveredPlaylists.add(
+                                PlaylistInfo(
+                                    uriString = uri.toString(),
+                                    displayName = name
                                 )
-                            }
+                            )
                         }
-                        continue
                     }
+                    continue
+                }
 
-                    val isAudio = isSupportedAudioFile(lowerName, mimeType)
-                    addFileCandidateIfNeeded(
-                        isAudio = isAudio,
-                        deepScan = deepScan,
-                        treeUri = treeUri,
-                        childId = childId,
-                        name = name,
-                        size = size,
-                        lastModified = lastModified,
-                        parentFolderName = parentFolderName,
-                        candidates = candidates,
-                        skippedReasons = skippedReasons
-                    )
+                val isAudio = isSupportedAudioFile(lowerName, mimeType)
+                addFileCandidateIfNeeded(
+                    isAudio = isAudio,
+                    deepScan = deepScan,
+                    treeUri = treeUri,
+                    childId = childId,
+                    name = name,
+                    size = size,
+                    lastModified = lastModified,
+                    parentFolderName = parentFolderName,
+                    candidates = candidates,
+                    skippedReasons = skippedReasons
+                )
                 }
             }
         }
