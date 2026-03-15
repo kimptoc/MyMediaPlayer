@@ -1010,7 +1010,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         val letters = mutableSetOf<String>()
         var hasOther = false
         for (value in values) {
-            val first = value.trim().firstOrNull()?.uppercaseChar()
+            val first = value.firstOrNull { !it.isWhitespace() }?.uppercaseChar()
             if (first != null && first in 'A'..'Z') {
                 letters.add(first.toString())
             } else {
@@ -1053,13 +1053,13 @@ class MyMusicService : MediaBrowserServiceCompat() {
     private fun filterByLetter(values: List<String>, letter: String): List<String> {
         if (letter == "#") {
             return values.filter {
-                val first = it.trim().firstOrNull()?.uppercaseChar()
+                val first = it.firstOrNull { !it.isWhitespace() }?.uppercaseChar()
                 first == null || first !in 'A'..'Z'
             }.sorted()
         }
         val target = letter.firstOrNull()?.uppercaseChar() ?: return emptyList()
         return values.filter {
-            it.trim().firstOrNull()?.uppercaseChar() == target
+            it.firstOrNull { !it.isWhitespace() }?.uppercaseChar() == target
         }.sorted()
     }
 
@@ -1069,8 +1069,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
     ): List<MediaFileInfo> {
         val target = letter.firstOrNull()?.uppercaseChar()
         return songs.filter { file ->
-            val title = file.cleanTitle.trim()
-            val first = title.firstOrNull()?.uppercaseChar()
+            val first = file.cleanTitle.firstOrNull { !it.isWhitespace() }?.uppercaseChar()
             if (letter == "#") {
                 first == null || first !in 'A'..'Z'
             } else {
@@ -1099,7 +1098,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         val letters = mutableSetOf<String>()
         var hasOther = false
         for (song in songs) {
-            val first = song.cleanTitle.trim().firstOrNull()?.uppercaseChar()
+            val first = song.cleanTitle.firstOrNull { !it.isWhitespace() }?.uppercaseChar()
             if (first != null && first in 'A'..'Z') {
                 letters.add(first.toString())
             } else {
@@ -1116,8 +1115,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
     internal fun buildSongLetterCounts(songs: List<MediaFileInfo>): Map<String, Int> {
         val counts = mutableMapOf<String, Int>()
         for (song in songs) {
-            val title = song.cleanTitle.trim()
-            val first = title.firstOrNull()?.uppercaseChar()
+            val first = song.cleanTitle.firstOrNull { !it.isWhitespace() }?.uppercaseChar()
             val key = if (first != null && first in 'A'..'Z') first.toString() else "#"
             counts[key] = (counts[key] ?: 0) + 1
         }
