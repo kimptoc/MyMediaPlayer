@@ -11,6 +11,10 @@ import java.io.InputStreamReader
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.runBlocking
 
 class PlaylistService {
 
@@ -84,29 +88,40 @@ class PlaylistService {
 
     fun listPlaylistsInTree(context: Context, treeUri: Uri): List<PlaylistInfo> {
         val root = DocumentFile.fromTreeUri(context, treeUri) ?: return emptyList()
-        val out = mutableListOf<PlaylistInfo>()
-        val stack = ArrayDeque<DocumentFile>()
-        stack.add(root)
-        while (stack.isNotEmpty()) {
-            val node = stack.removeLast()
-            val children = runCatching { node.listFiles().toList() }.getOrNull() ?: continue
-            for (child in children) {
-                if (child.isDirectory) {
-                    stack.add(child)
-                    continue
+        val out = java.util.Collections.synchronizedList(mutableListOf<PlaylistInfo>())
+
+        runBlocking {
+            suspend fun traverse(node: DocumentFile) {
+                val children = runCatching { node.listFiles().toList() }.getOrNull() ?: return
+
+                val dirs = mutableListOf<DocumentFile>()
+                for (child in children) {
+                    if (child.isDirectory) {
+                        dirs.add(child)
+                    } else {
+                        val name = child.name ?: continue
+                        val lower = name.lowercase(Locale.US)
+                        if (lower.endsWith(".m3u") || lower.endsWith(".m3u8") || lower.endsWith(".pls")) {
+                            out.add(
+                                PlaylistInfo(
+                                    uriString = child.uri.toString(),
+                                    displayName = name
+                                )
+                            )
+                        }
+                    }
                 }
-                val name = child.name ?: continue
-                val lower = name.lowercase(Locale.US)
-                if (lower.endsWith(".m3u") || lower.endsWith(".m3u8") || lower.endsWith(".pls")) {
-                    out.add(
-                        PlaylistInfo(
-                            uriString = child.uri.toString(),
-                            displayName = name
-                        )
-                    )
-                }
+
+                dirs.map { dir ->
+                    async(Dispatchers.IO) {
+                        traverse(dir)
+                    }
+                }.awaitAll()
             }
+
+            traverse(root)
         }
+
         return out.sortedBy { it.displayName.lowercase(Locale.US) }
     }
 
