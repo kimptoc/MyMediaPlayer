@@ -1940,7 +1940,6 @@ class MyMusicService : MediaBrowserServiceCompat() {
         updateSessionQueue()
         playTrack(playlistQueue[currentQueueIndex])
         savePlaybackSnapshot()
-        return
     }
 
     private suspend fun handlePlaySingleItem(resolvedMediaId: String) {
