@@ -181,27 +181,36 @@ class MediaCacheService {
                 val genreId = genreCursor.getLong(genreIdIndex)
                 val genreName = genreCursor.getString(genreNameIndex)?.trim().orEmpty()
                 if (genreName.isBlank()) continue
-                val membersUri = MediaStore.Audio.Genres.Members.getContentUri("external", genreId)
-                resolver.query(
-                    membersUri,
-                    arrayOf(MediaStore.Audio.Genres.Members.AUDIO_ID),
-                    null,
-                    null,
-                    null
-                )?.use { membersCursor ->
-                    val audioIdIndex =
-                        membersCursor.getColumnIndexOrThrow(MediaStore.Audio.Genres.Members.AUDIO_ID)
-                    while (membersCursor.moveToNext()) {
-                        val audioId = membersCursor.getLong(audioIdIndex)
-                        if (audioId !in audioIds) continue
-                        if (genresByAudioId[audioId].isNullOrBlank()) {
-                            genresByAudioId[audioId] = genreName
-                        }
-                    }
-                }
+                processGenreMembers(resolver, genreId, genreName, audioIds, genresByAudioId)
             }
         }
         return genresByAudioId
+    }
+
+    private fun processGenreMembers(
+        resolver: android.content.ContentResolver,
+        genreId: Long,
+        genreName: String,
+        audioIds: Set<Long>,
+        genresByAudioId: MutableMap<Long, String>
+    ) {
+        val membersUri = MediaStore.Audio.Genres.Members.getContentUri("external", genreId)
+        resolver.query(
+            membersUri,
+            arrayOf(MediaStore.Audio.Genres.Members.AUDIO_ID),
+            null,
+            null,
+            null
+        )?.use { membersCursor ->
+            val audioIdIndex = membersCursor.getColumnIndexOrThrow(MediaStore.Audio.Genres.Members.AUDIO_ID)
+            while (membersCursor.moveToNext()) {
+                val audioId = membersCursor.getLong(audioIdIndex)
+                if (audioId !in audioIds) continue
+                if (genresByAudioId[audioId].isNullOrBlank()) {
+                    genresByAudioId[audioId] = genreName
+                }
+            }
+        }
     }
 
     fun enrichGenresFromMediaStore(context: Context) {
