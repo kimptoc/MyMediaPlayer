@@ -21,9 +21,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
 import android.support.v4.media.MediaBrowserCompat
 import android.support.v4.media.MediaMetadataCompat
@@ -113,18 +111,18 @@ class MainActivity : ComponentActivity() {
     private var lastPlaybackState: PlaybackStateCompat? = null
     private var lastMetadata: MediaMetadataCompat? = null
     private var lastRepeatMode: Int = 0
-    private var bluetoothAutoPlayEnabled by mutableStateOf(false)
-    private var trustedBluetoothDevices by mutableStateOf<List<TrustedBluetoothDevice>>(emptyList())
-    private var bluetoothDiagnostics by mutableStateOf("No Bluetooth auto-play events yet")
+    private val bluetoothAutoPlayEnabled = mutableStateOf(false)
+    private val trustedBluetoothDevices = mutableStateOf<List<TrustedBluetoothDevice>>(emptyList())
+    private val bluetoothDiagnostics = mutableStateOf("No Bluetooth auto-play events yet")
     private var pendingVoiceSearchQuery: String? = null
     private var pendingVoiceSearchExtras: Bundle? = null
-    private var showPlaylistSaveFolderPrompt by mutableStateOf(false)
-    private var trackVoiceIntroEnabled by mutableStateOf(false)
-    private var trackVoiceOutroEnabled by mutableStateOf(false)
-    private var cloudAnnouncementKiloKey by mutableStateOf("")
-    private var cloudAnnouncementTtsKey by mutableStateOf("")
-    private var debugCloudAnnouncements by mutableStateOf(false)
-    private var nowPlayingArt by mutableStateOf<Bitmap?>(null)
+    private val showPlaylistSaveFolderPrompt = mutableStateOf(false)
+    private val trackVoiceIntroEnabled = mutableStateOf(false)
+    private val trackVoiceOutroEnabled = mutableStateOf(false)
+    private val cloudAnnouncementKiloKey = mutableStateOf("")
+    private val cloudAnnouncementTtsKey = mutableStateOf("")
+    private val debugCloudAnnouncements = mutableStateOf(false)
+    private val nowPlayingArt = mutableStateOf<Bitmap?>(null)
 
     private val bluetoothPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -146,7 +144,7 @@ class MainActivity : ComponentActivity() {
 
         override fun onMetadataChanged(metadata: MediaMetadataCompat?) {
             lastMetadata = metadata
-            nowPlayingArt =
+            nowPlayingArt.value =
                 metadata?.getBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART)
                     ?: metadata?.getBitmap(MediaMetadataCompat.METADATA_KEY_ART)
             pushPlaybackState()
@@ -216,7 +214,7 @@ class MainActivity : ComponentActivity() {
                     .putString(KEY_PLAYLIST_TREE_URI, it.toString())
                     .commit()
                 viewModel.setPlaylistTreeUri(it)
-                showPlaylistSaveFolderPrompt = false
+                showPlaylistSaveFolderPrompt.value = false
                 Toast.makeText(this, "Playlist save folder updated", Toast.LENGTH_SHORT).show()
             }
         }
@@ -259,7 +257,7 @@ class MainActivity : ComponentActivity() {
         maybeRequestPostNotifications()
 
         restoreLastTreeUri()
-        showPlaylistSaveFolderPrompt = !hasValidPlaylistSaveFolder()
+        showPlaylistSaveFolderPrompt.value = !hasValidPlaylistSaveFolder()
 
         setupMediaBrowser()
         handleIncomingIntent(intent)
@@ -379,9 +377,9 @@ class MainActivity : ComponentActivity() {
                     onToggleFavorite = { file ->
                         viewModel.toggleFavorite(file.uriString)
                     },
-                    bluetoothAutoPlayEnabled = bluetoothAutoPlayEnabled,
-                    trackVoiceIntroEnabled = trackVoiceIntroEnabled,
-                    trackVoiceOutroEnabled = trackVoiceOutroEnabled,
+                    bluetoothAutoPlayEnabled = bluetoothAutoPlayEnabled.value,
+                    trackVoiceIntroEnabled = trackVoiceIntroEnabled.value,
+                    trackVoiceOutroEnabled = trackVoiceOutroEnabled.value,
                     onToggleBluetoothAutoPlay = {
                         toggleBluetoothAutoPlay()
                     },
@@ -394,8 +392,8 @@ class MainActivity : ComponentActivity() {
                     onAddCurrentBluetoothDevice = {
                         addCurrentBluetoothDeviceToAllowlist()
                     },
-                    trustedBluetoothDevices = trustedBluetoothDevices,
-                    bluetoothDiagnostics = bluetoothDiagnostics,
+                    trustedBluetoothDevices = trustedBluetoothDevices.value,
+                    bluetoothDiagnostics = bluetoothDiagnostics.value,
                     onRemoveTrustedBluetoothDevice = { address ->
                         removeTrustedBluetoothDevice(address)
                     },
@@ -405,20 +403,20 @@ class MainActivity : ComponentActivity() {
                     onRefreshBluetoothDiagnostics = {
                         refreshBluetoothState()
                     },
-                    nowPlayingArt = nowPlayingArt,
-                    showPlaylistSaveFolderPrompt = showPlaylistSaveFolderPrompt,
+                    nowPlayingArt = nowPlayingArt.value,
+                    showPlaylistSaveFolderPrompt = showPlaylistSaveFolderPrompt.value,
                     onDismissPlaylistSaveFolderPrompt = {
-                        showPlaylistSaveFolderPrompt = false
+                        showPlaylistSaveFolderPrompt.value = false
                     },
                     onSetPlaylistSaveFolderNow = {
-                        showPlaylistSaveFolderPrompt = false
+                        showPlaylistSaveFolderPrompt.value = false
                         openPlaylistDocumentTree.launch(null)
                     },
-                    cloudAnnouncementKiloKey = cloudAnnouncementKiloKey,
-                    cloudAnnouncementTtsKey = cloudAnnouncementTtsKey,
+                    cloudAnnouncementKiloKey = cloudAnnouncementKiloKey.value,
+                    cloudAnnouncementTtsKey = cloudAnnouncementTtsKey.value,
                     onSaveCloudAnnouncementKeys = { kilo, tts, onValidated ->
-                        cloudAnnouncementKiloKey = kilo
-                        cloudAnnouncementTtsKey = tts
+                        cloudAnnouncementKiloKey.value = kilo
+                        cloudAnnouncementTtsKey.value = tts
                         ApiKeyStore.getPrefs(this)
                             ?.edit()
                             ?.putString(ApiKeyStore.KEY_KILO, kilo)
@@ -438,9 +436,9 @@ class MainActivity : ComponentActivity() {
                             onValidated()
                         }
                     },
-                    debugCloudAnnouncements = debugCloudAnnouncements,
+                    debugCloudAnnouncements = debugCloudAnnouncements.value,
                     onSetDebugCloudAnnouncements = { enabled ->
-                        debugCloudAnnouncements = enabled
+                        debugCloudAnnouncements.value = enabled
                         getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
                             .edit()
                             .putBoolean(KEY_DEBUG_CLOUD_ANNOUNCEMENTS, enabled)
@@ -502,18 +500,18 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun loadPreferences() {
-        bluetoothAutoPlayEnabled = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        bluetoothAutoPlayEnabled.value = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
             .getBoolean(KEY_BT_AUTOPLAY_ENABLED, false)
-        trackVoiceIntroEnabled = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        trackVoiceIntroEnabled.value = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
             .getBoolean(KEY_TRACK_VOICE_INTRO_ENABLED, false)
-        trackVoiceOutroEnabled = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        trackVoiceOutroEnabled.value = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
             .getBoolean(KEY_TRACK_VOICE_OUTRO_ENABLED, false)
-        debugCloudAnnouncements = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        debugCloudAnnouncements.value = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
             .getBoolean(KEY_DEBUG_CLOUD_ANNOUNCEMENTS, false)
         val encryptedPrefs = com.example.mymediaplayer.shared.ApiKeyStore.getPrefs(this)
-        cloudAnnouncementKiloKey = encryptedPrefs
+        cloudAnnouncementKiloKey.value = encryptedPrefs
             ?.getString(com.example.mymediaplayer.shared.ApiKeyStore.KEY_KILO, "") ?: ""
-        cloudAnnouncementTtsKey = encryptedPrefs
+        cloudAnnouncementTtsKey.value = encryptedPrefs
             ?.getString(com.example.mymediaplayer.shared.ApiKeyStore.KEY_CLOUD_TTS, "") ?: ""
     }
 
@@ -749,7 +747,7 @@ class MainActivity : ComponentActivity() {
     private fun sendTrackVoiceIntroSettingToService() {
         val controller = mediaController ?: return
         val bundle = Bundle().apply {
-            putBoolean(EXTRA_TRACK_VOICE_INTRO_ENABLED, trackVoiceIntroEnabled)
+            putBoolean(EXTRA_TRACK_VOICE_INTRO_ENABLED, trackVoiceIntroEnabled.value)
         }
         controller.transportControls.sendCustomAction(ACTION_SET_TRACK_VOICE_INTRO, bundle)
     }
@@ -757,7 +755,7 @@ class MainActivity : ComponentActivity() {
     private fun sendTrackVoiceOutroSettingToService() {
         val controller = mediaController ?: return
         val bundle = Bundle().apply {
-            putBoolean(EXTRA_TRACK_VOICE_OUTRO_ENABLED, trackVoiceOutroEnabled)
+            putBoolean(EXTRA_TRACK_VOICE_OUTRO_ENABLED, trackVoiceOutroEnabled.value)
         }
         controller.transportControls.sendCustomAction(ACTION_SET_TRACK_VOICE_OUTRO, bundle)
     }
@@ -791,43 +789,43 @@ class MainActivity : ComponentActivity() {
             requestBluetoothConnectPermission()
             return
         }
-        bluetoothAutoPlayEnabled = !bluetoothAutoPlayEnabled
+        bluetoothAutoPlayEnabled.value = !bluetoothAutoPlayEnabled.value
         getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
             .edit()
-            .putBoolean(KEY_BT_AUTOPLAY_ENABLED, bluetoothAutoPlayEnabled)
+            .putBoolean(KEY_BT_AUTOPLAY_ENABLED, bluetoothAutoPlayEnabled.value)
             .apply()
         refreshBluetoothState()
         Toast.makeText(
             this,
-            if (bluetoothAutoPlayEnabled) "Bluetooth auto-play enabled" else "Bluetooth auto-play disabled",
+            if (bluetoothAutoPlayEnabled.value) "Bluetooth auto-play enabled" else "Bluetooth auto-play disabled",
             Toast.LENGTH_SHORT
         ).show()
     }
 
     private fun toggleTrackVoiceIntro() {
-        trackVoiceIntroEnabled = !trackVoiceIntroEnabled
+        trackVoiceIntroEnabled.value = !trackVoiceIntroEnabled.value
         getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
             .edit()
-            .putBoolean(KEY_TRACK_VOICE_INTRO_ENABLED, trackVoiceIntroEnabled)
+            .putBoolean(KEY_TRACK_VOICE_INTRO_ENABLED, trackVoiceIntroEnabled.value)
             .apply()
         sendTrackVoiceIntroSettingToService()
         Toast.makeText(
             this,
-            if (trackVoiceIntroEnabled) "Track voice intro enabled" else "Track voice intro disabled",
+            if (trackVoiceIntroEnabled.value) "Track voice intro enabled" else "Track voice intro disabled",
             Toast.LENGTH_SHORT
         ).show()
     }
 
     private fun toggleTrackVoiceOutro() {
-        trackVoiceOutroEnabled = !trackVoiceOutroEnabled
+        trackVoiceOutroEnabled.value = !trackVoiceOutroEnabled.value
         getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
             .edit()
-            .putBoolean(KEY_TRACK_VOICE_OUTRO_ENABLED, trackVoiceOutroEnabled)
+            .putBoolean(KEY_TRACK_VOICE_OUTRO_ENABLED, trackVoiceOutroEnabled.value)
             .apply()
         sendTrackVoiceOutroSettingToService()
         Toast.makeText(
             this,
-            if (trackVoiceOutroEnabled) "Track voice outro enabled" else "Track voice outro disabled",
+            if (trackVoiceOutroEnabled.value) "Track voice outro enabled" else "Track voice outro disabled",
             Toast.LENGTH_SHORT
         ).show()
     }
@@ -914,7 +912,7 @@ class MainActivity : ComponentActivity() {
 
     private fun refreshBluetoothState() {
         val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-        trustedBluetoothDevices = readTrustedBluetoothDevices(prefs)
+        trustedBluetoothDevices.value = readTrustedBluetoothDevices(prefs)
             .map { (address, name) -> TrustedBluetoothDevice(address = address, name = name) }
             .sortedWith(
                 compareBy<TrustedBluetoothDevice> { it.name?.lowercase(Locale.US) ?: "\uFFFF" }
@@ -925,9 +923,9 @@ class MainActivity : ComponentActivity() {
         val lastReason = prefs.getString(KEY_BT_LAST_REASON, "none") ?: "none"
         val lastDevice = prefs.getString(KEY_BT_LAST_DEVICE, null)
         val lastDeviceName = prefs.getString(KEY_BT_LAST_DEVICE_NAME, null)
-        bluetoothDiagnostics = buildString {
-            appendLine("Enabled: ${if (bluetoothAutoPlayEnabled) "Yes" else "No"}")
-            appendLine("Trusted devices: ${trustedBluetoothDevices.size}")
+        bluetoothDiagnostics.value = buildString {
+            appendLine("Enabled: ${if (bluetoothAutoPlayEnabled.value) "Yes" else "No"}")
+            appendLine("Trusted devices: ${trustedBluetoothDevices.value.size}")
             appendLine("Last reason: $lastReason")
             val displayDevice = when {
                 !lastDeviceName.isNullOrBlank() && !lastDevice.isNullOrBlank() ->
