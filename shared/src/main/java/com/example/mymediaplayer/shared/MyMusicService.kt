@@ -2330,10 +2330,10 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 val playCounts = parsePlayCounts(
                     getPrefs(this@MyMusicService).getString(KEY_PLAY_COUNTS, null)
                 )
-                all.mapNotNull { file ->
+                all.asSequence().mapNotNull { file ->
                     val plays = playCounts[file.uriString] ?: 0
                     if (plays > 0) file to plays else null
-                }.sortedByDescending { it.second }.map { it.first }
+                }.sortedByDescending { it.second }.map { it.first }.toList()
             }
             SMART_PLAYLIST_NOT_HEARD_RECENTLY -> {
                 val lastPlayedAt = parseLongMap(
