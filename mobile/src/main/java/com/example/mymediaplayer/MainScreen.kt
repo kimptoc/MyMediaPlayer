@@ -51,6 +51,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
@@ -1109,6 +1110,14 @@ fun MainScreen(
     }
 
     if (showExpandedNowPlayingDialog && uiState.playback.currentTrackName != null) {
+        val currentMediaId = uiState.playback.currentMediaId
+        val context = LocalContext.current
+        val flaggedUris = remember { mutableStateOf(emptySet<String>()) }
+        LaunchedEffect(currentMediaId) {
+            val prefs = context.getSharedPreferences("mymediaplayer_prefs", android.content.Context.MODE_PRIVATE)
+            flaggedUris.value = prefs.getStringSet("flagged_uris", emptySet())?.toSet() ?: emptySet()
+        }
+        val isFlagged = currentMediaId != null && currentMediaId in flaggedUris.value
         ExpandedNowPlayingDialog(
             trackName = uiState.playback.currentTrackName,
             artistName = uiState.playback.currentArtistName,
@@ -1121,10 +1130,20 @@ fun MainScreen(
             hasPrev = uiState.playback.hasPrev,
             hasNext = uiState.playback.hasNext,
             isPlayingPlaylist = uiState.playback.isPlayingPlaylist,
+            isFlagged = isFlagged,
             onSeekTo = onSeekTo,
             onPlayPause = onPlayPause,
             onPrev = onPrev,
             onNext = onNext,
+            onToggleFlag = {
+                if (currentMediaId != null) {
+                    val prefs = context.getSharedPreferences("mymediaplayer_prefs", android.content.Context.MODE_PRIVATE)
+                    val current = prefs.getStringSet("flagged_uris", emptySet())?.toMutableSet() ?: mutableSetOf()
+                    if (currentMediaId in current) current.remove(currentMediaId) else current.add(currentMediaId)
+                    prefs.edit().putStringSet("flagged_uris", current).apply()
+                    flaggedUris.value = current.toSet()
+                }
+            },
             onDismiss = { showExpandedNowPlayingDialog = false }
         )
     }
@@ -2207,10 +2226,12 @@ private fun ExpandedNowPlayingDialog(
     hasPrev: Boolean,
     hasNext: Boolean,
     isPlayingPlaylist: Boolean,
+    isFlagged: Boolean = false,
     onSeekTo: (Long) -> Unit,
     onPlayPause: () -> Unit,
     onPrev: () -> Unit,
     onNext: () -> Unit,
+    onToggleFlag: () -> Unit = {},
     onDismiss: () -> Unit
 ) {
     val now = SystemClock.elapsedRealtime()
@@ -2283,6 +2304,9 @@ private fun ExpandedNowPlayingDialog(
                     TextButton(onClick = onPlayPause) { Text(if (isPlaying) "Pause" else "Play") }
                     if (isPlayingPlaylist) {
                         TextButton(onClick = onNext, enabled = hasNext) { Text("Next") }
+                    }
+                    TextButton(onClick = onToggleFlag) {
+                        Text(if (isFlagged) "Unflag" else "Flag")
                     }
                 }
             }
