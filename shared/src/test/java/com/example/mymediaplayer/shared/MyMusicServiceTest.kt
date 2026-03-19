@@ -9,6 +9,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNotNull
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 
 @RunWith(RobolectricTestRunner::class)
@@ -296,6 +297,58 @@ class MyMusicServiceTest {
         assertTrue(entries[1].mediaId.startsWith("playlist:"))
         assertEquals("Favorites", entries[2].title)
         assertTrue(entries[2].mediaId.startsWith("smart_playlist:"))
+    }
+
+    @Test
+    fun buildHomeItems_showsPlaylistsTileWhenOnlySmartPlaylistsAvailable() {
+        val service = Robolectric.buildService(MyMusicService::class.java).get()
+        service.mediaCacheService.addFile(
+            MediaFileInfo(
+                uriString = "content://test/song1",
+                displayName = "Song One.mp3",
+                sizeBytes = 1L,
+                title = "Song One"
+            )
+        )
+        // No discovered playlists — only smart playlists should be available
+
+        val items = service.buildHomeItems()
+
+        val playlistsTile = items.find { it.description.mediaId == "playlists" }
+        assertNotNull("Playlists tile should show when songs exist (smart playlists available)", playlistsTile)
+        assertEquals("Smart Playlists", playlistsTile!!.description.subtitle)
+    }
+
+    @Test
+    fun buildHomeItems_showsPlaylistsTileWithCountWhenUserPlaylistsExist() {
+        val service = Robolectric.buildService(MyMusicService::class.java).get()
+        service.mediaCacheService.addFile(
+            MediaFileInfo(
+                uriString = "content://test/song1",
+                displayName = "Song One.mp3",
+                sizeBytes = 1L,
+                title = "Song One"
+            )
+        )
+        service.mediaCacheService.addPlaylist(
+            PlaylistInfo(uriString = "content://test/playlist.m3u", displayName = "My Playlist.m3u")
+        )
+
+        val items = service.buildHomeItems()
+
+        val playlistsTile = items.find { it.description.mediaId == "playlists" }
+        assertNotNull(playlistsTile)
+        assertEquals("1 playlist", playlistsTile!!.description.subtitle)
+    }
+
+    @Test
+    fun buildHomeItems_hidesAllCategoriesWhenCacheEmpty() {
+        val service = Robolectric.buildService(MyMusicService::class.java).get()
+        // No files added
+
+        val items = service.buildHomeItems()
+
+        assertTrue("Home should be empty when no songs loaded", items.isEmpty())
     }
 
     @Test

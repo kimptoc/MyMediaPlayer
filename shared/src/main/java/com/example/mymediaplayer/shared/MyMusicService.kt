@@ -199,7 +199,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
     private lateinit var session: MediaSessionCompat
     private var mediaPlayer: MediaPlayer? = null
-    private val mediaCacheService = MediaCacheService()
+    internal val mediaCacheService = MediaCacheService()
     private val playlistService = PlaylistService()
     private var currentFileInfo: MediaFileInfo? = null
     private var currentMediaId: String? = null
@@ -2681,7 +2681,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }
     }
 
-    private fun buildHomeItems(): MutableList<MediaItem> {
+    internal fun buildHomeItems(): MutableList<MediaItem> {
         val items = mutableListOf<MediaItem>()
         val childListExtras = Bundle().apply {
             putInt(
@@ -2694,13 +2694,18 @@ class MyMusicService : MediaBrowserServiceCompat() {
             )
         }
         val playlistCount = mediaCacheService.discoveredPlaylists.size
-        if (playlistCount > 0) {
+        val songCount = mediaCacheService.cachedFiles.size
+        if (playlistCount > 0 || songCount > 0) {
+            val playlistSubtitle = if (playlistCount > 0)
+                "$playlistCount playlist${if (playlistCount != 1) "s" else ""}"
+            else
+                "Smart Playlists"
             items.add(
                 MediaItem(
                     MediaDescriptionCompat.Builder()
                         .setMediaId(PLAYLISTS_ID)
                         .setTitle("Playlists")
-                        .setSubtitle("$playlistCount playlist${if (playlistCount != 1) "s" else ""}")
+                        .setSubtitle(playlistSubtitle)
                         .setIconUri(resourceIconUri(R.drawable.ic_auto_playlists))
                         .setExtras(childListExtras)
                         .build(),
@@ -2709,7 +2714,6 @@ class MyMusicService : MediaBrowserServiceCompat() {
             )
         }
 
-        val songCount = mediaCacheService.cachedFiles.size
         if (songCount > 0) {
             ensureMetadataIndexes()
             val genreCount = mediaCacheService.genres().size
