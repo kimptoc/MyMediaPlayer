@@ -2226,6 +2226,7 @@ private fun ExpandedNowPlayingDialog(
     } else {
         projectedPositionMs.coerceAtLeast(0L)
     }
+    var isSeeking by remember { mutableStateOf(false) }
     var seekValueMs by remember(
         trackName,
         artistName,
@@ -2235,6 +2236,22 @@ private fun ExpandedNowPlayingDialog(
         isPlaying
     ) {
         mutableStateOf(clampedProjectedMs.toFloat())
+    }
+
+    // Continuously update progress while playing and user is not dragging the slider
+    LaunchedEffect(isPlaying, currentPositionMs, positionUpdatedAtElapsedMs, playbackSpeed) {
+        while (isPlaying && playbackSpeed > 0f) {
+            kotlinx.coroutines.delay(250L)
+            if (!isSeeking) {
+                val elapsed = (SystemClock.elapsedRealtime() - positionUpdatedAtElapsedMs).coerceAtLeast(0L)
+                val projected = currentPositionMs + (elapsed * playbackSpeed).toLong()
+                seekValueMs = if (durationSafe > 0L) {
+                    projected.coerceIn(0L, durationSafe).toFloat()
+                } else {
+                    projected.coerceAtLeast(0L).toFloat()
+                }
+            }
+        }
     }
 
     AlertDialog(
@@ -2258,9 +2275,15 @@ private fun ExpandedNowPlayingDialog(
                 if (durationSafe > 0L) {
                     Slider(
                         value = seekValueMs.coerceIn(0f, durationSafe.toFloat()),
-                        onValueChange = { seekValueMs = it },
+                        onValueChange = {
+                            isSeeking = true
+                            seekValueMs = it
+                        },
                         valueRange = 0f..durationSafe.toFloat(),
-                        onValueChangeFinished = { onSeekTo(seekValueMs.toLong()) }
+                        onValueChangeFinished = {
+                            isSeeking = false
+                            onSeekTo(seekValueMs.toLong())
+                        }
                     )
                     Row(
                         modifier = Modifier.fillMaxWidth(),
