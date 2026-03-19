@@ -1740,27 +1740,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
             playTrack(playlistQueue[currentQueueIndex])
             return
         }
-        val currentUri = currentFileInfo?.uriString
-        if (!currentUri.isNullOrBlank()) {
-            val fallbackList = mediaCacheService.cachedFiles
-            if (fallbackList.isNotEmpty()) {
-                val currentIndex = fallbackList.indexOfFirst { it.uriString == currentUri }
-                val nextIndex = if (currentIndex >= 0 && currentIndex < fallbackList.lastIndex) {
-                    currentIndex + 1
-                } else {
-                    -1
-                }
-                if (nextIndex >= 0) {
-                    playlistQueue = fallbackList
-                    currentQueueIndex = nextIndex
-                    currentPlaylistName = currentPlaylistName ?: "All Songs"
-                    updateSessionQueue()
-                    playTrack(playlistQueue[currentQueueIndex])
-                    return
-                }
-            }
-        }
         Log.w("MyMusicService", "Unable to recover playback error: $message")
+        updatePlaybackState(PlaybackStateCompat.STATE_ERROR, errorMessage = message)
         handleStop()
     }
 

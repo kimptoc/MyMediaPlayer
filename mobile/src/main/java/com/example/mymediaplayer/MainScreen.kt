@@ -203,6 +203,13 @@ fun MainScreen(
         }
     }
 
+    LaunchedEffect(uiState.playback.playbackError) {
+        val message = uiState.playback.playbackError
+        if (message != null) {
+            snackbarHostState.showSnackbar(message)
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(

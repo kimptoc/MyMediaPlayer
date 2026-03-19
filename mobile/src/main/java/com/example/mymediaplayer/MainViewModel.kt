@@ -30,6 +30,7 @@ data class ScanState(
 data class PlaybackState(
     val isPlaying: Boolean = false,
     val isPaused: Boolean = false,
+    val playbackError: String? = null,
     val currentTrackName: String? = null,
     val currentArtistName: String? = null,
     val currentAlbum: String? = null,
@@ -1079,7 +1080,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         positionMs: Long,
         positionUpdatedAtElapsedMs: Long,
         playbackSpeed: Float,
-        durationMs: Long
+        durationMs: Long,
+        errorMessage: String? = null
     ) {
         val current = _uiState.value
         var updatedPlayCounts = current.playCounts
@@ -1099,6 +1101,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             playback = current.playback.copy(
                 isPlaying = (state == PlaybackStateCompat.STATE_PLAYING),
                 isPaused = (state == PlaybackStateCompat.STATE_PAUSED),
+                playbackError = errorMessage,
                 currentTrackName = if (state == PlaybackStateCompat.STATE_STOPPED) null else trackName,
                 currentArtistName = if (state == PlaybackStateCompat.STATE_STOPPED) null else artistName,
                 currentAlbum = if (state == PlaybackStateCompat.STATE_STOPPED) null else album,

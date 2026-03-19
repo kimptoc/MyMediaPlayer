@@ -577,6 +577,9 @@ class MainActivity : ComponentActivity() {
         } else {
             0f
         }
+        val errorMessage = if (state == PlaybackStateCompat.STATE_ERROR) {
+            lastPlaybackState?.errorMessage?.toString()
+        } else null
         viewModel.updatePlaybackState(
             state = state,
             mediaId = mediaId,
@@ -588,7 +591,8 @@ class MainActivity : ComponentActivity() {
             positionMs = positionMs,
             positionUpdatedAtElapsedMs = updatedAtMs,
             playbackSpeed = speed,
-            durationMs = durationMs
+            durationMs = durationMs,
+            errorMessage = errorMessage
         )
     }
 
