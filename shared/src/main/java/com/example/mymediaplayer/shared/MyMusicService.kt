@@ -1042,6 +1042,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }
         val smartEntries = listOf(
             SMART_PLAYLIST_FAVORITES to "Favorites",
+            SMART_PLAYLIST_FLAGGED to "Flagged",
             SMART_PLAYLIST_RECENTLY_ADDED to "Recently Added",
             SMART_PLAYLIST_MOST_PLAYED to "Most Played",
             SMART_PLAYLIST_NOT_HEARD_RECENTLY to "Haven't Heard In A While"
@@ -2319,6 +2320,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 needle.contains("havent heard") ||
                 needle.contains("not heard") ||
                 needle.contains("unheard") -> SMART_PLAYLIST_NOT_HEARD_RECENTLY
+            needle.contains("flag") -> SMART_PLAYLIST_FLAGGED
             else -> null
         }
     }
@@ -2329,6 +2331,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
             SMART_PLAYLIST_RECENTLY_ADDED -> "Recently Added"
             SMART_PLAYLIST_MOST_PLAYED -> "Most Played"
             SMART_PLAYLIST_NOT_HEARD_RECENTLY -> "Haven't Heard In A While"
+            SMART_PLAYLIST_FLAGGED -> "Flagged"
             else -> smartId
         }
     }
@@ -2343,6 +2346,13 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     ?.toSet()
                     ?: emptySet()
                 all.filter { it.uriString in favorites }
+            }
+            SMART_PLAYLIST_FLAGGED -> {
+                val flagged = getPrefs(this@MyMusicService)
+                    .getStringSet(KEY_FLAGGED_URIS, emptySet())
+                    ?.toSet()
+                    ?: emptySet()
+                all.filter { it.uriString in flagged }
             }
             SMART_PLAYLIST_RECENTLY_ADDED -> {
                 all.sortedByDescending { it.addedAtMs ?: Long.MIN_VALUE }
