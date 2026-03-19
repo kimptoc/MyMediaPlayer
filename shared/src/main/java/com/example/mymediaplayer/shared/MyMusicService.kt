@@ -2577,11 +2577,13 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
         val albumArtBitmap = embeddedArtBitmap ?: loadPlaceholderArt()
 
+        val genre = runtimeMetadata?.genre ?: fileInfo.genre
         val builder = MediaMetadataCompat.Builder()
             .putString(MediaMetadataCompat.METADATA_KEY_MEDIA_ID, fileInfo.uriString)
             .putString(MediaMetadataCompat.METADATA_KEY_TITLE, title)
             .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, artist)
             .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, album)
+            .putString(MediaMetadataCompat.METADATA_KEY_GENRE, genre)
             .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, duration)
             .putLong(MediaMetadataCompat.METADATA_KEY_YEAR, year)
         albumArtBitmap?.let { bitmap ->

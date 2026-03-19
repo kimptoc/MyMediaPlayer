@@ -565,6 +565,9 @@ class MainActivity : ComponentActivity() {
         val mediaId = lastMetadata?.getString(MediaMetadataCompat.METADATA_KEY_MEDIA_ID)
         val trackName = lastMetadata?.getString(MediaMetadataCompat.METADATA_KEY_TITLE)
         val artistName = lastMetadata?.getString(MediaMetadataCompat.METADATA_KEY_ARTIST)
+        val album = lastMetadata?.getString(MediaMetadataCompat.METADATA_KEY_ALBUM)
+        val genre = lastMetadata?.getString(MediaMetadataCompat.METADATA_KEY_GENRE)
+        val year = lastMetadata?.getLong(MediaMetadataCompat.METADATA_KEY_YEAR) ?: 0L
         val durationMs = lastMetadata?.getLong(MediaMetadataCompat.METADATA_KEY_DURATION) ?: 0L
         val positionMs = (lastPlaybackState?.position ?: 0L).coerceAtLeast(0L)
         val updatedAtMs = (lastPlaybackState?.lastPositionUpdateTime ?: SystemClock.elapsedRealtime())
@@ -579,6 +582,9 @@ class MainActivity : ComponentActivity() {
             mediaId = mediaId,
             trackName = trackName,
             artistName = artistName,
+            album = album,
+            genre = genre,
+            year = year,
             positionMs = positionMs,
             positionUpdatedAtElapsedMs = updatedAtMs,
             playbackSpeed = speed,

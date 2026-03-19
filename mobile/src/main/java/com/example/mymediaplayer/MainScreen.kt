@@ -1121,6 +1121,9 @@ fun MainScreen(
         ExpandedNowPlayingDialog(
             trackName = uiState.playback.currentTrackName,
             artistName = uiState.playback.currentArtistName,
+            album = uiState.playback.currentAlbum,
+            genre = uiState.playback.currentGenre,
+            year = uiState.playback.currentYear,
             artwork = nowPlayingArt,
             currentPositionMs = uiState.playback.currentPositionMs,
             positionUpdatedAtElapsedMs = uiState.playback.positionUpdatedAtElapsedMs,
@@ -2217,6 +2220,9 @@ fun PlaybackBar(
 private fun ExpandedNowPlayingDialog(
     trackName: String,
     artistName: String?,
+    album: String?,
+    genre: String?,
+    year: Long,
     artwork: Bitmap?,
     currentPositionMs: Long,
     positionUpdatedAtElapsedMs: Long,
@@ -2275,6 +2281,14 @@ private fun ExpandedNowPlayingDialog(
                 Text(trackName, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 if (!artistName.isNullOrBlank()) {
                     Text(artistName, style = MaterialTheme.typography.bodySmall)
+                }
+                val details = listOfNotNull(
+                    album?.takeIf { it.isNotBlank() },
+                    genre?.takeIf { it.isNotBlank() },
+                    if (year > 0L) year.toString() else null
+                ).joinToString(" • ")
+                if (details.isNotEmpty()) {
+                    Text(details, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 if (durationSafe > 0L) {
                     Slider(
