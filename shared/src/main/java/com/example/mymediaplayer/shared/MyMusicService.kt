@@ -99,6 +99,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
         private const val SMART_PLAYLIST_RECENTLY_ADDED = "recently_added"
         private const val SMART_PLAYLIST_MOST_PLAYED = "most_played"
         private const val SMART_PLAYLIST_NOT_HEARD_RECENTLY = "not_heard_recently"
+        private const val KEY_FLAGGED_URIS = "flagged_uris"
+        private const val SMART_PLAYLIST_FLAGGED = "flagged"
+        private const val CUSTOM_ACTION_FLAG = "FLAG_TRACK"
 
         private const val ACTION_SET_MEDIA_FILES = "SET_MEDIA_FILES"
         private const val ACTION_REFRESH_LIBRARY = "REFRESH_LIBRARY"
@@ -525,6 +528,22 @@ class MyMusicService : MediaBrowserServiceCompat() {
                         .edit()
                         .putBoolean(KEY_DEBUG_CLOUD_ANNOUNCEMENTS, enabled)
                         .apply()
+                }
+                CUSTOM_ACTION_FLAG -> {
+                    val uri = currentFileInfo?.uriString ?: currentMediaId ?: return
+                    val prefs = getPrefs(this@MyMusicService)
+                    val flagged = prefs.getStringSet(KEY_FLAGGED_URIS, emptySet())
+                        ?.toMutableSet() ?: mutableSetOf()
+                    if (uri in flagged) {
+                        flagged.remove(uri)
+                    } else {
+                        flagged.add(uri)
+                    }
+                    prefs.edit().putStringSet(KEY_FLAGGED_URIS, flagged).apply()
+                    // Refresh playback state to toggle the icon
+                    val currentState = lastPlaybackState()?.state
+                        ?: PlaybackStateCompat.STATE_NONE
+                    updatePlaybackState(currentState)
                 }
             }
         }
@@ -1039,6 +1058,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }
         val smartEntries = listOf(
             SMART_PLAYLIST_FAVORITES to "Favorites",
+            SMART_PLAYLIST_FLAGGED to "Flagged",
             SMART_PLAYLIST_RECENTLY_ADDED to "Recently Added",
             SMART_PLAYLIST_MOST_PLAYED to "Most Played",
             SMART_PLAYLIST_NOT_HEARD_RECENTLY to "Haven't Heard In A While"
@@ -1720,27 +1740,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
             playTrack(playlistQueue[currentQueueIndex])
             return
         }
-        val currentUri = currentFileInfo?.uriString
-        if (!currentUri.isNullOrBlank()) {
-            val fallbackList = mediaCacheService.cachedFiles
-            if (fallbackList.isNotEmpty()) {
-                val currentIndex = fallbackList.indexOfFirst { it.uriString == currentUri }
-                val nextIndex = if (currentIndex >= 0 && currentIndex < fallbackList.lastIndex) {
-                    currentIndex + 1
-                } else {
-                    -1
-                }
-                if (nextIndex >= 0) {
-                    playlistQueue = fallbackList
-                    currentQueueIndex = nextIndex
-                    currentPlaylistName = currentPlaylistName ?: "All Songs"
-                    updateSessionQueue()
-                    playTrack(playlistQueue[currentQueueIndex])
-                    return
-                }
-            }
-        }
         Log.w("MyMusicService", "Unable to recover playback error: $message")
+        updatePlaybackState(PlaybackStateCompat.STATE_ERROR, errorMessage = message)
         handleStop()
     }
 
@@ -2316,6 +2317,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 needle.contains("havent heard") ||
                 needle.contains("not heard") ||
                 needle.contains("unheard") -> SMART_PLAYLIST_NOT_HEARD_RECENTLY
+            needle.contains("flag") -> SMART_PLAYLIST_FLAGGED
             else -> null
         }
     }
@@ -2326,6 +2328,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
             SMART_PLAYLIST_RECENTLY_ADDED -> "Recently Added"
             SMART_PLAYLIST_MOST_PLAYED -> "Most Played"
             SMART_PLAYLIST_NOT_HEARD_RECENTLY -> "Haven't Heard In A While"
+            SMART_PLAYLIST_FLAGGED -> "Flagged"
             else -> smartId
         }
     }
@@ -2340,6 +2343,13 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     ?.toSet()
                     ?: emptySet()
                 all.filter { it.uriString in favorites }
+            }
+            SMART_PLAYLIST_FLAGGED -> {
+                val flagged = getPrefs(this@MyMusicService)
+                    .getStringSet(KEY_FLAGGED_URIS, emptySet())
+                    ?.toSet()
+                    ?: emptySet()
+                all.filter { it.uriString in flagged }
             }
             SMART_PLAYLIST_RECENTLY_ADDED -> {
                 all.sortedByDescending { it.addedAtMs ?: Long.MIN_VALUE }
@@ -2443,29 +2453,44 @@ class MyMusicService : MediaBrowserServiceCompat() {
             canSeek = mediaPlayer != null
         )
 
-        playbackStateBuilder
+        val builder = PlaybackStateCompat.Builder()
             .setActions(playbackActions)
             .setState(state, position, speed, SystemClock.elapsedRealtime())
 
         if (state == PlaybackStateCompat.STATE_ERROR && errorMessage != null) {
-            playbackStateBuilder.setErrorMessage(
+            builder.setErrorMessage(
                 PlaybackStateCompat.ERROR_CODE_APP_ERROR,
                 errorMessage
             )
         } else {
-            playbackStateBuilder.setErrorMessage(
+            builder.setErrorMessage(
                 PlaybackStateCompat.ERROR_CODE_UNKNOWN_ERROR,
                 null
             )
         }
 
         if (playlistQueue.isNotEmpty() && currentQueueIndex >= 0) {
-            playbackStateBuilder.setActiveQueueItemId(currentQueueIndex.toLong())
+            builder.setActiveQueueItemId(currentQueueIndex.toLong())
         } else {
-            playbackStateBuilder.setActiveQueueItemId(PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN)
+            builder.setActiveQueueItemId(PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN)
         }
 
-        session.setPlaybackState(playbackStateBuilder.build())
+        // Add flag/unflag custom action for Android Auto
+        val currentUri = currentFileInfo?.uriString ?: currentMediaId
+        if (currentUri != null) {
+            val isFlagged = getPrefs(this@MyMusicService)
+                .getStringSet(KEY_FLAGGED_URIS, emptySet())
+                ?.contains(currentUri) == true
+            val flagIcon = if (isFlagged) R.drawable.ic_flag_filled else R.drawable.ic_flag
+            val flagLabel = if (isFlagged) "Unflag" else "Flag"
+            builder.addCustomAction(
+                PlaybackStateCompat.CustomAction.Builder(
+                    CUSTOM_ACTION_FLAG, flagLabel, flagIcon
+                ).build()
+            )
+        }
+
+        session.setPlaybackState(builder.build())
         updateNowPlayingNotification(state)
     }
 
@@ -2533,11 +2558,13 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
         val albumArtBitmap = embeddedArtBitmap ?: loadPlaceholderArt()
 
+        val genre = runtimeMetadata?.genre ?: fileInfo.genre
         val builder = MediaMetadataCompat.Builder()
             .putString(MediaMetadataCompat.METADATA_KEY_MEDIA_ID, fileInfo.uriString)
             .putString(MediaMetadataCompat.METADATA_KEY_TITLE, title)
             .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, artist)
             .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, album)
+            .putString(MediaMetadataCompat.METADATA_KEY_GENRE, genre)
             .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, duration)
             .putLong(MediaMetadataCompat.METADATA_KEY_YEAR, year)
         albumArtBitmap?.let { bitmap ->

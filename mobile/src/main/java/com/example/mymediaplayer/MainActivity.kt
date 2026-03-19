@@ -198,7 +198,7 @@ class MainActivity : ComponentActivity() {
                     .putBoolean(KEY_SCAN_WHOLE_DRIVE, false)
                     .apply()
                 viewModel.setTreeUri(it)
-                viewModel.onDirectorySelected(it, pendingScanLimit, deepScan = pendingDeepScan)
+                viewModel.onDirectorySelected(it, pendingScanLimit, deepScan = pendingDeepScan, forceRescan = true)
             }
         }
 
@@ -241,7 +241,7 @@ class MainActivity : ComponentActivity() {
                     .putInt(KEY_SCAN_LIMIT, limit)
                     .putBoolean(KEY_SCAN_WHOLE_DRIVE, true)
                     .apply()
-                viewModel.scanWholeDevice(limit)
+                viewModel.scanWholeDevice(limit, forceRescan = true)
             } else if (!granted) {
                 Toast.makeText(this, "Media permission denied", Toast.LENGTH_SHORT).show()
             }
@@ -284,7 +284,7 @@ class MainActivity : ComponentActivity() {
                                 .putInt(KEY_SCAN_LIMIT, limit)
                                 .putBoolean(KEY_SCAN_WHOLE_DRIVE, true)
                                 .apply()
-                            viewModel.scanWholeDevice(limit)
+                            viewModel.scanWholeDevice(limit, forceRescan = true)
                         } else {
                             pendingWholeDriveScanLimit = limit
                             requestMediaReadPermission.launch(requiredMediaReadPermission())
@@ -565,6 +565,9 @@ class MainActivity : ComponentActivity() {
         val mediaId = lastMetadata?.getString(MediaMetadataCompat.METADATA_KEY_MEDIA_ID)
         val trackName = lastMetadata?.getString(MediaMetadataCompat.METADATA_KEY_TITLE)
         val artistName = lastMetadata?.getString(MediaMetadataCompat.METADATA_KEY_ARTIST)
+        val album = lastMetadata?.getString(MediaMetadataCompat.METADATA_KEY_ALBUM)
+        val genre = lastMetadata?.getString(MediaMetadataCompat.METADATA_KEY_GENRE)
+        val year = lastMetadata?.getLong(MediaMetadataCompat.METADATA_KEY_YEAR) ?: 0L
         val durationMs = lastMetadata?.getLong(MediaMetadataCompat.METADATA_KEY_DURATION) ?: 0L
         val positionMs = (lastPlaybackState?.position ?: 0L).coerceAtLeast(0L)
         val updatedAtMs = (lastPlaybackState?.lastPositionUpdateTime ?: SystemClock.elapsedRealtime())
@@ -574,15 +577,22 @@ class MainActivity : ComponentActivity() {
         } else {
             0f
         }
+        val errorMessage = if (state == PlaybackStateCompat.STATE_ERROR) {
+            lastPlaybackState?.errorMessage?.toString()
+        } else null
         viewModel.updatePlaybackState(
             state = state,
             mediaId = mediaId,
             trackName = trackName,
             artistName = artistName,
+            album = album,
+            genre = genre,
+            year = year,
             positionMs = positionMs,
             positionUpdatedAtElapsedMs = updatedAtMs,
             playbackSpeed = speed,
-            durationMs = durationMs
+            durationMs = durationMs,
+            errorMessage = errorMessage
         )
     }
 
@@ -720,8 +730,17 @@ class MainActivity : ComponentActivity() {
         if (songs.isEmpty()) return
         sendFilesToServiceIfNeeded(viewModel.uiState.value.scan.scannedFiles)
         if (songs.size > MAX_MEDIA_FILES_FOR_BUNDLE) {
-            val target = if (shuffle) songs.random() else songs.first()
-            controller.transportControls.playFromMediaId(target.uriString, null)
+            // Too many songs for a Bundle — delegate to the service using its browse IDs
+            val prefix = if (shuffle) "action:shuffle:" else "action:play_all:"
+            val lib = viewModel.uiState.value.library
+            val browseId = when {
+                lib.selectedGenre != null -> "genre:${android.net.Uri.encode(lib.selectedGenre)}"
+                lib.selectedAlbum != null -> "album:${android.net.Uri.encode(lib.selectedAlbum)}"
+                lib.selectedArtist != null -> "artist:${android.net.Uri.encode(lib.selectedArtist)}"
+                lib.selectedDecade != null -> "decade:${android.net.Uri.encode(lib.selectedDecade)}"
+                else -> "songs"
+            }
+            controller.transportControls.playFromMediaId(prefix + browseId, null)
             return
         }
         val uris = songs.map { it.uriString }

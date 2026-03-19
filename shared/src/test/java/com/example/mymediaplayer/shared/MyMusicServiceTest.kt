@@ -290,13 +290,15 @@ class MyMusicServiceTest {
 
         val entries = service.playlistEntriesForBrowse(discovered)
 
-        assertEquals(6, entries.size)
+        assertEquals(7, entries.size)
         assertEquals("User One", entries[0].title)
         assertEquals("User Two", entries[1].title)
         assertTrue(entries[0].mediaId.startsWith("playlist:"))
         assertTrue(entries[1].mediaId.startsWith("playlist:"))
         assertEquals("Favorites", entries[2].title)
+        assertEquals("Flagged", entries[3].title)
         assertTrue(entries[2].mediaId.startsWith("smart_playlist:"))
+        assertTrue(entries[3].mediaId.startsWith("smart_playlist:"))
     }
 
     @Test
@@ -357,11 +359,12 @@ class MyMusicServiceTest {
 
         val entries = service.playlistEntriesForBrowse(emptyList())
 
-        assertEquals(4, entries.size)
+        assertEquals(5, entries.size)
         assertEquals("Favorites", entries[0].title)
-        assertEquals("Recently Added", entries[1].title)
-        assertEquals("Most Played", entries[2].title)
-        assertEquals("Haven't Heard In A While", entries[3].title)
+        assertEquals("Flagged", entries[1].title)
+        assertEquals("Recently Added", entries[2].title)
+        assertEquals("Most Played", entries[3].title)
+        assertEquals("Haven't Heard In A While", entries[4].title)
         assertNotNull(entries.firstOrNull { it.mediaId.endsWith("favorites") })
     }
 }

@@ -163,7 +163,8 @@ class MediaCacheService {
     private fun loadWholeDriveGenres(context: Context, audioIds: Set<Long>): Map<Long, String> {
         if (audioIds.isEmpty()) return emptyMap()
         val resolver = context.contentResolver
-        val genresByAudioId = mutableMapOf<Long, String>()
+        // Collect ALL genre assignments per audio ID, then pick the best one
+        val allGenresByAudioId = mutableMapOf<Long, MutableList<String>>()
         val genreProjection = arrayOf(
             MediaStore.Audio.Genres._ID,
             MediaStore.Audio.Genres.NAME
@@ -181,18 +182,30 @@ class MediaCacheService {
                 val genreId = genreCursor.getLong(genreIdIndex)
                 val genreName = genreCursor.getString(genreNameIndex)?.trim().orEmpty()
                 if (genreName.isBlank()) continue
-                processGenreMembers(resolver, genreId, genreName, audioIds, genresByAudioId)
+                collectGenreMembers(resolver, genreId, genreName, audioIds, allGenresByAudioId)
             }
         }
-        return genresByAudioId
+        // Pick genre per audio ID: only use MediaStore genre if all assignments
+        // bucket to the same category. When they conflict (e.g. "Country" + "Urban
+        // Crossover"), MediaStore data is unreliable — skip and fall back to path inference.
+        return allGenresByAudioId.mapNotNull { (audioId, genres) ->
+            val buckets = genres.map { bucketGenre(it) }.distinct()
+            if (buckets.size == 1) {
+                // All genres agree on bucket — use the first raw genre name
+                audioId to genres.first()
+            } else {
+                // Conflicting buckets — don't trust MediaStore for this track
+                null
+            }
+        }.toMap()
     }
 
-    private fun processGenreMembers(
+    private fun collectGenreMembers(
         resolver: android.content.ContentResolver,
         genreId: Long,
         genreName: String,
         audioIds: Set<Long>,
-        genresByAudioId: MutableMap<Long, String>
+        allGenresByAudioId: MutableMap<Long, MutableList<String>>
     ) {
         val membersUri = MediaStore.Audio.Genres.Members.getContentUri("external", genreId)
         resolver.query(
@@ -206,9 +219,7 @@ class MediaCacheService {
             while (membersCursor.moveToNext()) {
                 val audioId = membersCursor.getLong(audioIdIndex)
                 if (audioId !in audioIds) continue
-                if (genresByAudioId[audioId].isNullOrBlank()) {
-                    genresByAudioId[audioId] = genreName
-                }
+                allGenresByAudioId.getOrPut(audioId) { mutableListOf() }.add(genreName)
             }
         }
     }
@@ -239,6 +250,7 @@ class MediaCacheService {
         synchronized(cacheLock) {
             for (i in _cachedFiles.indices) {
                 val file = _cachedFiles[i]
+                if (!file.genre.isNullOrBlank()) continue // prefer ID3 tag genre
                 val audioId = audioIdByName[file.displayName] ?: continue
                 val genre = genresByAudioId[audioId] ?: continue
                 _cachedFiles[i] = file.copy(genre = normalizeGenre(genre))

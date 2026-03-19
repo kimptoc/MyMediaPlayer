@@ -146,14 +146,14 @@ class MainViewModelTest {
         val viewModel = MainViewModel(app)
 
         viewModel.updatePlaybackState(
-            PlaybackStateCompat.STATE_PLAYING,
-            "content://test/song1",
-            "Song One",
-            "Artist One",
-            10_000L,
-            1_000L,
-            1f,
-            180_000L
+            state = PlaybackStateCompat.STATE_PLAYING,
+            mediaId = "content://test/song1",
+            trackName = "Song One",
+            artistName = "Artist One",
+            positionMs = 10_000L,
+            positionUpdatedAtElapsedMs = 1_000L,
+            playbackSpeed = 1f,
+            durationMs = 180_000L
         )
         val state = viewModel.uiState.value
 
