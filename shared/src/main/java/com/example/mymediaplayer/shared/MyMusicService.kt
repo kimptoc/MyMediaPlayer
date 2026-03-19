@@ -442,6 +442,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     notifyChildrenChanged(ROOT_ID)
                     notifyChildrenChanged(HOME_ID)
                     notifyChildrenChanged(SONGS_ID)
+                    notifyChildrenChanged(PLAYLISTS_ID)
                     notifyChildrenChanged(ALBUMS_ID)
                     notifyChildrenChanged(GENRES_ID)
                     notifyChildrenChanged(ARTISTS_ID)
