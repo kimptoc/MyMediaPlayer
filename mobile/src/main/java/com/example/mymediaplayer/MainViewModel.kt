@@ -8,6 +8,7 @@ import com.example.mymediaplayer.shared.MediaCacheService
 import com.example.mymediaplayer.shared.MediaFileInfo
 import com.example.mymediaplayer.shared.PlaylistInfo
 import com.example.mymediaplayer.shared.PlaylistService
+import android.provider.MediaStore
 import android.support.v4.media.session.PlaybackStateCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -315,6 +316,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         viewModelScope.launch(Dispatchers.IO) {
+            if (!forceRescan) {
+                val wholeDeviceUri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+                val persisted =
+                    mediaCacheService.loadPersistedCache(getApplication(), wholeDeviceUri, maxFiles)
+                if (persisted != null) {
+                    scanCache[key] = persisted.files to persisted.playlists
+                    _uiState.value = resetAfterScan(
+                        persisted.files,
+                        persisted.playlists,
+                        maxFiles,
+                        deepScan = false,
+                        scanMessage = "Whole-drive scan loaded from cache"
+                    )
+                    reimportPlaylistsFromSaveFolderIfNeeded()
+                    metadataKey = null
+                    return@launch
+                }
+            }
             val current = _uiState.value
             _uiState.value = current.copy(
                 scan = current.scan.copy(
@@ -348,6 +367,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val files = mediaCacheService.cachedFiles
             val playlists = mediaCacheService.discoveredPlaylists
             scanCache[key] = files to playlists
+            mediaCacheService.persistCache(
+                getApplication(),
+                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                maxFiles
+            )
             val seconds = stats.durationMs / 1000.0
             val typeSummary = stats.extensionCounts.entries
                 .sortedByDescending { it.value }
