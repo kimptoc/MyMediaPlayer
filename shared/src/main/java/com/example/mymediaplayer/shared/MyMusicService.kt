@@ -1780,23 +1780,25 @@ class MyMusicService : MediaBrowserServiceCompat() {
         savePlaybackSnapshot(positionMsOverride = 0L)
     }
 
-    private fun refreshQueueMetadata() {
+    private suspend fun refreshQueueMetadata() {
         if (playlistQueue.isEmpty()) return
         val byUri = mediaCacheService.getFileIndexByUri()
-        var changed = false
-        playlistQueue = playlistQueue.map { fileInfo ->
-            val cached = byUri[fileInfo.uriString]
-            if (cached != null && cached.title != fileInfo.title) {
-                changed = true
-                cached
-            } else {
-                fileInfo
+        playMutex.withLock {
+            var changed = false
+            playlistQueue = playlistQueue.map { fileInfo ->
+                val cached = byUri[fileInfo.uriString]
+                if (cached != null && cached.title != fileInfo.title) {
+                    changed = true
+                    cached
+                } else {
+                    fileInfo
+                }
             }
-        }
-        if (changed) {
-            currentFileInfo = playlistQueue.getOrNull(currentQueueIndex) ?: currentFileInfo
-            updateSessionQueue()
-            currentFileInfo?.let { updateMetadata(it) }
+            if (changed) {
+                currentFileInfo = playlistQueue.getOrNull(currentQueueIndex) ?: currentFileInfo
+                updateSessionQueue()
+                currentFileInfo?.let { updateMetadata(it) }
+            }
         }
     }
 
