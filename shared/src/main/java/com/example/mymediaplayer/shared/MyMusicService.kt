@@ -99,6 +99,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
         private const val SMART_PLAYLIST_RECENTLY_ADDED = "recently_added"
         private const val SMART_PLAYLIST_MOST_PLAYED = "most_played"
         private const val SMART_PLAYLIST_NOT_HEARD_RECENTLY = "not_heard_recently"
+        private const val KEY_FLAGGED_URIS = "flagged_uris"
+        private const val SMART_PLAYLIST_FLAGGED = "flagged"
+        private const val CUSTOM_ACTION_FLAG = "FLAG_TRACK"
 
         private const val ACTION_SET_MEDIA_FILES = "SET_MEDIA_FILES"
         private const val ACTION_REFRESH_LIBRARY = "REFRESH_LIBRARY"
