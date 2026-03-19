@@ -206,7 +206,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (!forceRescan && !deepScan) {
                 val persisted =
                     mediaCacheService.loadPersistedCache(getApplication(), treeUri, maxFiles)
-                if (persisted != null) {
+                if (persisted != null && persisted.files.isNotEmpty()) {
                     scanCache[key] = persisted.files to persisted.playlists
                     _uiState.value = resetAfterScan(
                         persisted.files,
@@ -320,7 +320,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val wholeDeviceUri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
                 val persisted =
                     mediaCacheService.loadPersistedCache(getApplication(), wholeDeviceUri, maxFiles)
-                if (persisted != null) {
+                if (persisted != null && persisted.files.isNotEmpty()) {
                     scanCache[key] = persisted.files to persisted.playlists
                     _uiState.value = resetAfterScan(
                         persisted.files,
