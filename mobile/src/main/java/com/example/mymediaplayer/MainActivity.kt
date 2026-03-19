@@ -198,7 +198,7 @@ class MainActivity : ComponentActivity() {
                     .putBoolean(KEY_SCAN_WHOLE_DRIVE, false)
                     .apply()
                 viewModel.setTreeUri(it)
-                viewModel.onDirectorySelected(it, pendingScanLimit, deepScan = pendingDeepScan)
+                viewModel.onDirectorySelected(it, pendingScanLimit, deepScan = pendingDeepScan, forceRescan = true)
             }
         }
 
@@ -241,7 +241,7 @@ class MainActivity : ComponentActivity() {
                     .putInt(KEY_SCAN_LIMIT, limit)
                     .putBoolean(KEY_SCAN_WHOLE_DRIVE, true)
                     .apply()
-                viewModel.scanWholeDevice(limit)
+                viewModel.scanWholeDevice(limit, forceRescan = true)
             } else if (!granted) {
                 Toast.makeText(this, "Media permission denied", Toast.LENGTH_SHORT).show()
             }
@@ -284,7 +284,7 @@ class MainActivity : ComponentActivity() {
                                 .putInt(KEY_SCAN_LIMIT, limit)
                                 .putBoolean(KEY_SCAN_WHOLE_DRIVE, true)
                                 .apply()
-                            viewModel.scanWholeDevice(limit)
+                            viewModel.scanWholeDevice(limit, forceRescan = true)
                         } else {
                             pendingWholeDriveScanLimit = limit
                             requestMediaReadPermission.launch(requiredMediaReadPermission())
