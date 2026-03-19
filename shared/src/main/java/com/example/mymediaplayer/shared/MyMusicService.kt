@@ -1225,7 +1225,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         serviceScope.launch {
             try {
                 val persisted = mediaCacheService.loadPersistedCache(this@MyMusicService, uri, limit)
-                if (persisted != null) {
+                if (persisted != null && persisted.files.isNotEmpty()) {
                     mediaCacheService.buildAlbumArtistIndexesFromCache()
                 } else {
                     var lastNotify = 0
@@ -1251,6 +1251,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 }
             } finally {
                 isScanning = false
+                refreshQueueMetadata()
                 deliverPendingResults()
                 notifyChildrenChanged(ROOT_ID)
                 notifyChildrenChanged(HOME_ID)
@@ -1777,6 +1778,26 @@ class MyMusicService : MediaBrowserServiceCompat() {
             handleStop()
         }
         savePlaybackSnapshot(positionMsOverride = 0L)
+    }
+
+    private fun refreshQueueMetadata() {
+        if (playlistQueue.isEmpty()) return
+        val byUri = mediaCacheService.getFileIndexByUri()
+        var changed = false
+        playlistQueue = playlistQueue.map { fileInfo ->
+            val cached = byUri[fileInfo.uriString]
+            if (cached != null && cached.title != fileInfo.title) {
+                changed = true
+                cached
+            } else {
+                fileInfo
+            }
+        }
+        if (changed) {
+            currentFileInfo = playlistQueue.getOrNull(currentQueueIndex) ?: currentFileInfo
+            updateSessionQueue()
+            currentFileInfo?.let { updateMetadata(it) }
+        }
     }
 
     private fun updateSessionQueue() {
