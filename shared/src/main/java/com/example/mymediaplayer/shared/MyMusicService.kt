@@ -529,6 +529,22 @@ class MyMusicService : MediaBrowserServiceCompat() {
                         .putBoolean(KEY_DEBUG_CLOUD_ANNOUNCEMENTS, enabled)
                         .apply()
                 }
+                CUSTOM_ACTION_FLAG -> {
+                    val uri = currentFileInfo?.uriString ?: currentMediaId ?: return
+                    val prefs = getPrefs(this@MyMusicService)
+                    val flagged = prefs.getStringSet(KEY_FLAGGED_URIS, emptySet())
+                        ?.toMutableSet() ?: mutableSetOf()
+                    if (uri in flagged) {
+                        flagged.remove(uri)
+                    } else {
+                        flagged.add(uri)
+                    }
+                    prefs.edit().putStringSet(KEY_FLAGGED_URIS, flagged).apply()
+                    // Refresh playback state to toggle the icon
+                    val currentState = lastPlaybackState()?.state
+                        ?: PlaybackStateCompat.STATE_NONE
+                    updatePlaybackState(currentState)
+                }
             }
         }
     }
@@ -2456,29 +2472,44 @@ class MyMusicService : MediaBrowserServiceCompat() {
             canSeek = mediaPlayer != null
         )
 
-        playbackStateBuilder
+        val builder = PlaybackStateCompat.Builder()
             .setActions(playbackActions)
             .setState(state, position, speed, SystemClock.elapsedRealtime())
 
         if (state == PlaybackStateCompat.STATE_ERROR && errorMessage != null) {
-            playbackStateBuilder.setErrorMessage(
+            builder.setErrorMessage(
                 PlaybackStateCompat.ERROR_CODE_APP_ERROR,
                 errorMessage
             )
         } else {
-            playbackStateBuilder.setErrorMessage(
+            builder.setErrorMessage(
                 PlaybackStateCompat.ERROR_CODE_UNKNOWN_ERROR,
                 null
             )
         }
 
         if (playlistQueue.isNotEmpty() && currentQueueIndex >= 0) {
-            playbackStateBuilder.setActiveQueueItemId(currentQueueIndex.toLong())
+            builder.setActiveQueueItemId(currentQueueIndex.toLong())
         } else {
-            playbackStateBuilder.setActiveQueueItemId(PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN)
+            builder.setActiveQueueItemId(PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN)
         }
 
-        session.setPlaybackState(playbackStateBuilder.build())
+        // Add flag/unflag custom action for Android Auto
+        val currentUri = currentFileInfo?.uriString ?: currentMediaId
+        if (currentUri != null) {
+            val isFlagged = getPrefs(this@MyMusicService)
+                .getStringSet(KEY_FLAGGED_URIS, emptySet())
+                ?.contains(currentUri) == true
+            val flagIcon = if (isFlagged) R.drawable.ic_flag_filled else R.drawable.ic_flag
+            val flagLabel = if (isFlagged) "Unflag" else "Flag"
+            builder.addCustomAction(
+                PlaybackStateCompat.CustomAction.Builder(
+                    CUSTOM_ACTION_FLAG, flagLabel, flagIcon
+                ).build()
+            )
+        }
+
+        session.setPlaybackState(builder.build())
         updateNowPlayingNotification(state)
     }
 
