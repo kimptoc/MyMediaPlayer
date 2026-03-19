@@ -1217,43 +1217,37 @@ class MyMusicService : MediaBrowserServiceCompat() {
             parsed
         }
 
+        // Set isScanning BEFORE launching the coroutine so that any onLoadChildren
+        // calls during the loading window are queued in pendingResults and delivered
+        // properly once data is ready — rather than returning empty results immediately.
+        isScanning = true
         serviceScope.launch {
-            val persisted = mediaCacheService.loadPersistedCache(this@MyMusicService, uri, limit)
-            if (persisted != null) {
-                mediaCacheService.buildAlbumArtistIndexesFromCache()
-                deliverPendingResults()
-                notifyChildrenChanged(ROOT_ID)
-                notifyChildrenChanged(HOME_ID)
-                notifyChildrenChanged(SONGS_ID)
-                notifyChildrenChanged(PLAYLISTS_ID)
-                notifyChildrenChanged(ALBUMS_ID)
-                notifyChildrenChanged(GENRES_ID)
-                notifyChildrenChanged(ARTISTS_ID)
-                notifyChildrenChanged(DECADES_ID)
-                return@launch
-            }
-            isScanning = true
             try {
-                var lastNotify = 0
-                val progress: (Int, Int) -> Unit = { songsFound, _ ->
-                    if (songsFound - lastNotify >= 200) {
-                        lastNotify = songsFound
-                        notifyChildrenChanged(SONGS_ALL_ID)
-                    }
-                }
-                if (wholeDriveMode) {
-                    mediaCacheService.scanWholeDevice(this@MyMusicService, limit, progress)
+                val persisted = mediaCacheService.loadPersistedCache(this@MyMusicService, uri, limit)
+                if (persisted != null) {
+                    mediaCacheService.buildAlbumArtistIndexesFromCache()
                 } else {
-                    mediaCacheService.scanDirectory(
-                        this@MyMusicService,
-                        uri,
-                        limit,
-                        onProgress = progress
-                    )
-                    mediaCacheService.enrichGenresFromMediaStore(this@MyMusicService)
+                    var lastNotify = 0
+                    val progress: (Int, Int) -> Unit = { songsFound, _ ->
+                        if (songsFound - lastNotify >= 200) {
+                            lastNotify = songsFound
+                            notifyChildrenChanged(SONGS_ALL_ID)
+                        }
+                    }
+                    if (wholeDriveMode) {
+                        mediaCacheService.scanWholeDevice(this@MyMusicService, limit, progress)
+                    } else {
+                        mediaCacheService.scanDirectory(
+                            this@MyMusicService,
+                            uri,
+                            limit,
+                            onProgress = progress
+                        )
+                        mediaCacheService.enrichGenresFromMediaStore(this@MyMusicService)
+                    }
+                    mediaCacheService.buildAlbumArtistIndexesFromCache()
+                    mediaCacheService.persistCache(this@MyMusicService, uri, limit)
                 }
-                mediaCacheService.buildAlbumArtistIndexesFromCache()
-                mediaCacheService.persistCache(this@MyMusicService, uri, limit)
             } finally {
                 isScanning = false
                 deliverPendingResults()
