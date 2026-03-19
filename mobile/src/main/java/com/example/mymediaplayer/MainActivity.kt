@@ -730,8 +730,17 @@ class MainActivity : ComponentActivity() {
         if (songs.isEmpty()) return
         sendFilesToServiceIfNeeded(viewModel.uiState.value.scan.scannedFiles)
         if (songs.size > MAX_MEDIA_FILES_FOR_BUNDLE) {
-            val target = if (shuffle) songs.random() else songs.first()
-            controller.transportControls.playFromMediaId(target.uriString, null)
+            // Too many songs for a Bundle — delegate to the service using its browse IDs
+            val prefix = if (shuffle) "action:shuffle:" else "action:play_all:"
+            val lib = viewModel.uiState.value.library
+            val browseId = when {
+                lib.selectedGenre != null -> "genre:${android.net.Uri.encode(lib.selectedGenre)}"
+                lib.selectedAlbum != null -> "album:${android.net.Uri.encode(lib.selectedAlbum)}"
+                lib.selectedArtist != null -> "artist:${android.net.Uri.encode(lib.selectedArtist)}"
+                lib.selectedDecade != null -> "decade:${android.net.Uri.encode(lib.selectedDecade)}"
+                else -> "songs"
+            }
+            controller.transportControls.playFromMediaId(prefix + browseId, null)
             return
         }
         val uris = songs.map { it.uriString }

@@ -185,10 +185,19 @@ class MediaCacheService {
                 collectGenreMembers(resolver, genreId, genreName, audioIds, allGenresByAudioId)
             }
         }
-        // Pick best genre per audio ID: prefer non-"Other" bucket, then most specific name
-        return allGenresByAudioId.mapValues { (_, genres) ->
-            genres.sortedBy { if (bucketGenre(it) == "Other") 1 else 0 }.first()
-        }
+        // Pick genre per audio ID: only use MediaStore genre if all assignments
+        // bucket to the same category. When they conflict (e.g. "Country" + "Urban
+        // Crossover"), MediaStore data is unreliable — skip and fall back to path inference.
+        return allGenresByAudioId.mapNotNull { (audioId, genres) ->
+            val buckets = genres.map { bucketGenre(it) }.distinct()
+            if (buckets.size == 1) {
+                // All genres agree on bucket — use the first raw genre name
+                audioId to genres.first()
+            } else {
+                // Conflicting buckets — don't trust MediaStore for this track
+                null
+            }
+        }.toMap()
     }
 
     private fun collectGenreMembers(
