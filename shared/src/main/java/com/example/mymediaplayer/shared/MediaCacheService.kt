@@ -239,6 +239,7 @@ class MediaCacheService {
         synchronized(cacheLock) {
             for (i in _cachedFiles.indices) {
                 val file = _cachedFiles[i]
+                if (!file.genre.isNullOrBlank()) continue // prefer ID3 tag genre
                 val audioId = audioIdByName[file.displayName] ?: continue
                 val genre = genresByAudioId[audioId] ?: continue
                 _cachedFiles[i] = file.copy(genre = normalizeGenre(genre))
