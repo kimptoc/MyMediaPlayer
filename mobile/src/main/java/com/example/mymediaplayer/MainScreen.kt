@@ -400,70 +400,27 @@ fun MainScreen(
                         onToggleFavorite = onToggleFavorite
                     )
                 } else {
-                    val selectedSearchResults = visibleSearchResults.filter {
-                        it.uriString in selectedSearchUris
-                    }
-                    LazyRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        item {
-                            TextButton(onClick = { searchFavoritesOnly = !searchFavoritesOnly }) {
-                                Text(if (searchFavoritesOnly) "All results" else "Favorites only")
-                            }
+                    SearchResultsActionRow(
+                        searchFavoritesOnly = searchFavoritesOnly,
+                        onToggleSearchFavoritesOnly = { searchFavoritesOnly = !searchFavoritesOnly },
+                        visibleSearchResults = visibleSearchResults,
+                        onAddAll = {
+                            pendingAddFiles = it
+                            showAddToPlaylistDialog = true
+                        },
+                        isSearchSelectionMode = isSearchSelectionMode,
+                        onToggleSearchSelectionMode = {
+                            isSearchSelectionMode = !isSearchSelectionMode
+                            if (!isSearchSelectionMode) selectedSearchUris = emptySet()
+                        },
+                        selectedSearchUris = selectedSearchUris,
+                        onSelectAll = { selectedSearchUris = it },
+                        onClearSelection = { selectedSearchUris = emptySet() },
+                        onAddSelected = {
+                            pendingAddFiles = it
+                            showAddToPlaylistDialog = true
                         }
-                        item {
-                            TextButton(
-                                onClick = {
-                                    pendingAddFiles = visibleSearchResults
-                                    showAddToPlaylistDialog = true
-                                }
-                            ) {
-                                Text("Add all")
-                            }
-                        }
-                        item {
-                            TextButton(
-                                onClick = {
-                                    isSearchSelectionMode = !isSearchSelectionMode
-                                    if (!isSearchSelectionMode) selectedSearchUris = emptySet()
-                                }
-                            ) {
-                                Text(if (isSearchSelectionMode) "Cancel selection" else "Select")
-                            }
-                        }
-                        if (isSearchSelectionMode) {
-                            item {
-                                TextButton(
-                                    onClick = {
-                                        selectedSearchUris = visibleSearchResults.map { it.uriString }.toSet()
-                                    },
-                                    enabled = selectedSearchResults.size < visibleSearchResults.size
-                                ) {
-                                    Text("Select all")
-                                }
-                            }
-                            item {
-                                TextButton(
-                                    onClick = { selectedSearchUris = emptySet() },
-                                    enabled = selectedSearchResults.isNotEmpty()
-                                ) {
-                                    Text("Clear selection")
-                                }
-                            }
-                            item {
-                                TextButton(
-                                    onClick = {
-                                        pendingAddFiles = selectedSearchResults
-                                        showAddToPlaylistDialog = true
-                                    },
-                                    enabled = selectedSearchResults.isNotEmpty()
-                                ) {
-                                    Text("Add selected (${selectedSearchResults.size})")
-                                }
-                            }
-                        }
-                    }
+                    )
                     SongsListSection(
                         title = "Search Results (${visibleSearchResults.size})",
                         songs = visibleSearchResults,
@@ -1597,6 +1554,77 @@ private fun AlbumSearchResultsSection(
                             Text("Add album")
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SearchResultsActionRow(
+    searchFavoritesOnly: Boolean,
+    onToggleSearchFavoritesOnly: () -> Unit,
+    visibleSearchResults: List<MediaFileInfo>,
+    onAddAll: (List<MediaFileInfo>) -> Unit,
+    isSearchSelectionMode: Boolean,
+    onToggleSearchSelectionMode: () -> Unit,
+    selectedSearchUris: Set<String>,
+    onSelectAll: (Set<String>) -> Unit,
+    onClearSelection: () -> Unit,
+    onAddSelected: (List<MediaFileInfo>) -> Unit
+) {
+    val selectedSearchResults = visibleSearchResults.filter {
+        it.uriString in selectedSearchUris
+    }
+
+    LazyRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        item {
+            TextButton(onClick = onToggleSearchFavoritesOnly) {
+                Text(if (searchFavoritesOnly) "All results" else "Favorites only")
+            }
+        }
+        item {
+            TextButton(
+                onClick = { onAddAll(visibleSearchResults) }
+            ) {
+                Text("Add all")
+            }
+        }
+        item {
+            TextButton(
+                onClick = onToggleSearchSelectionMode
+            ) {
+                Text(if (isSearchSelectionMode) "Cancel selection" else "Select")
+            }
+        }
+        if (isSearchSelectionMode) {
+            item {
+                TextButton(
+                    onClick = {
+                        onSelectAll(visibleSearchResults.map { it.uriString }.toSet())
+                    },
+                    enabled = selectedSearchResults.size < visibleSearchResults.size
+                ) {
+                    Text("Select all")
+                }
+            }
+            item {
+                TextButton(
+                    onClick = onClearSelection,
+                    enabled = selectedSearchResults.isNotEmpty()
+                ) {
+                    Text("Clear selection")
+                }
+            }
+            item {
+                TextButton(
+                    onClick = { onAddSelected(selectedSearchResults) },
+                    enabled = selectedSearchResults.isNotEmpty()
+                ) {
+                    Text("Add selected (${selectedSearchResults.size})")
                 }
             }
         }
