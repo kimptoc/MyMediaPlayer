@@ -906,42 +906,38 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 treeUri
             )
             val current = _uiState.value
-            if (success) {
-                val updatedPlaylists = sortPlaylists(current.scan.discoveredPlaylists.filterNot {
-                    it.uriString == playlist.uriString
-                })
-                val key = treeUri?.let { "${it}|${current.scan.lastScanLimit}" }
-                if (key != null) {
-                    val cached = scanCache[key]
-                    if (cached != null) {
-                        scanCache[key] = cached.first to updatedPlaylists
-                    }
-                }
-                mediaCacheService.removePlaylistByUri(playlist.uriString)
-                _uiState.value = current.copy(
-                    scan = current.scan.copy(discoveredPlaylists = updatedPlaylists),
-                    playlist = current.playlist.copy(
-                        selectedPlaylist = if (current.playlist.selectedPlaylist?.uriString == playlist.uriString) {
-                            null
-                        } else {
-                            current.playlist.selectedPlaylist
-                        },
-                        playlistSongs = if (current.playlist.selectedPlaylist?.uriString == playlist.uriString) {
-                            emptyList()
-                        } else {
-                            current.playlist.playlistSongs
-                        },
-                        playlistMessage = "Deleted ${playlist.displayName.removeSuffix(".m3u")}"
-                    )
-                )
-                treeUri?.let { tree ->
-                    val limit = current.scan.lastScanLimit
-                    mediaCacheService.persistCache(getApplication(), tree, limit)
-                }
-            } else {
+            if (!success) {
                 _uiState.value = current.copy(
                     playlist = current.playlist.copy(playlistMessage = "Failed to delete playlist")
                 )
+                return@launch
+            }
+
+            val updatedPlaylists = sortPlaylists(current.scan.discoveredPlaylists.filterNot {
+                it.uriString == playlist.uriString
+            })
+            val key = treeUri?.let { "${it}|${current.scan.lastScanLimit}" }
+            if (key != null) {
+                val cached = scanCache[key]
+                if (cached != null) {
+                    scanCache[key] = cached.first to updatedPlaylists
+                }
+            }
+            mediaCacheService.removePlaylistByUri(playlist.uriString)
+
+            val isSelectedPlaylist = current.playlist.selectedPlaylist?.uriString == playlist.uriString
+
+            _uiState.value = current.copy(
+                scan = current.scan.copy(discoveredPlaylists = updatedPlaylists),
+                playlist = current.playlist.copy(
+                    selectedPlaylist = if (isSelectedPlaylist) null else current.playlist.selectedPlaylist,
+                    playlistSongs = if (isSelectedPlaylist) emptyList() else current.playlist.playlistSongs,
+                    playlistMessage = "Deleted ${playlist.displayName.removeSuffix(".m3u")}"
+                )
+            )
+            treeUri?.let { tree ->
+                val limit = current.scan.lastScanLimit
+                mediaCacheService.persistCache(getApplication(), tree, limit)
             }
         }
     }
