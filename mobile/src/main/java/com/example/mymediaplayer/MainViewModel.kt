@@ -197,8 +197,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val cached = scanCache[key]
             if (cached != null) {
                 mediaCacheService.clearCache()
-                cached.first.forEach { mediaCacheService.addFile(it) }
-                cached.second.forEach { mediaCacheService.addPlaylist(it) }
+                mediaCacheService.addAllFiles(cached.first)
+                mediaCacheService.addAllPlaylists(cached.second)
                 _uiState.value = resetAfterScan(cached.first, cached.second, maxFiles, deepScan)
                 reimportPlaylistsFromSaveFolderIfNeeded()
                 metadataKey = null
@@ -304,8 +304,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val cached = scanCache[key]
             if (cached != null) {
                 mediaCacheService.clearCache()
-                cached.first.forEach { mediaCacheService.addFile(it) }
-                cached.second.forEach { mediaCacheService.addPlaylist(it) }
+                mediaCacheService.addAllFiles(cached.first)
+                mediaCacheService.addAllPlaylists(cached.second)
                 _uiState.value = resetAfterScan(
                     cached.first,
                     cached.second,
@@ -416,7 +416,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val current = _uiState.value
             val merged = sortPlaylists((current.scan.discoveredPlaylists + imported).distinctBy { it.uriString })
             mediaCacheService.clearPlaylists()
-            merged.forEach { mediaCacheService.addPlaylist(it) }
+            mediaCacheService.addAllPlaylists(merged)
             _uiState.value = current.copy(
                 scan = current.scan.copy(discoveredPlaylists = merged),
                 playlist = current.playlist.copy(
