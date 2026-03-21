@@ -290,42 +290,14 @@ class MainActivity : ComponentActivity() {
                             requestMediaReadPermission.launch(requiredMediaReadPermission())
                         }
                     },
-                    onFileClick = { file ->
-                        sendFilesToServiceIfNeeded(uiState.value.scan.scannedFiles)
-                        mediaController?.transportControls?.playFromMediaId(file.uriString, null)
-                    },
-                    onPlayPause = {
-                        val isPlaying = uiState.value.playback.isPlaying
-                        if (isPlaying) {
-                            mediaController?.transportControls?.pause()
-                        } else {
-                            mediaController?.transportControls?.play()
-                        }
-                    },
-                    onStop = {
-                        mediaController?.transportControls?.stop()
-                    },
-                    onNext = {
-                        mediaController?.transportControls?.skipToNext()
-                    },
-                    onPrev = {
-                        mediaController?.transportControls?.skipToPrevious()
-                    },
-                    onToggleRepeat = {
-                        val current = uiState.value.playback.repeatMode
-                        val next = when (current) {
-                            PlaybackStateCompat.REPEAT_MODE_ALL -> PlaybackStateCompat.REPEAT_MODE_ONE
-                            PlaybackStateCompat.REPEAT_MODE_ONE -> PlaybackStateCompat.REPEAT_MODE_NONE
-                            else -> PlaybackStateCompat.REPEAT_MODE_ALL
-                        }
-                        mediaController?.transportControls?.setRepeatMode(next)
-                    },
-                    onQueueItemSelected = { queueId ->
-                        mediaController?.transportControls?.skipToQueueItem(queueId)
-                    },
-                    onSeekTo = { positionMs ->
-                        mediaController?.transportControls?.seekTo(positionMs)
-                    },
+                    onFileClick = { file -> playFile(file, uiState.value.scan.scannedFiles) },
+                    onPlayPause = { togglePlayPause(uiState.value.playback.isPlaying) },
+                    onStop = { stopPlayback() },
+                    onNext = { skipToNext() },
+                    onPrev = { skipToPrevious() },
+                    onToggleRepeat = { toggleRepeatMode(uiState.value.playback.repeatMode) },
+                    onQueueItemSelected = { queueId -> skipToQueueItem(queueId) },
+                    onSeekTo = { positionMs -> seekTo(positionMs) },
                     onCreatePlaylist = { count -> viewModel.createRandomPlaylist(count) },
                     onPlaylistMessageDismissed = { viewModel.clearPlaylistMessage() },
                     onFolderMessageDismissed = { viewModel.clearFolderMessage() },
@@ -475,6 +447,51 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    private fun playFile(
+        file: com.example.mymediaplayer.shared.MediaFileInfo,
+        scannedFiles: List<com.example.mymediaplayer.shared.MediaFileInfo>
+    ) {
+        sendFilesToServiceIfNeeded(scannedFiles)
+        mediaController?.transportControls?.playFromMediaId(file.uriString, null)
+    }
+
+    private fun togglePlayPause(isPlaying: Boolean) {
+        if (isPlaying) {
+            mediaController?.transportControls?.pause()
+        } else {
+            mediaController?.transportControls?.play()
+        }
+    }
+
+    private fun stopPlayback() {
+        mediaController?.transportControls?.stop()
+    }
+
+    private fun skipToNext() {
+        mediaController?.transportControls?.skipToNext()
+    }
+
+    private fun skipToPrevious() {
+        mediaController?.transportControls?.skipToPrevious()
+    }
+
+    private fun toggleRepeatMode(currentMode: Int) {
+        val nextMode = when (currentMode) {
+            PlaybackStateCompat.REPEAT_MODE_ALL -> PlaybackStateCompat.REPEAT_MODE_ONE
+            PlaybackStateCompat.REPEAT_MODE_ONE -> PlaybackStateCompat.REPEAT_MODE_NONE
+            else -> PlaybackStateCompat.REPEAT_MODE_ALL
+        }
+        mediaController?.transportControls?.setRepeatMode(nextMode)
+    }
+
+    private fun skipToQueueItem(queueId: Long) {
+        mediaController?.transportControls?.skipToQueueItem(queueId)
+    }
+
+    private fun seekTo(positionMs: Long) {
+        mediaController?.transportControls?.seekTo(positionMs)
     }
 
     private fun observeViewModel() {
