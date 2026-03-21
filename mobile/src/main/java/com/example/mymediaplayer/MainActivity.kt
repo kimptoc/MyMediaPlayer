@@ -448,28 +448,15 @@ class MainActivity : ComponentActivity() {
                     onPlayPlaylist = { playlist ->
                         sendFilesToServiceIfNeeded(uiState.value.scan.scannedFiles)
                         sendPlaylistsToServiceIfNeeded(uiState.value.scan.discoveredPlaylists)
-                        val mediaId = if (playlist.uriString.startsWith(MainViewModel.SMART_PREFIX)) {
-                            val smartId = playlist.uriString.removePrefix(MainViewModel.SMART_PREFIX)
-                            SMART_PLAYLIST_PREFIX + Uri.encode(smartId)
-                        } else {
-                            "playlist:${playlist.uriString}"
-                        }
+                        val mediaId = getPlaylistMediaId(playlist.uriString)
                         mediaController?.transportControls?.playFromMediaId(mediaId, null)
                     },
                     onShufflePlaylistSongs = { playlist, songs ->
                         if (songs.isNotEmpty()) {
                             sendFilesToServiceIfNeeded(uiState.value.scan.scannedFiles)
                             sendPlaylistsToServiceIfNeeded(uiState.value.scan.discoveredPlaylists)
-                            val listKey = if (playlist.uriString.startsWith(MainViewModel.SMART_PREFIX)) {
-                                val smartId = playlist.uriString.removePrefix(MainViewModel.SMART_PREFIX)
-                                SMART_PLAYLIST_PREFIX + Uri.encode(smartId)
-                            } else {
-                                PLAYLIST_URI_PREFIX + Uri.encode(playlist.uriString)
-                            }
-                            mediaController?.transportControls?.playFromMediaId(
-                                ACTION_SHUFFLE_PREFIX + listKey,
-                                null
-                            )
+                            val mediaId = getPlaylistShuffleMediaId(playlist.uriString)
+                            mediaController?.transportControls?.playFromMediaId(mediaId, null)
                         }
                     }
                 )
@@ -963,6 +950,25 @@ class MainActivity : ComponentActivity() {
                     if (lastTrigger > 0L) formatElapsed(lastTrigger) else "n/a"
             )
         }
+    }
+
+    private fun getPlaylistMediaId(uriString: String): String {
+        return if (uriString.startsWith(MainViewModel.SMART_PREFIX)) {
+            val smartId = uriString.removePrefix(MainViewModel.SMART_PREFIX)
+            SMART_PLAYLIST_PREFIX + Uri.encode(smartId)
+        } else {
+            "playlist:$uriString"
+        }
+    }
+
+    private fun getPlaylistShuffleMediaId(uriString: String): String {
+        val listKey = if (uriString.startsWith(MainViewModel.SMART_PREFIX)) {
+            val smartId = uriString.removePrefix(MainViewModel.SMART_PREFIX)
+            SMART_PLAYLIST_PREFIX + Uri.encode(smartId)
+        } else {
+            PLAYLIST_URI_PREFIX + Uri.encode(uriString)
+        }
+        return ACTION_SHUFFLE_PREFIX + listKey
     }
 
     private fun formatElapsed(elapsedMs: Long): String {
