@@ -918,15 +918,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
                 mediaCacheService.removePlaylistByUri(playlist.uriString)
+                val isCurrentlySelected = current.playlist.selectedPlaylist?.uriString == playlist.uriString
                 _uiState.value = current.copy(
                     scan = current.scan.copy(discoveredPlaylists = updatedPlaylists),
                     playlist = current.playlist.copy(
-                        selectedPlaylist = if (current.playlist.selectedPlaylist?.uriString == playlist.uriString) {
+                        selectedPlaylist = if (isCurrentlySelected) {
                             null
                         } else {
                             current.playlist.selectedPlaylist
                         },
-                        playlistSongs = if (current.playlist.selectedPlaylist?.uriString == playlist.uriString) {
+                        playlistSongs = if (isCurrentlySelected) {
                             emptyList()
                         } else {
                             current.playlist.playlistSongs
