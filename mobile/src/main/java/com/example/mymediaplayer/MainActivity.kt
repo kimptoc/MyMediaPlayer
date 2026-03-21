@@ -277,30 +277,13 @@ class MainActivity : ComponentActivity() {
                     onChoosePlaylistSaveFolder = {
                         openPlaylistDocumentTree.launch(null)
                     },
-                    onScanWholeDriveWithLimit = { limit ->
-                        if (hasMediaReadPermission()) {
-                            getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-                                .edit()
-                                .putInt(KEY_SCAN_LIMIT, limit)
-                                .putBoolean(KEY_SCAN_WHOLE_DRIVE, true)
-                                .apply()
-                            viewModel.scanWholeDevice(limit, forceRescan = true)
-                        } else {
-                            pendingWholeDriveScanLimit = limit
-                            requestMediaReadPermission.launch(requiredMediaReadPermission())
-                        }
-                    },
+                    onScanWholeDriveWithLimit = { limit -> handleScanWholeDrive(limit) },
                     onFileClick = { file ->
                         sendFilesToServiceIfNeeded(uiState.value.scan.scannedFiles)
                         mediaController?.transportControls?.playFromMediaId(file.uriString, null)
                     },
                     onPlayPause = {
-                        val isPlaying = uiState.value.playback.isPlaying
-                        if (isPlaying) {
-                            mediaController?.transportControls?.pause()
-                        } else {
-                            mediaController?.transportControls?.play()
-                        }
+                        handlePlayPause(uiState.value.playback.isPlaying)
                     },
                     onStop = {
                         mediaController?.transportControls?.stop()
@@ -312,13 +295,7 @@ class MainActivity : ComponentActivity() {
                         mediaController?.transportControls?.skipToPrevious()
                     },
                     onToggleRepeat = {
-                        val current = uiState.value.playback.repeatMode
-                        val next = when (current) {
-                            PlaybackStateCompat.REPEAT_MODE_ALL -> PlaybackStateCompat.REPEAT_MODE_ONE
-                            PlaybackStateCompat.REPEAT_MODE_ONE -> PlaybackStateCompat.REPEAT_MODE_NONE
-                            else -> PlaybackStateCompat.REPEAT_MODE_ALL
-                        }
-                        mediaController?.transportControls?.setRepeatMode(next)
+                        handleToggleRepeat(uiState.value.playback.repeatMode)
                     },
                     onQueueItemSelected = { queueId ->
                         mediaController?.transportControls?.skipToQueueItem(queueId)
@@ -475,6 +452,37 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    private fun handleScanWholeDrive(limit: Int) {
+        if (hasMediaReadPermission()) {
+            getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                .edit()
+                .putInt(KEY_SCAN_LIMIT, limit)
+                .putBoolean(KEY_SCAN_WHOLE_DRIVE, true)
+                .apply()
+            viewModel.scanWholeDevice(limit, forceRescan = true)
+        } else {
+            pendingWholeDriveScanLimit = limit
+            requestMediaReadPermission.launch(requiredMediaReadPermission())
+        }
+    }
+
+    private fun handlePlayPause(isPlaying: Boolean) {
+        if (isPlaying) {
+            mediaController?.transportControls?.pause()
+        } else {
+            mediaController?.transportControls?.play()
+        }
+    }
+
+    private fun handleToggleRepeat(current: Int) {
+        val next = when (current) {
+            PlaybackStateCompat.REPEAT_MODE_ALL -> PlaybackStateCompat.REPEAT_MODE_ONE
+            PlaybackStateCompat.REPEAT_MODE_ONE -> PlaybackStateCompat.REPEAT_MODE_NONE
+            else -> PlaybackStateCompat.REPEAT_MODE_ALL
+        }
+        mediaController?.transportControls?.setRepeatMode(next)
     }
 
     private fun observeViewModel() {
