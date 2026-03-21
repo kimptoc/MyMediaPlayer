@@ -248,30 +248,14 @@ fun MainScreen(
                             enabled = uiState.scan.scannedFiles.isNotEmpty()
                         )
                         DropdownMenuItem(
-                            text = {
-                                Text(
-                                    if (trackVoiceIntroEnabled) {
-                                        "Track Voice Intro: On"
-                                    } else {
-                                        "Track Voice Intro: Off"
-                                    }
-                                )
-                            },
+                            text = { Text("Track Voice Intro: ${if (trackVoiceIntroEnabled) "On" else "Off"}") },
                             onClick = {
                                 menuExpanded = false
                                 onToggleTrackVoiceIntro()
                             }
                         )
                         DropdownMenuItem(
-                            text = {
-                                Text(
-                                    if (trackVoiceOutroEnabled) {
-                                        "Track Voice Outro: On"
-                                    } else {
-                                        "Track Voice Outro: Off"
-                                    }
-                                )
-                            },
+                            text = { Text("Track Voice Outro: ${if (trackVoiceOutroEnabled) "On" else "Off"}") },
                             onClick = {
                                 menuExpanded = false
                                 onToggleTrackVoiceOutro()
@@ -285,15 +269,7 @@ fun MainScreen(
                             }
                         )
                         DropdownMenuItem(
-                            text = {
-                                Text(
-                                    if (bluetoothAutoPlayEnabled) {
-                                        "Bluetooth Auto-Play: On"
-                                    } else {
-                                        "Bluetooth Auto-Play: Off"
-                                    }
-                                )
-                            },
+                            text = { Text("Bluetooth Auto-Play: ${if (bluetoothAutoPlayEnabled) "On" else "Off"}") },
                             onClick = {
                                 menuExpanded = false
                                 onToggleBluetoothAutoPlay()
