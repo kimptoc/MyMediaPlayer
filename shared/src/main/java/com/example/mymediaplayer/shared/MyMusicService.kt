@@ -124,26 +124,36 @@ class MyMusicService : MediaBrowserServiceCompat() {
             val standardPrefsFile = File(context.applicationInfo.dataDir, "shared_prefs/${PREFS_NAME}.xml")
             if (standardPrefsFile.exists() && !encryptedPrefs.getBoolean("migration_completed", false)) {
                 val standardPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                val editor = encryptedPrefs.edit()
-                for ((key, value) in standardPrefs.all) {
-                    when (value) {
-                        is String -> editor.putString(key, value)
-                        is Int -> editor.putInt(key, value)
-                        is Boolean -> editor.putBoolean(key, value)
-                        is Long -> editor.putLong(key, value)
-                        is Float -> editor.putFloat(key, value)
-                        is Set<*> -> {
-                            @Suppress("UNCHECKED_CAST")
-                            editor.putStringSet(key, value as Set<String>)
+                val allPrefs = standardPrefs.all
+                if (allPrefs.isNotEmpty()) {
+                    val editor = encryptedPrefs.edit()
+                    for ((key, value) in allPrefs) {
+                        when (value) {
+                            is String -> editor.putString(key, value)
+                            is Int -> editor.putInt(key, value)
+                            is Boolean -> editor.putBoolean(key, value)
+                            is Long -> editor.putLong(key, value)
+                            is Float -> editor.putFloat(key, value)
+                            is Set<*> -> {
+                                @Suppress("UNCHECKED_CAST")
+                                editor.putStringSet(key, value as Set<String>)
+                            }
                         }
                     }
-                }
-                try {
-                    editor.putBoolean("migration_completed", true).commit()
-                    standardPrefs.edit().clear().commit()
-                    standardPrefsFile.delete()
-                } catch (e: Exception) {
-                    // Log error - migration will retry on next app launch
+                    try {
+                        editor.putBoolean("migration_completed", true).commit()
+                        standardPrefs.edit().clear().commit()
+                        standardPrefsFile.delete()
+                    } catch (e: Exception) {
+                        // Log error - migration will retry on next app launch
+                    }
+                } else {
+                    try {
+                        encryptedPrefs.edit().putBoolean("migration_completed", true).commit()
+                        standardPrefsFile.delete()
+                    } catch (e: Exception) {
+                        // Log error - migration will retry on next app launch
+                    }
                 }
             }
             prefsInstance = encryptedPrefs
