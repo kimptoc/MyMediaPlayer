@@ -277,19 +277,7 @@ class MainActivity : ComponentActivity() {
                     onChoosePlaylistSaveFolder = {
                         openPlaylistDocumentTree.launch(null)
                     },
-                    onScanWholeDriveWithLimit = { limit ->
-                        if (hasMediaReadPermission()) {
-                            getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-                                .edit()
-                                .putInt(KEY_SCAN_LIMIT, limit)
-                                .putBoolean(KEY_SCAN_WHOLE_DRIVE, true)
-                                .apply()
-                            viewModel.scanWholeDevice(limit, forceRescan = true)
-                        } else {
-                            pendingWholeDriveScanLimit = limit
-                            requestMediaReadPermission.launch(requiredMediaReadPermission())
-                        }
-                    },
+                    onScanWholeDriveWithLimit = ::handleScanWholeDriveWithLimit,
                     onFileClick = { file ->
                         sendFilesToServiceIfNeeded(uiState.value.scan.scannedFiles)
                         mediaController?.transportControls?.playFromMediaId(file.uriString, null)
@@ -801,6 +789,20 @@ class MainActivity : ComponentActivity() {
         controller.transportControls.playFromSearch(query, extras)
         pendingVoiceSearchQuery = null
         pendingVoiceSearchExtras = null
+    }
+
+    private fun handleScanWholeDriveWithLimit(limit: Int) {
+        if (hasMediaReadPermission()) {
+            getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                .edit()
+                .putInt(KEY_SCAN_LIMIT, limit)
+                .putBoolean(KEY_SCAN_WHOLE_DRIVE, true)
+                .apply()
+            viewModel.scanWholeDevice(limit, forceRescan = true)
+        } else {
+            pendingWholeDriveScanLimit = limit
+            requestMediaReadPermission.launch(requiredMediaReadPermission())
+        }
     }
 
     private fun toggleBluetoothAutoPlay() {
