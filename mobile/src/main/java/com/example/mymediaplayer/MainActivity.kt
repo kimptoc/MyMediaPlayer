@@ -448,24 +448,14 @@ class MainActivity : ComponentActivity() {
                     onPlayPlaylist = { playlist ->
                         sendFilesToServiceIfNeeded(uiState.value.scan.scannedFiles)
                         sendPlaylistsToServiceIfNeeded(uiState.value.scan.discoveredPlaylists)
-                        val mediaId = if (playlist.uriString.startsWith(MainViewModel.SMART_PREFIX)) {
-                            val smartId = playlist.uriString.removePrefix(MainViewModel.SMART_PREFIX)
-                            SMART_PLAYLIST_PREFIX + Uri.encode(smartId)
-                        } else {
-                            "playlist:${playlist.uriString}"
-                        }
+                        val mediaId = getPlaylistMediaId(playlist)
                         mediaController?.transportControls?.playFromMediaId(mediaId, null)
                     },
                     onShufflePlaylistSongs = { playlist, songs ->
                         if (songs.isNotEmpty()) {
                             sendFilesToServiceIfNeeded(uiState.value.scan.scannedFiles)
                             sendPlaylistsToServiceIfNeeded(uiState.value.scan.discoveredPlaylists)
-                            val listKey = if (playlist.uriString.startsWith(MainViewModel.SMART_PREFIX)) {
-                                val smartId = playlist.uriString.removePrefix(MainViewModel.SMART_PREFIX)
-                                SMART_PLAYLIST_PREFIX + Uri.encode(smartId)
-                            } else {
-                                PLAYLIST_URI_PREFIX + Uri.encode(playlist.uriString)
-                            }
+                            val listKey = getPlaylistShuffleKey(playlist)
                             mediaController?.transportControls?.playFromMediaId(
                                 ACTION_SHUFFLE_PREFIX + listKey,
                                 null
@@ -1014,4 +1004,21 @@ class MainActivity : ComponentActivity() {
             .apply()
     }
 
+    private fun getPlaylistMediaId(playlist: com.example.mymediaplayer.shared.PlaylistInfo): String {
+        return if (playlist.uriString.startsWith(MainViewModel.SMART_PREFIX)) {
+            val smartId = playlist.uriString.removePrefix(MainViewModel.SMART_PREFIX)
+            SMART_PLAYLIST_PREFIX + Uri.encode(smartId)
+        } else {
+            "playlist:${playlist.uriString}"
+        }
+    }
+
+    private fun getPlaylistShuffleKey(playlist: com.example.mymediaplayer.shared.PlaylistInfo): String {
+        return if (playlist.uriString.startsWith(MainViewModel.SMART_PREFIX)) {
+            val smartId = playlist.uriString.removePrefix(MainViewModel.SMART_PREFIX)
+            SMART_PLAYLIST_PREFIX + Uri.encode(smartId)
+        } else {
+            PLAYLIST_URI_PREFIX + Uri.encode(playlist.uriString)
+        }
+    }
 }
