@@ -794,59 +794,12 @@ fun MainScreen(
     }
 
     if (showPlaylistDialog) {
-        val maxCount = uiState.scan.scannedFiles.size
-        val countValue = playlistCountText.toIntOrNull()
-        val isValid = countValue != null && countValue in 1..maxCount
-        val helperText = when {
-            maxCount == 0 -> "Scan a folder to enable playlists."
-            countValue == null -> "Enter a number between 1 and $maxCount."
-            countValue < 1 || countValue > maxCount -> "Enter a number between 1 and $maxCount."
-            else -> "OK"
-        }
-
-        androidx.compose.material3.AlertDialog(
+        CreateRandomPlaylistDialog(
+            maxCount = uiState.scan.scannedFiles.size,
+            playlistCountText = playlistCountText,
+            onPlaylistCountTextChange = { playlistCountText = it },
             onDismissRequest = { showPlaylistDialog = false },
-            title = { Text("Create Random Playlist") },
-            text = {
-                Column {
-                    Text("How many songs should be added?")
-                    Spacer(modifier = Modifier.height(8.dp))
-                    TextField(
-                        value = playlistCountText,
-                        onValueChange = { playlistCountText = it },
-                        singleLine = true,
-                        placeholder = { Text("e.g. 3") }
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = helperText,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (isValid) {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        } else {
-                            MaterialTheme.colorScheme.error
-                        }
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        if (isValid) {
-                            showPlaylistDialog = false
-                            onCreatePlaylist(countValue!!)
-                        }
-                    },
-                    enabled = isValid
-                ) {
-                    Text("Create")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showPlaylistDialog = false }) {
-                    Text("Cancel")
-                }
-            }
+            onCreatePlaylist = onCreatePlaylist
         )
     }
 
@@ -1360,6 +1313,69 @@ fun MainScreen(
             }
         )
     }
+}
+
+@Composable
+private fun CreateRandomPlaylistDialog(
+    maxCount: Int,
+    playlistCountText: String,
+    onPlaylistCountTextChange: (String) -> Unit,
+    onDismissRequest: () -> Unit,
+    onCreatePlaylist: (Int) -> Unit
+) {
+    val countValue = playlistCountText.toIntOrNull()
+    val isValid = countValue != null && countValue in 1..maxCount
+    val helperText = when {
+        maxCount == 0 -> "Scan a folder to enable playlists."
+        countValue == null -> "Enter a number between 1 and $maxCount."
+        countValue < 1 || countValue > maxCount -> "Enter a number between 1 and $maxCount."
+        else -> "OK"
+    }
+
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismissRequest,
+        title = { Text("Create Random Playlist") },
+        text = {
+            Column {
+                Text("How many songs should be added?")
+                Spacer(modifier = Modifier.height(8.dp))
+                TextField(
+                    value = playlistCountText,
+                    onValueChange = onPlaylistCountTextChange,
+                    singleLine = true,
+                    placeholder = { Text("e.g. 3") }
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = helperText,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (isValid) {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    } else {
+                        MaterialTheme.colorScheme.error
+                    }
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    if (isValid) {
+                        onDismissRequest()
+                        onCreatePlaylist(countValue!!)
+                    }
+                },
+                enabled = isValid
+            ) {
+                Text("Create")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismissRequest) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 @Composable
