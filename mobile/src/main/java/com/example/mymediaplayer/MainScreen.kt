@@ -544,34 +544,16 @@ fun MainScreen(
 
             when (uiState.library.selectedTab) {
                 LibraryTab.Songs -> {
-                    val songsForTab = if (songsFavoritesOnly) {
-                        uiState.scan.scannedFiles.filter { it.uriString in uiState.favoriteUris }
-                    } else {
-                        uiState.scan.scannedFiles
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        TextButton(onClick = { songsFavoritesOnly = !songsFavoritesOnly }) {
-                            Text(if (songsFavoritesOnly) "Show all songs" else "Favorites only")
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    SongsListSection(
-                        title = if (songsFavoritesOnly) {
-                            "Favorites (${songsForTab.size})"
-                        } else {
-                            "${songsForTab.size} file(s) found"
-                        },
-                        songs = songsForTab,
+                    SongsTabContent(
+                        songsFavoritesOnly = songsFavoritesOnly,
+                        onToggleSongsFavoritesOnly = { songsFavoritesOnly = !songsFavoritesOnly },
+                        scannedFiles = uiState.scan.scannedFiles,
                         favoriteUris = uiState.favoriteUris,
-                        isPlaying = false,
                         isPlayingPlaylist = uiState.playback.isPlayingPlaylist,
                         hasNext = uiState.playback.hasNext,
                         hasPrev = uiState.playback.hasPrev,
-                        onPlay = { onPlaySongs(songsForTab) },
-                        onShuffle = { onShuffleSongs(songsForTab) },
+                        onPlaySongs = onPlaySongs,
+                        onShuffleSongs = onShuffleSongs,
                         onStop = onStop,
                         onNext = onNext,
                         onPrev = onPrev,
@@ -2508,4 +2490,61 @@ private fun formatDuration(durationMs: Long): String {
     val minutes = totalSeconds / 60
     val seconds = totalSeconds % 60
     return "%d:%02d".format(minutes, seconds)
+}
+
+@Composable
+private fun SongsTabContent(
+    songsFavoritesOnly: Boolean,
+    onToggleSongsFavoritesOnly: () -> Unit,
+    scannedFiles: List<MediaFileInfo>,
+    favoriteUris: Set<String>,
+    isPlayingPlaylist: Boolean,
+    hasNext: Boolean,
+    hasPrev: Boolean,
+    onPlaySongs: (List<MediaFileInfo>) -> Unit,
+    onShuffleSongs: (List<MediaFileInfo>) -> Unit,
+    onStop: () -> Unit,
+    onNext: () -> Unit,
+    onPrev: () -> Unit,
+    onFileClick: (MediaFileInfo) -> Unit,
+    onAddToPlaylist: (MediaFileInfo) -> Unit,
+    onToggleFavorite: (MediaFileInfo) -> Unit,
+    currentMediaId: String?
+) {
+    val songsForTab = if (songsFavoritesOnly) {
+        scannedFiles.filter { it.uriString in favoriteUris }
+    } else {
+        scannedFiles
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        TextButton(onClick = onToggleSongsFavoritesOnly) {
+            Text(if (songsFavoritesOnly) "Show all songs" else "Favorites only")
+        }
+    }
+    Spacer(modifier = Modifier.height(4.dp))
+    SongsListSection(
+        title = if (songsFavoritesOnly) {
+            "Favorites (${songsForTab.size})"
+        } else {
+            "${songsForTab.size} file(s) found"
+        },
+        songs = songsForTab,
+        favoriteUris = favoriteUris,
+        isPlaying = false,
+        isPlayingPlaylist = isPlayingPlaylist,
+        hasNext = hasNext,
+        hasPrev = hasPrev,
+        onPlay = { onPlaySongs(songsForTab) },
+        onShuffle = { onShuffleSongs(songsForTab) },
+        onStop = onStop,
+        onNext = onNext,
+        onPrev = onPrev,
+        onFileClick = onFileClick,
+        onAddToPlaylist = onAddToPlaylist,
+        onToggleFavorite = onToggleFavorite,
+        currentMediaId = currentMediaId
+    )
 }
