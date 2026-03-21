@@ -415,26 +415,7 @@ class MainActivity : ComponentActivity() {
                     cloudAnnouncementKiloKey = cloudAnnouncementKiloKey.value,
                     cloudAnnouncementTtsKey = cloudAnnouncementTtsKey.value,
                     onSaveCloudAnnouncementKeys = { kilo, tts, onValidated ->
-                        cloudAnnouncementKiloKey.value = kilo
-                        cloudAnnouncementTtsKey.value = tts
-                        ApiKeyStore.getPrefs(this)
-                            ?.edit()
-                            ?.putString(ApiKeyStore.KEY_KILO, kilo)
-                            ?.putString(ApiKeyStore.KEY_CLOUD_TTS, tts)
-                            ?.apply()
-                        lifecycleScope.launch {
-                            val (kiloResult, ttsResult) = ApiKeyStore.validateKeys(this@MainActivity)
-                            val kiloMsg = when (kiloResult) {
-                                is ApiKeyStore.ValidationResult.Success -> if (kilo.isBlank()) "Kilo API: Anonymous mode" else "Kilo API: OK"
-                                is ApiKeyStore.ValidationResult.Error -> "Kilo API: ${kiloResult.message}"
-                            }
-                            val ttsMsg = when (ttsResult) {
-                                is ApiKeyStore.ValidationResult.Success -> if (tts.isBlank()) "Google TTS: Using on-device" else "Google TTS: OK"
-                                is ApiKeyStore.ValidationResult.Error -> "Google TTS: Not configured (using on-device)"
-                            }
-                            Toast.makeText(this@MainActivity, "$kiloMsg\n$ttsMsg", Toast.LENGTH_LONG).show()
-                            onValidated()
-                        }
+                        handleSaveCloudAnnouncementKeys(kilo, tts, onValidated)
                     },
                     debugCloudAnnouncements = debugCloudAnnouncements.value,
                     onSetDebugCloudAnnouncements = { enabled ->
@@ -777,6 +758,29 @@ class MainActivity : ComponentActivity() {
             putBoolean(EXTRA_TRACK_VOICE_OUTRO_ENABLED, trackVoiceOutroEnabled.value)
         }
         controller.transportControls.sendCustomAction(ACTION_SET_TRACK_VOICE_OUTRO, bundle)
+    }
+
+    private fun handleSaveCloudAnnouncementKeys(kilo: String, tts: String, onValidated: () -> Unit) {
+        cloudAnnouncementKiloKey.value = kilo
+        cloudAnnouncementTtsKey.value = tts
+        ApiKeyStore.getPrefs(this)
+            ?.edit()
+            ?.putString(ApiKeyStore.KEY_KILO, kilo)
+            ?.putString(ApiKeyStore.KEY_CLOUD_TTS, tts)
+            ?.apply()
+        lifecycleScope.launch {
+            val (kiloResult, ttsResult) = ApiKeyStore.validateKeys(this@MainActivity)
+            val kiloMsg = when (kiloResult) {
+                is ApiKeyStore.ValidationResult.Success -> if (kilo.isBlank()) "Kilo API: Anonymous mode" else "Kilo API: OK"
+                is ApiKeyStore.ValidationResult.Error -> "Kilo API: ${kiloResult.message}"
+            }
+            val ttsMsg = when (ttsResult) {
+                is ApiKeyStore.ValidationResult.Success -> if (tts.isBlank()) "Google TTS: Using on-device" else "Google TTS: OK"
+                is ApiKeyStore.ValidationResult.Error -> "Google TTS: Not configured (using on-device)"
+            }
+            Toast.makeText(this@MainActivity, "$kiloMsg\n$ttsMsg", Toast.LENGTH_LONG).show()
+            onValidated()
+        }
     }
 
     private fun sendDebugCloudSettingToService(enabled: Boolean) {
