@@ -544,34 +544,12 @@ fun MainScreen(
 
             when (uiState.library.selectedTab) {
                 LibraryTab.Songs -> {
-                    val songsForTab = if (songsFavoritesOnly) {
-                        uiState.scan.scannedFiles.filter { it.uriString in uiState.favoriteUris }
-                    } else {
-                        uiState.scan.scannedFiles
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        TextButton(onClick = { songsFavoritesOnly = !songsFavoritesOnly }) {
-                            Text(if (songsFavoritesOnly) "Show all songs" else "Favorites only")
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    SongsListSection(
-                        title = if (songsFavoritesOnly) {
-                            "Favorites (${songsForTab.size})"
-                        } else {
-                            "${songsForTab.size} file(s) found"
-                        },
-                        songs = songsForTab,
-                        favoriteUris = uiState.favoriteUris,
-                        isPlaying = false,
-                        isPlayingPlaylist = uiState.playback.isPlayingPlaylist,
-                        hasNext = uiState.playback.hasNext,
-                        hasPrev = uiState.playback.hasPrev,
-                        onPlay = { onPlaySongs(songsForTab) },
-                        onShuffle = { onShuffleSongs(songsForTab) },
+                    SongsTabContent(
+                        songsFavoritesOnly = songsFavoritesOnly,
+                        onToggleSongsFavoritesOnly = { songsFavoritesOnly = !songsFavoritesOnly },
+                        uiState = uiState,
+                        onPlaySongs = onPlaySongs,
+                        onShuffleSongs = onShuffleSongs,
                         onStop = onStop,
                         onNext = onNext,
                         onPrev = onPrev,
@@ -580,8 +558,7 @@ fun MainScreen(
                             pendingAddFiles = listOf(it)
                             showAddToPlaylistDialog = true
                         },
-                        onToggleFavorite = onToggleFavorite,
-                        currentMediaId = uiState.playback.currentMediaId
+                        onToggleFavorite = onToggleFavorite
                     )
                 }
                 LibraryTab.Playlists -> {
@@ -1360,6 +1337,58 @@ fun MainScreen(
             }
         )
     }
+}
+
+@Composable
+private fun SongsTabContent(
+    songsFavoritesOnly: Boolean,
+    onToggleSongsFavoritesOnly: () -> Unit,
+    uiState: MainUiState,
+    onPlaySongs: (List<MediaFileInfo>) -> Unit,
+    onShuffleSongs: (List<MediaFileInfo>) -> Unit,
+    onStop: () -> Unit,
+    onNext: () -> Unit,
+    onPrev: () -> Unit,
+    onFileClick: (MediaFileInfo) -> Unit,
+    onAddToPlaylist: (MediaFileInfo) -> Unit,
+    onToggleFavorite: (MediaFileInfo) -> Unit
+) {
+    val songsForTab = if (songsFavoritesOnly) {
+        uiState.scan.scannedFiles.filter { it.uriString in uiState.favoriteUris }
+    } else {
+        uiState.scan.scannedFiles
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        TextButton(onClick = onToggleSongsFavoritesOnly) {
+            Text(if (songsFavoritesOnly) "Show all songs" else "Favorites only")
+        }
+    }
+    Spacer(modifier = Modifier.height(4.dp))
+    SongsListSection(
+        title = if (songsFavoritesOnly) {
+            "Favorites (${songsForTab.size})"
+        } else {
+            "${songsForTab.size} file(s) found"
+        },
+        songs = songsForTab,
+        favoriteUris = uiState.favoriteUris,
+        isPlaying = false,
+        isPlayingPlaylist = uiState.playback.isPlayingPlaylist,
+        hasNext = uiState.playback.hasNext,
+        hasPrev = uiState.playback.hasPrev,
+        onPlay = { onPlaySongs(songsForTab) },
+        onShuffle = { onShuffleSongs(songsForTab) },
+        onStop = onStop,
+        onNext = onNext,
+        onPrev = onPrev,
+        onFileClick = onFileClick,
+        onAddToPlaylist = onAddToPlaylist,
+        onToggleFavorite = onToggleFavorite,
+        currentMediaId = uiState.playback.currentMediaId
+    )
 }
 
 @Composable
