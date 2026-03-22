@@ -488,6 +488,15 @@ fun MainScreen(
                             }
                         }
                     }
+
+                    val handleSearchSelectionToggle: (MediaFileInfo) -> Unit = { file ->
+                        selectedSearchUris = if (file.uriString in selectedSearchUris) {
+                            selectedSearchUris - file.uriString
+                        } else {
+                            selectedSearchUris + file.uriString
+                        }
+                    }
+
                     SongsListSection(
                         title = "Search Results (${visibleSearchResults.size})",
                         songs = visibleSearchResults,
@@ -509,13 +518,7 @@ fun MainScreen(
                         onToggleFavorite = onToggleFavorite,
                         enableSelection = isSearchSelectionMode,
                         selectedUris = selectedSearchUris,
-                        onSelectionToggle = { file ->
-                            selectedSearchUris = if (file.uriString in selectedSearchUris) {
-                                selectedSearchUris - file.uriString
-                            } else {
-                                selectedSearchUris + file.uriString
-                            }
-                        },
+                        onSelectionToggle = handleSearchSelectionToggle,
                         currentMediaId = uiState.playback.currentMediaId
                     )
                 }
