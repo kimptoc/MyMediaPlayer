@@ -160,7 +160,7 @@ class MediaCacheService {
         )
     }
 
-    private fun loadWholeDriveGenres(context: Context, audioIds: Set<Long>): Map<Long, String> {
+    private suspend fun loadWholeDriveGenres(context: Context, audioIds: Set<Long>): Map<Long, String> {
         if (audioIds.isEmpty()) return emptyMap()
         val resolver = context.contentResolver
         // Collect ALL genre assignments per audio ID, then pick the best one
@@ -169,6 +169,7 @@ class MediaCacheService {
             MediaStore.Audio.Genres._ID,
             MediaStore.Audio.Genres.NAME
         )
+        val genreList = mutableListOf<Pair<Long, String>>()
         resolver.query(
             MediaStore.Audio.Genres.EXTERNAL_CONTENT_URI,
             genreProjection,
@@ -181,10 +182,46 @@ class MediaCacheService {
             while (genreCursor.moveToNext()) {
                 val genreId = genreCursor.getLong(genreIdIndex)
                 val genreName = genreCursor.getString(genreNameIndex)?.trim().orEmpty()
-                if (genreName.isBlank()) continue
-                collectGenreMembers(resolver, genreId, genreName, audioIds, allGenresByAudioId)
+                if (genreName.isNotBlank()) {
+                    genreList.add(genreId to genreName)
+                }
             }
         }
+
+        // Limit concurrency to avoid CursorWindowAllocationException
+        val parallelism = METADATA_PARALLELISM.coerceAtLeast(4)
+
+        coroutineScope {
+            genreList.chunked(parallelism).map { batch ->
+                batch.map { (genreId, genreName) ->
+                    async(Dispatchers.IO) {
+                        val members = mutableListOf<Long>()
+                        val membersUri = MediaStore.Audio.Genres.Members.getContentUri("external", genreId)
+                        resolver.query(
+                            membersUri,
+                            arrayOf(MediaStore.Audio.Genres.Members.AUDIO_ID),
+                            null,
+                            null,
+                            null
+                        )?.use { membersCursor ->
+                            val audioIdIndex = membersCursor.getColumnIndexOrThrow(MediaStore.Audio.Genres.Members.AUDIO_ID)
+                            while (membersCursor.moveToNext()) {
+                                val audioId = membersCursor.getLong(audioIdIndex)
+                                if (audioId in audioIds) {
+                                    members.add(audioId)
+                                }
+                            }
+                        }
+                        genreName to members
+                    }
+                }.awaitAll()
+            }.flatten()
+        }.forEach { (genreName, members) ->
+            for (audioId in members) {
+                allGenresByAudioId.getOrPut(audioId) { mutableListOf() }.add(genreName)
+            }
+        }
+
         // Pick genre per audio ID: only use MediaStore genre if all assignments
         // bucket to the same category. When they conflict (e.g. "Country" + "Urban
         // Crossover"), MediaStore data is unreliable — skip and fall back to path inference.
@@ -200,31 +237,7 @@ class MediaCacheService {
         }.toMap()
     }
 
-    private fun collectGenreMembers(
-        resolver: android.content.ContentResolver,
-        genreId: Long,
-        genreName: String,
-        audioIds: Set<Long>,
-        allGenresByAudioId: MutableMap<Long, MutableList<String>>
-    ) {
-        val membersUri = MediaStore.Audio.Genres.Members.getContentUri("external", genreId)
-        resolver.query(
-            membersUri,
-            arrayOf(MediaStore.Audio.Genres.Members.AUDIO_ID),
-            null,
-            null,
-            null
-        )?.use { membersCursor ->
-            val audioIdIndex = membersCursor.getColumnIndexOrThrow(MediaStore.Audio.Genres.Members.AUDIO_ID)
-            while (membersCursor.moveToNext()) {
-                val audioId = membersCursor.getLong(audioIdIndex)
-                if (audioId !in audioIds) continue
-                allGenresByAudioId.getOrPut(audioId) { mutableListOf() }.add(genreName)
-            }
-        }
-    }
-
-    fun enrichGenresFromMediaStore(context: Context) {
+    suspend fun enrichGenresFromMediaStore(context: Context) {
         val resolver = context.contentResolver
         // Build audioId → displayName map from MediaStore
         val audioIdByName = mutableMapOf<String, Long>()
