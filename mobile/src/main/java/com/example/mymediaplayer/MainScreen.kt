@@ -248,30 +248,14 @@ fun MainScreen(
                             enabled = uiState.scan.scannedFiles.isNotEmpty()
                         )
                         DropdownMenuItem(
-                            text = {
-                                Text(
-                                    if (trackVoiceIntroEnabled) {
-                                        "Track Voice Intro: On"
-                                    } else {
-                                        "Track Voice Intro: Off"
-                                    }
-                                )
-                            },
+                            text = { Text(if (trackVoiceIntroEnabled) "Track Voice Intro: On" else "Track Voice Intro: Off") },
                             onClick = {
                                 menuExpanded = false
                                 onToggleTrackVoiceIntro()
                             }
                         )
                         DropdownMenuItem(
-                            text = {
-                                Text(
-                                    if (trackVoiceOutroEnabled) {
-                                        "Track Voice Outro: On"
-                                    } else {
-                                        "Track Voice Outro: Off"
-                                    }
-                                )
-                            },
+                            text = { Text(if (trackVoiceOutroEnabled) "Track Voice Outro: On" else "Track Voice Outro: Off") },
                             onClick = {
                                 menuExpanded = false
                                 onToggleTrackVoiceOutro()
@@ -285,15 +269,7 @@ fun MainScreen(
                             }
                         )
                         DropdownMenuItem(
-                            text = {
-                                Text(
-                                    if (bluetoothAutoPlayEnabled) {
-                                        "Bluetooth Auto-Play: On"
-                                    } else {
-                                        "Bluetooth Auto-Play: Off"
-                                    }
-                                )
-                            },
+                            text = { Text(if (bluetoothAutoPlayEnabled) "Bluetooth Auto-Play: On" else "Bluetooth Auto-Play: Off") },
                             onClick = {
                                 menuExpanded = false
                                 onToggleBluetoothAutoPlay()
@@ -424,70 +400,27 @@ fun MainScreen(
                         onToggleFavorite = onToggleFavorite
                     )
                 } else {
-                    val selectedSearchResults = visibleSearchResults.filter {
-                        it.uriString in selectedSearchUris
-                    }
-                    LazyRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        item {
-                            TextButton(onClick = { searchFavoritesOnly = !searchFavoritesOnly }) {
-                                Text(if (searchFavoritesOnly) "All results" else "Favorites only")
-                            }
+                    SearchResultsActionRow(
+                        searchFavoritesOnly = searchFavoritesOnly,
+                        onToggleSearchFavoritesOnly = { searchFavoritesOnly = !searchFavoritesOnly },
+                        visibleSearchResults = visibleSearchResults,
+                        onAddAll = {
+                            pendingAddFiles = it
+                            showAddToPlaylistDialog = true
+                        },
+                        isSearchSelectionMode = isSearchSelectionMode,
+                        onToggleSearchSelectionMode = {
+                            isSearchSelectionMode = !isSearchSelectionMode
+                            if (!isSearchSelectionMode) selectedSearchUris = emptySet()
+                        },
+                        selectedSearchUris = selectedSearchUris,
+                        onSelectAll = { selectedSearchUris = it },
+                        onClearSelection = { selectedSearchUris = emptySet() },
+                        onAddSelected = {
+                            pendingAddFiles = it
+                            showAddToPlaylistDialog = true
                         }
-                        item {
-                            TextButton(
-                                onClick = {
-                                    pendingAddFiles = visibleSearchResults
-                                    showAddToPlaylistDialog = true
-                                }
-                            ) {
-                                Text("Add all")
-                            }
-                        }
-                        item {
-                            TextButton(
-                                onClick = {
-                                    isSearchSelectionMode = !isSearchSelectionMode
-                                    if (!isSearchSelectionMode) selectedSearchUris = emptySet()
-                                }
-                            ) {
-                                Text(if (isSearchSelectionMode) "Cancel selection" else "Select")
-                            }
-                        }
-                        if (isSearchSelectionMode) {
-                            item {
-                                TextButton(
-                                    onClick = {
-                                        selectedSearchUris = visibleSearchResults.map { it.uriString }.toSet()
-                                    },
-                                    enabled = selectedSearchResults.size < visibleSearchResults.size
-                                ) {
-                                    Text("Select all")
-                                }
-                            }
-                            item {
-                                TextButton(
-                                    onClick = { selectedSearchUris = emptySet() },
-                                    enabled = selectedSearchResults.isNotEmpty()
-                                ) {
-                                    Text("Clear selection")
-                                }
-                            }
-                            item {
-                                TextButton(
-                                    onClick = {
-                                        pendingAddFiles = selectedSearchResults
-                                        showAddToPlaylistDialog = true
-                                    },
-                                    enabled = selectedSearchResults.isNotEmpty()
-                                ) {
-                                    Text("Add selected (${selectedSearchResults.size})")
-                                }
-                            }
-                        }
-                    }
+                    )
                     SongsListSection(
                         title = "Search Results (${visibleSearchResults.size})",
                         songs = visibleSearchResults,
@@ -794,59 +727,12 @@ fun MainScreen(
     }
 
     if (showPlaylistDialog) {
-        val maxCount = uiState.scan.scannedFiles.size
-        val countValue = playlistCountText.toIntOrNull()
-        val isValid = countValue != null && countValue in 1..maxCount
-        val helperText = when {
-            maxCount == 0 -> "Scan a folder to enable playlists."
-            countValue == null -> "Enter a number between 1 and $maxCount."
-            countValue < 1 || countValue > maxCount -> "Enter a number between 1 and $maxCount."
-            else -> "OK"
-        }
-
-        androidx.compose.material3.AlertDialog(
+        CreateRandomPlaylistDialog(
+            maxCount = uiState.scan.scannedFiles.size,
+            playlistCountText = playlistCountText,
+            onPlaylistCountTextChange = { playlistCountText = it },
             onDismissRequest = { showPlaylistDialog = false },
-            title = { Text("Create Random Playlist") },
-            text = {
-                Column {
-                    Text("How many songs should be added?")
-                    Spacer(modifier = Modifier.height(8.dp))
-                    TextField(
-                        value = playlistCountText,
-                        onValueChange = { playlistCountText = it },
-                        singleLine = true,
-                        placeholder = { Text("e.g. 3") }
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = helperText,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (isValid) {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        } else {
-                            MaterialTheme.colorScheme.error
-                        }
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        if (isValid) {
-                            showPlaylistDialog = false
-                            onCreatePlaylist(countValue!!)
-                        }
-                    },
-                    enabled = isValid
-                ) {
-                    Text("Create")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showPlaylistDialog = false }) {
-                    Text("Cancel")
-                }
-            }
+            onCreatePlaylist = onCreatePlaylist
         )
     }
 
@@ -1363,6 +1249,69 @@ fun MainScreen(
 }
 
 @Composable
+private fun CreateRandomPlaylistDialog(
+    maxCount: Int,
+    playlistCountText: String,
+    onPlaylistCountTextChange: (String) -> Unit,
+    onDismissRequest: () -> Unit,
+    onCreatePlaylist: (Int) -> Unit
+) {
+    val countValue = playlistCountText.toIntOrNull()
+    val isValid = countValue != null && countValue in 1..maxCount
+    val helperText = when {
+        maxCount == 0 -> "Scan a folder to enable playlists."
+        countValue == null -> "Enter a number between 1 and $maxCount."
+        countValue < 1 || countValue > maxCount -> "Enter a number between 1 and $maxCount."
+        else -> "OK"
+    }
+
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismissRequest,
+        title = { Text("Create Random Playlist") },
+        text = {
+            Column {
+                Text("How many songs should be added?")
+                Spacer(modifier = Modifier.height(8.dp))
+                TextField(
+                    value = playlistCountText,
+                    onValueChange = onPlaylistCountTextChange,
+                    singleLine = true,
+                    placeholder = { Text("e.g. 3") }
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = helperText,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (isValid) {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    } else {
+                        MaterialTheme.colorScheme.error
+                    }
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    if (isValid) {
+                        onDismissRequest()
+                        onCreatePlaylist(countValue!!)
+                    }
+                },
+                enabled = isValid
+            ) {
+                Text("Create")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismissRequest) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
 private fun CategoryTabContent(
     title: String,
     categories: List<String>,
@@ -1621,6 +1570,77 @@ private fun AlbumSearchResultsSection(
                             Text("Add album")
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SearchResultsActionRow(
+    searchFavoritesOnly: Boolean,
+    onToggleSearchFavoritesOnly: () -> Unit,
+    visibleSearchResults: List<MediaFileInfo>,
+    onAddAll: (List<MediaFileInfo>) -> Unit,
+    isSearchSelectionMode: Boolean,
+    onToggleSearchSelectionMode: () -> Unit,
+    selectedSearchUris: Set<String>,
+    onSelectAll: (Set<String>) -> Unit,
+    onClearSelection: () -> Unit,
+    onAddSelected: (List<MediaFileInfo>) -> Unit
+) {
+    val selectedSearchResults = visibleSearchResults.filter {
+        it.uriString in selectedSearchUris
+    }
+
+    LazyRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        item {
+            TextButton(onClick = onToggleSearchFavoritesOnly) {
+                Text(if (searchFavoritesOnly) "All results" else "Favorites only")
+            }
+        }
+        item {
+            TextButton(
+                onClick = { onAddAll(visibleSearchResults) }
+            ) {
+                Text("Add all")
+            }
+        }
+        item {
+            TextButton(
+                onClick = onToggleSearchSelectionMode
+            ) {
+                Text(if (isSearchSelectionMode) "Cancel selection" else "Select")
+            }
+        }
+        if (isSearchSelectionMode) {
+            item {
+                TextButton(
+                    onClick = {
+                        onSelectAll(visibleSearchResults.map { it.uriString }.toSet())
+                    },
+                    enabled = selectedSearchResults.size < visibleSearchResults.size
+                ) {
+                    Text("Select all")
+                }
+            }
+            item {
+                TextButton(
+                    onClick = onClearSelection,
+                    enabled = selectedSearchResults.isNotEmpty()
+                ) {
+                    Text("Clear selection")
+                }
+            }
+            item {
+                TextButton(
+                    onClick = { onAddSelected(selectedSearchResults) },
+                    enabled = selectedSearchResults.isNotEmpty()
+                ) {
+                    Text("Add selected (${selectedSearchResults.size})")
                 }
             }
         }
