@@ -1240,33 +1240,41 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val current = _uiState.value
         val files = current.scan.scannedFiles
         return when (smartId) {
-            SMART_FAVORITES -> {
-                files.filter { it.uriString in current.favoriteUris }
-            }
-            SMART_RECENTLY_ADDED -> {
-                files.sortedByDescending { it.addedAtMs ?: Long.MIN_VALUE }
-            }
-            SMART_MOST_PLAYED -> {
-                files
-                    .mapNotNull { file ->
-                        val plays = current.playCounts[file.uriString] ?: 0
-                        if (plays > 0) file to plays else null
-                    }
-                    .sortedWith(
-                        compareByDescending<Pair<MediaFileInfo, Int>> { it.second }
-                            .thenBy { it.first.cleanTitle.lowercase(Locale.US) }
-                    )
-                    .map { it.first }
-            }
-            SMART_NOT_HEARD_RECENTLY -> {
-                files.sortedWith(
-                    compareBy<MediaFileInfo> { current.lastPlayedAt[it.uriString] != null }
-                        .thenBy { current.lastPlayedAt[it.uriString] ?: Long.MIN_VALUE }
-                        .thenBy { it.cleanTitle.lowercase(Locale.US) }
-                )
-            }
+            SMART_FAVORITES -> getFavoriteSongs(files, current.favoriteUris)
+            SMART_RECENTLY_ADDED -> getRecentlyAddedSongs(files)
+            SMART_MOST_PLAYED -> getMostPlayedSongs(files, current.playCounts)
+            SMART_NOT_HEARD_RECENTLY -> getNotHeardRecentlySongs(files, current.lastPlayedAt)
             else -> emptyList()
         }
+    }
+
+    private fun getFavoriteSongs(files: List<MediaFileInfo>, favoriteUris: Set<String>): List<MediaFileInfo> {
+        return files.filter { it.uriString in favoriteUris }
+    }
+
+    private fun getRecentlyAddedSongs(files: List<MediaFileInfo>): List<MediaFileInfo> {
+        return files.sortedByDescending { it.addedAtMs ?: Long.MIN_VALUE }
+    }
+
+    private fun getMostPlayedSongs(files: List<MediaFileInfo>, playCounts: Map<String, Int>): List<MediaFileInfo> {
+        return files
+            .mapNotNull { file ->
+                val plays = playCounts[file.uriString] ?: 0
+                if (plays > 0) file to plays else null
+            }
+            .sortedWith(
+                compareByDescending<Pair<MediaFileInfo, Int>> { it.second }
+                    .thenBy { it.first.cleanTitle.lowercase(Locale.US) }
+            )
+            .map { it.first }
+    }
+
+    private fun getNotHeardRecentlySongs(files: List<MediaFileInfo>, lastPlayedAt: Map<String, Long>): List<MediaFileInfo> {
+        return files.sortedWith(
+            compareBy<MediaFileInfo> { lastPlayedAt[it.uriString] != null }
+                .thenBy { lastPlayedAt[it.uriString] ?: Long.MIN_VALUE }
+                .thenBy { it.cleanTitle.lowercase(Locale.US) }
+        )
     }
 
     private fun refreshSmartPlaylistSelection() {
