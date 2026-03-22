@@ -4,8 +4,10 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.SharedPreferences
 import androidx.test.core.app.ApplicationProvider
-import org.junit.Assert.assertNull
+import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -41,5 +43,26 @@ class ApiKeyStoreTest {
         val result = ApiKeyStore.getPrefs(failingContext)
 
         assertNull("getPrefs should return null when an exception occurs", result)
+    }
+
+    @Test
+    fun validateKeys_whenPrefsNull_returnsErrorPair() = runBlocking {
+        val baseContext = ApplicationProvider.getApplicationContext<Context>()
+
+        // Simulate failure in getting preferences
+        val failingContext = object : ContextWrapper(baseContext) {
+            override fun getApplicationContext(): Context {
+                return this
+            }
+
+            override fun getSharedPreferences(name: String?, mode: Int): SharedPreferences {
+                throw GeneralSecurityException("Simulated Keystore failure")
+            }
+        }
+
+        val result = ApiKeyStore.validateKeys(failingContext)
+
+        val expectedError = ApiKeyStore.ValidationResult.Error("Encrypted storage unavailable")
+        assertEquals(Pair(expectedError, expectedError), result)
     }
 }

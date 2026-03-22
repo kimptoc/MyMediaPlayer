@@ -1027,19 +1027,38 @@ class MyMusicService : MediaBrowserServiceCompat() {
     }
 
     private fun buildLetterBuckets(values: List<String>): List<String> {
-        val letters = mutableSetOf<String>()
+        val seenLetters = BooleanArray(26)
         var hasOther = false
+
         for (value in values) {
-            val first = value.firstOrNull { !it.isWhitespace() }?.uppercaseChar()
-            if (first != null && first in 'A'..'Z') {
-                letters.add(first.toString())
-            } else {
+            var foundNonWhitespace = false
+            for (i in 0 until value.length) {
+                val c = value[i]
+                if (!c.isWhitespace()) {
+                    foundNonWhitespace = true
+                    val u = c.uppercaseChar()
+                    if (u in 'A'..'Z') {
+                        seenLetters[u - 'A'] = true
+                    } else {
+                        hasOther = true
+                    }
+                    break
+                }
+            }
+            if (!foundNonWhitespace) {
                 hasOther = true
             }
         }
-        val result = letters.toMutableList()
-        result.sort()
-        if (hasOther) result.add("#")
+
+        val result = ArrayList<String>(27)
+        for (i in 0..25) {
+            if (seenLetters[i]) {
+                result.add((i + 'A'.code).toChar().toString())
+            }
+        }
+        if (hasOther) {
+            result.add("#")
+        }
         return result
     }
 

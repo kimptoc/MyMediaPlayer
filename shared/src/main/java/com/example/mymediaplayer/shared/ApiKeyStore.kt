@@ -145,8 +145,8 @@ object ApiKeyStore {
             EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
         )
-    }.getOrElse { e ->
-        Log.e(TAG, "Failed to open encrypted prefs — API keys unavailable", e)
+    }.getOrElse { _ ->
+        Log.e(TAG, "Failed to open encrypted prefs — API keys unavailable")
         null
     }
 }

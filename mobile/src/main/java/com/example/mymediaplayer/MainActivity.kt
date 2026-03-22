@@ -277,55 +277,15 @@ class MainActivity : ComponentActivity() {
                     onChoosePlaylistSaveFolder = {
                         openPlaylistDocumentTree.launch(null)
                     },
-                    onScanWholeDriveWithLimit = { limit ->
-                        if (hasMediaReadPermission()) {
-                            getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-                                .edit()
-                                .putInt(KEY_SCAN_LIMIT, limit)
-                                .putBoolean(KEY_SCAN_WHOLE_DRIVE, true)
-                                .apply()
-                            viewModel.scanWholeDevice(limit, forceRescan = true)
-                        } else {
-                            pendingWholeDriveScanLimit = limit
-                            requestMediaReadPermission.launch(requiredMediaReadPermission())
-                        }
-                    },
-                    onFileClick = { file ->
-                        sendFilesToServiceIfNeeded(uiState.value.scan.scannedFiles)
-                        mediaController?.transportControls?.playFromMediaId(file.uriString, null)
-                    },
-                    onPlayPause = {
-                        val isPlaying = uiState.value.playback.isPlaying
-                        if (isPlaying) {
-                            mediaController?.transportControls?.pause()
-                        } else {
-                            mediaController?.transportControls?.play()
-                        }
-                    },
-                    onStop = {
-                        mediaController?.transportControls?.stop()
-                    },
-                    onNext = {
-                        mediaController?.transportControls?.skipToNext()
-                    },
-                    onPrev = {
-                        mediaController?.transportControls?.skipToPrevious()
-                    },
-                    onToggleRepeat = {
-                        val current = uiState.value.playback.repeatMode
-                        val next = when (current) {
-                            PlaybackStateCompat.REPEAT_MODE_ALL -> PlaybackStateCompat.REPEAT_MODE_ONE
-                            PlaybackStateCompat.REPEAT_MODE_ONE -> PlaybackStateCompat.REPEAT_MODE_NONE
-                            else -> PlaybackStateCompat.REPEAT_MODE_ALL
-                        }
-                        mediaController?.transportControls?.setRepeatMode(next)
-                    },
-                    onQueueItemSelected = { queueId ->
-                        mediaController?.transportControls?.skipToQueueItem(queueId)
-                    },
-                    onSeekTo = { positionMs ->
-                        mediaController?.transportControls?.seekTo(positionMs)
-                    },
+                    onScanWholeDriveWithLimit = ::handleScanWholeDriveWithLimit,
+                    onFileClick = { file -> playFile(file, uiState.value.scan.scannedFiles) },
+                    onPlayPause = { togglePlayPause(uiState.value.playback.isPlaying) },
+                    onStop = { stopPlayback() },
+                    onNext = { skipToNext() },
+                    onPrev = { skipToPrevious() },
+                    onToggleRepeat = { toggleRepeatMode(uiState.value.playback.repeatMode) },
+                    onQueueItemSelected = { queueId -> skipToQueueItem(queueId) },
+                    onSeekTo = { positionMs -> seekTo(positionMs) },
                     onCreatePlaylist = { count -> viewModel.createRandomPlaylist(count) },
                     onPlaylistMessageDismissed = { viewModel.clearPlaylistMessage() },
                     onFolderMessageDismissed = { viewModel.clearFolderMessage() },
@@ -414,28 +374,7 @@ class MainActivity : ComponentActivity() {
                     },
                     cloudAnnouncementKiloKey = cloudAnnouncementKiloKey.value,
                     cloudAnnouncementTtsKey = cloudAnnouncementTtsKey.value,
-                    onSaveCloudAnnouncementKeys = { kilo, tts, onValidated ->
-                        cloudAnnouncementKiloKey.value = kilo
-                        cloudAnnouncementTtsKey.value = tts
-                        ApiKeyStore.getPrefs(this)
-                            ?.edit()
-                            ?.putString(ApiKeyStore.KEY_KILO, kilo)
-                            ?.putString(ApiKeyStore.KEY_CLOUD_TTS, tts)
-                            ?.apply()
-                        lifecycleScope.launch {
-                            val (kiloResult, ttsResult) = ApiKeyStore.validateKeys(this@MainActivity)
-                            val kiloMsg = when (kiloResult) {
-                                is ApiKeyStore.ValidationResult.Success -> if (kilo.isBlank()) "Kilo API: Anonymous mode" else "Kilo API: OK"
-                                is ApiKeyStore.ValidationResult.Error -> "Kilo API: ${kiloResult.message}"
-                            }
-                            val ttsMsg = when (ttsResult) {
-                                is ApiKeyStore.ValidationResult.Success -> if (tts.isBlank()) "Google TTS: Using on-device" else "Google TTS: OK"
-                                is ApiKeyStore.ValidationResult.Error -> "Google TTS: Not configured (using on-device)"
-                            }
-                            Toast.makeText(this@MainActivity, "$kiloMsg\n$ttsMsg", Toast.LENGTH_LONG).show()
-                            onValidated()
-                        }
-                    },
+                    onSaveCloudAnnouncementKeys = ::saveCloudAnnouncementKeys,
                     debugCloudAnnouncements = debugCloudAnnouncements.value,
                     onSetDebugCloudAnnouncements = { enabled ->
                         debugCloudAnnouncements.value = enabled
@@ -448,33 +387,65 @@ class MainActivity : ComponentActivity() {
                     onPlayPlaylist = { playlist ->
                         sendFilesToServiceIfNeeded(uiState.value.scan.scannedFiles)
                         sendPlaylistsToServiceIfNeeded(uiState.value.scan.discoveredPlaylists)
-                        val mediaId = if (playlist.uriString.startsWith(MainViewModel.SMART_PREFIX)) {
-                            val smartId = playlist.uriString.removePrefix(MainViewModel.SMART_PREFIX)
-                            SMART_PLAYLIST_PREFIX + Uri.encode(smartId)
-                        } else {
-                            "playlist:${playlist.uriString}"
-                        }
+                        val mediaId = getPlaylistMediaId(playlist.uriString)
                         mediaController?.transportControls?.playFromMediaId(mediaId, null)
                     },
                     onShufflePlaylistSongs = { playlist, songs ->
                         if (songs.isNotEmpty()) {
                             sendFilesToServiceIfNeeded(uiState.value.scan.scannedFiles)
                             sendPlaylistsToServiceIfNeeded(uiState.value.scan.discoveredPlaylists)
-                            val listKey = if (playlist.uriString.startsWith(MainViewModel.SMART_PREFIX)) {
-                                val smartId = playlist.uriString.removePrefix(MainViewModel.SMART_PREFIX)
-                                SMART_PLAYLIST_PREFIX + Uri.encode(smartId)
-                            } else {
-                                PLAYLIST_URI_PREFIX + Uri.encode(playlist.uriString)
-                            }
-                            mediaController?.transportControls?.playFromMediaId(
-                                ACTION_SHUFFLE_PREFIX + listKey,
-                                null
-                            )
+                            val mediaId = getPlaylistShuffleMediaId(playlist.uriString)
+                            mediaController?.transportControls?.playFromMediaId(mediaId, null)
                         }
                     }
                 )
             }
         }
+    }
+
+    private fun playFile(
+        file: com.example.mymediaplayer.shared.MediaFileInfo,
+        scannedFiles: List<com.example.mymediaplayer.shared.MediaFileInfo>
+    ) {
+        sendFilesToServiceIfNeeded(scannedFiles)
+        mediaController?.transportControls?.playFromMediaId(file.uriString, null)
+    }
+
+    private fun togglePlayPause(isPlaying: Boolean) {
+        if (isPlaying) {
+            mediaController?.transportControls?.pause()
+        } else {
+            mediaController?.transportControls?.play()
+        }
+    }
+
+    private fun stopPlayback() {
+        mediaController?.transportControls?.stop()
+    }
+
+    private fun skipToNext() {
+        mediaController?.transportControls?.skipToNext()
+    }
+
+    private fun skipToPrevious() {
+        mediaController?.transportControls?.skipToPrevious()
+    }
+
+    private fun toggleRepeatMode(currentMode: Int) {
+        val nextMode = when (currentMode) {
+            PlaybackStateCompat.REPEAT_MODE_ALL -> PlaybackStateCompat.REPEAT_MODE_ONE
+            PlaybackStateCompat.REPEAT_MODE_ONE -> PlaybackStateCompat.REPEAT_MODE_NONE
+            else -> PlaybackStateCompat.REPEAT_MODE_ALL
+        }
+        mediaController?.transportControls?.setRepeatMode(nextMode)
+    }
+
+    private fun skipToQueueItem(queueId: Long) {
+        mediaController?.transportControls?.skipToQueueItem(queueId)
+    }
+
+    private fun seekTo(positionMs: Long) {
+        mediaController?.transportControls?.seekTo(positionMs)
     }
 
     private fun observeViewModel() {
@@ -803,6 +774,20 @@ class MainActivity : ComponentActivity() {
         pendingVoiceSearchExtras = null
     }
 
+    private fun handleScanWholeDriveWithLimit(limit: Int) {
+        if (hasMediaReadPermission()) {
+            getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                .edit()
+                .putInt(KEY_SCAN_LIMIT, limit)
+                .putBoolean(KEY_SCAN_WHOLE_DRIVE, true)
+                .apply()
+            viewModel.scanWholeDevice(limit, forceRescan = true)
+        } else {
+            pendingWholeDriveScanLimit = limit
+            requestMediaReadPermission.launch(requiredMediaReadPermission())
+        }
+    }
+
     private fun toggleBluetoothAutoPlay() {
         if (!hasBluetoothConnectPermission()) {
             requestBluetoothConnectPermission()
@@ -965,6 +950,25 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun getPlaylistMediaId(uriString: String): String {
+        return if (uriString.startsWith(MainViewModel.SMART_PREFIX)) {
+            val smartId = uriString.removePrefix(MainViewModel.SMART_PREFIX)
+            SMART_PLAYLIST_PREFIX + Uri.encode(smartId)
+        } else {
+            "playlist:$uriString"
+        }
+    }
+
+    private fun getPlaylistShuffleMediaId(uriString: String): String {
+        val listKey = if (uriString.startsWith(MainViewModel.SMART_PREFIX)) {
+            val smartId = uriString.removePrefix(MainViewModel.SMART_PREFIX)
+            SMART_PLAYLIST_PREFIX + Uri.encode(smartId)
+        } else {
+            PLAYLIST_URI_PREFIX + Uri.encode(uriString)
+        }
+        return ACTION_SHUFFLE_PREFIX + listKey
+    }
+
     private fun formatElapsed(elapsedMs: Long): String {
         val totalSeconds = elapsedMs / 1000
         val hours = totalSeconds / 3600
@@ -995,6 +999,29 @@ class MainActivity : ComponentActivity() {
             }
         }
         return decoded
+    }
+
+    private fun saveCloudAnnouncementKeys(kilo: String, tts: String, onValidated: () -> Unit) {
+        cloudAnnouncementKiloKey.value = kilo
+        cloudAnnouncementTtsKey.value = tts
+        ApiKeyStore.getPrefs(this)
+            ?.edit()
+            ?.putString(ApiKeyStore.KEY_KILO, kilo)
+            ?.putString(ApiKeyStore.KEY_CLOUD_TTS, tts)
+            ?.apply()
+        lifecycleScope.launch {
+            val (kiloResult, ttsResult) = ApiKeyStore.validateKeys(this@MainActivity)
+            val kiloMsg = when (kiloResult) {
+                is ApiKeyStore.ValidationResult.Success -> if (kilo.isBlank()) "Kilo API: Anonymous mode" else "Kilo API: OK"
+                is ApiKeyStore.ValidationResult.Error -> "Kilo API: ${kiloResult.message}"
+            }
+            val ttsMsg = when (ttsResult) {
+                is ApiKeyStore.ValidationResult.Success -> if (tts.isBlank()) "Google TTS: Using on-device" else "Google TTS: OK"
+                is ApiKeyStore.ValidationResult.Error -> "Google TTS: Not configured (using on-device)"
+            }
+            Toast.makeText(this@MainActivity, "$kiloMsg\n$ttsMsg", Toast.LENGTH_LONG).show()
+            onValidated()
+        }
     }
 
     private fun persistTrustedBluetoothDevices(
