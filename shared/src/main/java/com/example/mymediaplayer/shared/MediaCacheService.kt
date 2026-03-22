@@ -474,9 +474,28 @@ class MediaCacheService {
         }
     }
 
+    fun addAllFiles(files: List<MediaFileInfo>) {
+        if (files.isEmpty()) return
+        synchronized(cacheLock) {
+            val spaceLeft = MAX_CACHE_SIZE - _cachedFiles.size
+            if (spaceLeft <= 0) return
+            val toAdd = if (files.size > spaceLeft) files.take(spaceLeft) else files
+            _cachedFiles.addAll(toAdd)
+            _cachedFilesByUri.putAll(toAdd.associateBy { it.uriString })
+            albumArtistIndexed = false
+        }
+    }
+
     fun addPlaylist(playlistInfo: PlaylistInfo) {
         synchronized(cacheLock) {
             _discoveredPlaylists.add(playlistInfo)
+        }
+    }
+
+    fun addAllPlaylists(playlists: List<PlaylistInfo>) {
+        if (playlists.isEmpty()) return
+        synchronized(cacheLock) {
+            _discoveredPlaylists.addAll(playlists)
         }
     }
 
