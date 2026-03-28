@@ -5,6 +5,7 @@ import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
 import android.provider.MediaStore
+import androidx.annotation.VisibleForTesting
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -464,6 +465,7 @@ class MediaCacheService {
         dao.replaceCache(files, playlists, state)
     }
 
+    @VisibleForTesting
     fun addFile(fileInfo: MediaFileInfo) {
         synchronized(cacheLock) {
             if (_cachedFiles.size < MAX_CACHE_SIZE) {
@@ -684,6 +686,7 @@ class MediaCacheService {
         return displayName.substring(dot).lowercase(Locale.US)
     }
 
+    @VisibleForTesting
     fun clearFiles() {
         synchronized(cacheLock) {
             _cachedFiles.clear()
