@@ -21,6 +21,14 @@ data class PersistedCache(
     val scannedAt: Long
 )
 
+data class ScanContext(
+    val context: Context,
+    val treeUri: Uri,
+    val maxFiles: Int = MediaCacheService.MAX_CACHE_SIZE,
+    val deepScan: Boolean = false,
+    val onProgress: ((songsFound: Int, foldersScanned: Int) -> Unit)? = null
+)
+
 class MediaCacheService {
 
     companion object {
@@ -281,19 +289,13 @@ class MediaCacheService {
     private var foldersScanned: Int = 0
     private var songsFound: Int = 0
 
-    suspend fun scanDirectory(
-        context: Context,
-        treeUri: Uri,
-        maxFiles: Int = MAX_CACHE_SIZE,
-        deepScan: Boolean = false,
-        onProgress: ((songsFound: Int, foldersScanned: Int) -> Unit)? = null
-    ): ScanStats {
+    suspend fun scanDirectory(scanContext: ScanContext): ScanStats {
         clearCache()
-        maxFileLimit = maxFiles.coerceAtLeast(1)
+        maxFileLimit = scanContext.maxFiles.coerceAtLeast(1)
         foldersScanned = 0
         songsFound = 0
         val startTime = android.os.SystemClock.elapsedRealtime()
-        val rootDocumentId = DocumentsContract.getTreeDocumentId(treeUri)
+        val rootDocumentId = DocumentsContract.getTreeDocumentId(scanContext.treeUri)
         val extensionCounts = mutableMapOf<String, Int>()
         val skippedReasons = mutableMapOf<String, Int>()
         var probedCandidates = 0
@@ -303,54 +305,52 @@ class MediaCacheService {
         val parentContext = coroutineContext
         val shouldContinue: () -> Boolean = { parentContext.isActive }
         walkTree(
-            context = context,
-            treeUri = treeUri,
+            context = scanContext.context,
+            treeUri = scanContext.treeUri,
             rootDocumentId = rootDocumentId,
             candidates = candidates,
             shouldContinue = shouldContinue,
-            deepScan = deepScan,
+            deepScan = scanContext.deepScan,
             skippedReasons = skippedReasons
         )
-        onProgress?.invoke(candidates.size, foldersScanned)
+        scanContext.onProgress?.invoke(candidates.size, foldersScanned)
 
         // Phase 2: Extract metadata in parallel batches
+        probedCandidates = processMetadataBatches(
+            scanContext = scanContext,
+            candidates = candidates,
+            extensionCounts = extensionCounts,
+            skippedReasons = skippedReasons,
+            initialProbedCandidates = probedCandidates
+        )
+
+        val durationMs = android.os.SystemClock.elapsedRealtime() - startTime
+        return ScanStats(
+            durationMs = durationMs,
+            foldersScanned = foldersScanned,
+            songsFound = songsFound,
+            extensionCounts = extensionCounts.toMap(),
+            skippedReasons = skippedReasons.toMap(),
+            deepScan = scanContext.deepScan,
+            probedCandidates = probedCandidates
+        )
+    }
+
+    private suspend fun processMetadataBatches(
+        scanContext: ScanContext,
+        candidates: List<FileCandidate>,
+        extensionCounts: MutableMap<String, Int>,
+        skippedReasons: MutableMap<String, Int>,
+        initialProbedCandidates: Int
+    ): Int {
         val metadataDispatcher = Dispatchers.IO.limitedParallelism(METADATA_PARALLELISM)
         var processed = 0
+        var probedCandidates = initialProbedCandidates
         for (batch in candidates.chunked(METADATA_BATCH_SIZE)) {
             val results = coroutineScope {
                 batch.map { candidate ->
                     async(metadataDispatcher) {
-                        val metadata = MediaMetadataHelper.extractMetadata(context, candidate.uri.toString())
-                        if (candidate.requiresProbe) {
-                            if (!looksLikeAudioMetadata(metadata)) {
-                                return@async null
-                            }
-                        }
-                        val fallbackYear = candidate.lastModified?.let { millis ->
-                            Instant.ofEpochMilli(millis)
-                                .atZone(ZoneId.systemDefault())
-                                .year
-                        }
-                        val yearValue = metadata?.year?.toIntOrNull() ?: fallbackYear
-                        val durationMs = metadata?.durationMs?.toLongOrNull()
-                        val resolvedTitle = metadata?.title ?: candidate.name.substringBeforeLast('.')
-                        if (metadata?.title == null) {
-                            android.util.Log.w("MediaCacheService", "No metadata title for ${candidate.name} (uri=${candidate.uri}), using fallback: $resolvedTitle")
-                        }
-                        MediaFileInfo(
-                            uriString = candidate.uri.toString(),
-                            displayName = candidate.name,
-                            sizeBytes = candidate.size,
-                            title = resolvedTitle,
-                            artist = metadata?.artist,
-                            album = metadata?.album?.ifBlank { null } ?: candidate.parentFolderName,
-                            genre = normalizeGenre(
-                                metadata?.genre ?: inferGenreFromPath(candidate.parentFolderName)
-                            ),
-                            durationMs = durationMs,
-                            year = yearValue,
-                            addedAtMs = candidate.lastModified
-                        )
+                        extractCandidateMetadata(scanContext.context, candidate)
                     }
                 }.awaitAll()
             }
@@ -370,20 +370,44 @@ class MediaCacheService {
                 songsFound = processed
                 val ext = fileExtension(result.displayName)
                 extensionCounts[ext] = (extensionCounts[ext] ?: 0) + 1
-                onProgress?.invoke(songsFound, foldersScanned)
+                scanContext.onProgress?.invoke(songsFound, foldersScanned)
             }
             if (songsFound >= maxFileLimit) break
         }
+        return probedCandidates
+    }
 
-        val durationMs = android.os.SystemClock.elapsedRealtime() - startTime
-        return ScanStats(
+    private fun extractCandidateMetadata(context: Context, candidate: FileCandidate): MediaFileInfo? {
+        val metadata = MediaMetadataHelper.extractMetadata(context, candidate.uri.toString())
+        if (candidate.requiresProbe) {
+            if (!looksLikeAudioMetadata(metadata)) {
+                return null
+            }
+        }
+        val fallbackYear = candidate.lastModified?.let { millis ->
+            Instant.ofEpochMilli(millis)
+                .atZone(ZoneId.systemDefault())
+                .year
+        }
+        val yearValue = metadata?.year?.toIntOrNull() ?: fallbackYear
+        val durationMs = metadata?.durationMs?.toLongOrNull()
+        val resolvedTitle = metadata?.title ?: candidate.name.substringBeforeLast('.')
+        if (metadata?.title == null) {
+            android.util.Log.w("MediaCacheService", "No metadata title for ${candidate.name} (uri=${candidate.uri}), using fallback: $resolvedTitle")
+        }
+        return MediaFileInfo(
+            uriString = candidate.uri.toString(),
+            displayName = candidate.name,
+            sizeBytes = candidate.size,
+            title = resolvedTitle,
+            artist = metadata?.artist,
+            album = metadata?.album?.ifBlank { null } ?: candidate.parentFolderName,
+            genre = normalizeGenre(
+                metadata?.genre ?: inferGenreFromPath(candidate.parentFolderName)
+            ),
             durationMs = durationMs,
-            foldersScanned = foldersScanned,
-            songsFound = songsFound,
-            extensionCounts = extensionCounts.toMap(),
-            skippedReasons = skippedReasons.toMap(),
-            deepScan = deepScan,
-            probedCandidates = probedCandidates
+            year = yearValue,
+            addedAtMs = candidate.lastModified
         )
     }
 

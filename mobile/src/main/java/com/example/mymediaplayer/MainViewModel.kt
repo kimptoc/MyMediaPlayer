@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.mymediaplayer.shared.MediaCacheService
 import com.example.mymediaplayer.shared.MediaFileInfo
 import com.example.mymediaplayer.shared.PlaylistInfo
+import com.example.mymediaplayer.shared.ScanContext
 import com.example.mymediaplayer.shared.PlaylistService
 import android.provider.MediaStore
 import android.support.v4.media.session.PlaybackStateCompat
@@ -242,19 +243,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 )
             )
             val stats = mediaCacheService.scanDirectory(
-                getApplication(),
-                treeUri,
-                maxFiles,
-                deepScan
-            ) { songsFound, foldersScanned ->
-                val cur = _uiState.value
-                _uiState.value = cur.copy(
-                    scan = cur.scan.copy(
-                        scanProgress = "Scanning… $songsFound songs • $foldersScanned folders",
-                        scannedFiles = mediaCacheService.cachedFiles
-                    )
+                ScanContext(
+                    context = getApplication(),
+                    treeUri = treeUri,
+                    maxFiles = maxFiles,
+                    deepScan = deepScan,
+                    onProgress = { songsFound, foldersScanned ->
+                        val cur = _uiState.value
+                        _uiState.value = cur.copy(
+                            scan = cur.scan.copy(
+                                scanProgress = "Scanning… $songsFound songs • $foldersScanned folders",
+                                scannedFiles = mediaCacheService.cachedFiles
+                            )
+                        )
+                    }
                 )
-            }
+            )
             val files = mediaCacheService.cachedFiles
             val playlists = mediaCacheService.discoveredPlaylists
             scanCache[key] = files to playlists

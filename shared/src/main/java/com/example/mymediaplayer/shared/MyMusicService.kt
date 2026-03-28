@@ -1278,10 +1278,12 @@ class MyMusicService : MediaBrowserServiceCompat() {
                         mediaCacheService.scanWholeDevice(this@MyMusicService, limit, progress)
                     } else {
                         mediaCacheService.scanDirectory(
-                            this@MyMusicService,
-                            uri,
-                            limit,
-                            onProgress = progress
+                            ScanContext(
+                                context = this@MyMusicService,
+                                treeUri = uri,
+                                maxFiles = limit,
+                                onProgress = progress
+                            )
                         )
                         mediaCacheService.enrichGenresFromMediaStore(this@MyMusicService)
                     }
