@@ -1446,113 +1446,180 @@ private fun CategoryTabContent(
             headerContent()
             Spacer(modifier = Modifier.height(8.dp))
         }
-        Surface(
-            color = MaterialTheme.colorScheme.secondaryContainer,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            LazyColumn(modifier = Modifier.padding(8.dp)) {
-                val filteredCategories = if (selectedLetter == null) {
-                    categories
-                } else {
-                    categories.filter {
-                        it.trim().firstOrNull()?.uppercaseChar()?.toString() == selectedLetter
-                    }
-                }
-                val visibleCategories = if (selectedLabel == null) {
-                    filteredCategories
-                } else {
-                    filteredCategories.filter { it == selectedLabel }
-                }
-                if (selectedLabel == null && enableAlphaIndex && letters.isNotEmpty()) {
-                    item {
-                        LazyRow(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 8.dp),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            item {
-                                TextButton(
-                                    onClick = { selectedLetter = null },
-                                    modifier = Modifier.wrapContentWidth()
-                                ) {
-                                    Text("All")
-                                }
-                            }
-                            items(letters) { letter ->
-                                TextButton(
-                                    onClick = { selectedLetter = letter },
-                                    modifier = Modifier.wrapContentWidth()
-                                ) {
-                                    Text(letter)
-                                }
-                            }
-                        }
-                    }
-                }
-                items(visibleCategories) { category ->
-                    val displayTitle = categoryCounts[category]?.let { count ->
-                        "$category ($count)"
-                    } ?: category
-                    CategoryCard(
-                        title = displayTitle,
-                        isSelected = category == selectedLabel,
-                        isCompact = selectedLabel != null,
-                        onClick = { onCategorySelected(category) }
-                    )
-                }
-            }
-        }
+
+        CategoryListSection(
+            categories = categories,
+            categoryCounts = categoryCounts,
+            selectedLabel = selectedLabel,
+            selectedLetter = selectedLetter,
+            enableAlphaIndex = enableAlphaIndex,
+            letters = letters,
+            onSelectedLetterChanged = { selectedLetter = it },
+            onCategorySelected = onCategorySelected
+        )
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        Surface(
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.padding(12.dp)) {
-                if (selectedLabel != null) {
-                    TextButton(onClick = onClearCategorySelection) {
-                        Text("Back to all $title")
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "Songs in $selectedLabel",
-                        style = MaterialTheme.typography.titleSmall
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    PlaybackButtonsRow(
-                        isPlaying = isPlaying,
-                        isPlayingPlaylist = isPlayingPlaylist,
-                        hasNext = hasNext,
-                        hasPrev = hasPrev,
-                        showNavForNonPlaylist = true,
-                        onPlay = onPlay,
-                        onShuffle = onShuffle,
-                        onStop = onStop,
-                        onNext = onNext,
-                        onPrev = onPrev
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    if (songs.isEmpty()) {
-                        Text("No songs in $selectedLabel")
-                    } else {
-                        LazyColumn {
-                            items(songs) { file ->
-                                FileCard(
-                                    file = file,
-                                    isCurrentTrack = file.uriString == currentMediaId,
-                                    onClick = { onFileClick(file) },
-                                    onAddToPlaylist = { onAddToPlaylist(file) },
-                                    isFavorite = file.uriString in favoriteUris,
-                                    onToggleFavorite = { onToggleFavorite(file) }
-                                )
+        CategorySongsSection(
+            title = title,
+            selectedLabel = selectedLabel,
+            songs = songs,
+            isPlaying = isPlaying,
+            isPlayingPlaylist = isPlayingPlaylist,
+            hasNext = hasNext,
+            hasPrev = hasPrev,
+            onClearCategorySelection = onClearCategorySelection,
+            onPlay = onPlay,
+            onShuffle = onShuffle,
+            onStop = onStop,
+            onNext = onNext,
+            onPrev = onPrev,
+            onFileClick = onFileClick,
+            onAddToPlaylist = onAddToPlaylist,
+            favoriteUris = favoriteUris,
+            onToggleFavorite = onToggleFavorite,
+            currentMediaId = currentMediaId
+        )
+    }
+}
+
+@Composable
+private fun CategoryListSection(
+    categories: List<String>,
+    categoryCounts: Map<String, Int>,
+    selectedLabel: String?,
+    selectedLetter: String?,
+    enableAlphaIndex: Boolean,
+    letters: List<String>,
+    onSelectedLetterChanged: (String?) -> Unit,
+    onCategorySelected: (String) -> Unit
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        LazyColumn(modifier = Modifier.padding(8.dp)) {
+            val filteredCategories = if (selectedLetter == null) {
+                categories
+            } else {
+                categories.filter {
+                    it.trim().firstOrNull()?.uppercaseChar()?.toString() == selectedLetter
+                }
+            }
+            val visibleCategories = if (selectedLabel == null) {
+                filteredCategories
+            } else {
+                filteredCategories.filter { it == selectedLabel }
+            }
+            if (selectedLabel == null && enableAlphaIndex && letters.isNotEmpty()) {
+                item {
+                    LazyRow(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        item {
+                            TextButton(
+                                onClick = { onSelectedLetterChanged(null) },
+                                modifier = Modifier.wrapContentWidth()
+                            ) {
+                                Text("All")
+                            }
+                        }
+                        items(letters) { letter ->
+                            TextButton(
+                                onClick = { onSelectedLetterChanged(letter) },
+                                modifier = Modifier.wrapContentWidth()
+                            ) {
+                                Text(letter)
                             }
                         }
                     }
-                } else {
-                    Text("Select a $title to view songs")
                 }
+            }
+            items(visibleCategories) { category ->
+                val displayTitle = categoryCounts[category]?.let { count ->
+                    "$category ($count)"
+                } ?: category
+                CategoryCard(
+                    title = displayTitle,
+                    isSelected = category == selectedLabel,
+                    isCompact = selectedLabel != null,
+                    onClick = { onCategorySelected(category) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CategorySongsSection(
+    title: String,
+    selectedLabel: String?,
+    songs: List<MediaFileInfo>,
+    isPlaying: Boolean,
+    isPlayingPlaylist: Boolean,
+    hasNext: Boolean,
+    hasPrev: Boolean,
+    onClearCategorySelection: () -> Unit,
+    onPlay: () -> Unit,
+    onShuffle: () -> Unit,
+    onStop: () -> Unit,
+    onNext: () -> Unit,
+    onPrev: () -> Unit,
+    onFileClick: (MediaFileInfo) -> Unit,
+    onAddToPlaylist: (MediaFileInfo) -> Unit,
+    favoriteUris: Set<String>,
+    onToggleFavorite: (MediaFileInfo) -> Unit,
+    currentMediaId: String?
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            if (selectedLabel != null) {
+                TextButton(onClick = onClearCategorySelection) {
+                    Text("Back to all $title")
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Songs in $selectedLabel",
+                    style = MaterialTheme.typography.titleSmall
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                PlaybackButtonsRow(
+                    isPlaying = isPlaying,
+                    isPlayingPlaylist = isPlayingPlaylist,
+                    hasNext = hasNext,
+                    hasPrev = hasPrev,
+                    showNavForNonPlaylist = true,
+                    onPlay = onPlay,
+                    onShuffle = onShuffle,
+                    onStop = onStop,
+                    onNext = onNext,
+                    onPrev = onPrev
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                if (songs.isEmpty()) {
+                    Text("No songs in $selectedLabel")
+                } else {
+                    LazyColumn {
+                        items(songs) { file ->
+                            FileCard(
+                                file = file,
+                                isCurrentTrack = file.uriString == currentMediaId,
+                                onClick = { onFileClick(file) },
+                                onAddToPlaylist = { onAddToPlaylist(file) },
+                                isFavorite = file.uriString in favoriteUris,
+                                onToggleFavorite = { onToggleFavorite(file) }
+                            )
+                        }
+                    }
+                }
+            } else {
+                Text("Select a $title to view songs")
             }
         }
     }
