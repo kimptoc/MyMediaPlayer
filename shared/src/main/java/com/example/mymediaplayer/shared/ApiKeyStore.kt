@@ -85,8 +85,7 @@ object ApiKeyStore {
             OutputStreamWriter(conn.outputStream).use { it.write(body) }
 
             if (conn.responseCode != 200) {
-                val errorBody = conn.errorStream?.bufferedReader()?.readText() ?: ""
-                return@withContext ValidationResult.Error("HTTP ${conn.responseCode}: $errorBody")
+                return@withContext ValidationResult.Error("HTTP ${conn.responseCode}: API request failed")
             }
 
             ValidationResult.Success
@@ -119,8 +118,7 @@ object ApiKeyStore {
             OutputStreamWriter(conn.outputStream).use { it.write(body) }
 
             if (conn.responseCode != 200) {
-                val errorBody = conn.errorStream?.bufferedReader()?.readText() ?: ""
-                return@withContext ValidationResult.Error("HTTP ${conn.responseCode}: $errorBody")
+                return@withContext ValidationResult.Error("HTTP ${conn.responseCode}: API request failed")
             }
 
             ValidationResult.Success
