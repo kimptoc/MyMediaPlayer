@@ -2317,11 +2317,6 @@ class MyMusicService : MediaBrowserServiceCompat() {
         return smartPlaylistTitleFromId(smartId)
     }
 
-    private fun resolveSmartPlaylistTracks(playlistNameQuery: String): List<MediaFileInfo>? {
-        val smartId = smartPlaylistIdFromQuery(playlistNameQuery) ?: return null
-        return resolveSmartPlaylistTracksById(smartId)
-    }
-
     @VisibleForTesting
     internal fun smartPlaylistIdFromQuery(query: String): String? {
         val needle = query.lowercase().trim()
