@@ -261,31 +261,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (!deepScan) {
                 mediaCacheService.persistCache(getApplication(), treeUri, maxFiles)
             }
-            val seconds = stats.durationMs / 1000.0
-            val typeSummary = stats.extensionCounts.entries
-                .sortedByDescending { it.value }
-                .take(5)
-                .joinToString(", ") { "${it.key}:${it.value}" }
-                .ifBlank { "n/a" }
-            val skipSummary = if (stats.skippedReasons.isEmpty()) {
-                "none"
-            } else {
-                stats.skippedReasons.entries
-                    .sortedByDescending { it.value }
-                    .take(3)
-                    .joinToString(", ") { "${it.key}:${it.value}" }
-            }
-            val modeLabel = if (stats.deepScan) "Deep" else "Normal"
-            val message =
-                "$modeLabel scan complete in %.1fs • Folders: %d • Songs: %d • Types: %s • Skipped: %s • Probed: %d"
-                    .format(
-                        seconds,
-                        stats.foldersScanned,
-                        stats.songsFound,
-                        typeSummary,
-                        skipSummary,
-                        stats.probedCandidates
-                    )
+            val message = formatDirectoryScanMessage(stats)
             _uiState.value = resetAfterScan(
                 files,
                 playlists,
@@ -376,15 +352,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
                 maxFiles
             )
-            val seconds = stats.durationMs / 1000.0
-            val typeSummary = stats.extensionCounts.entries
-                .sortedByDescending { it.value }
-                .take(5)
-                .joinToString(", ") { "${it.key}:${it.value}" }
-                .ifBlank { "n/a" }
-            val message =
-                "Whole-drive scan complete in %.1fs • Songs: %d • Types: %s"
-                    .format(seconds, stats.songsFound, typeSummary)
+            val message = formatWholeDeviceScanMessage(stats)
             _uiState.value = resetAfterScan(
                 files,
                 playlists,
@@ -395,6 +363,44 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             reimportPlaylistsFromSaveFolderIfNeeded()
             metadataKey = null
         }
+    }
+
+    private fun formatDirectoryScanMessage(stats: com.example.mymediaplayer.shared.ScanStats): String {
+        val seconds = stats.durationMs / 1000.0
+        val typeSummary = stats.extensionCounts.entries
+            .sortedByDescending { it.value }
+            .take(5)
+            .joinToString(", ") { "${it.key}:${it.value}" }
+            .ifBlank { "n/a" }
+        val skipSummary = if (stats.skippedReasons.isEmpty()) {
+            "none"
+        } else {
+            stats.skippedReasons.entries
+                .sortedByDescending { it.value }
+                .take(3)
+                .joinToString(", ") { "${it.key}:${it.value}" }
+        }
+        val modeLabel = if (stats.deepScan) "Deep" else "Normal"
+        return "$modeLabel scan complete in %.1fs • Folders: %d • Songs: %d • Types: %s • Skipped: %s • Probed: %d"
+            .format(
+                seconds,
+                stats.foldersScanned,
+                stats.songsFound,
+                typeSummary,
+                skipSummary,
+                stats.probedCandidates
+            )
+    }
+
+    private fun formatWholeDeviceScanMessage(stats: com.example.mymediaplayer.shared.ScanStats): String {
+        val seconds = stats.durationMs / 1000.0
+        val typeSummary = stats.extensionCounts.entries
+            .sortedByDescending { it.value }
+            .take(5)
+            .joinToString(", ") { "${it.key}:${it.value}" }
+            .ifBlank { "n/a" }
+        return "Whole-drive scan complete in %.1fs • Songs: %d • Types: %s"
+            .format(seconds, stats.songsFound, typeSummary)
     }
 
     fun setTreeUri(uri: Uri) {
