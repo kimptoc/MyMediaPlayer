@@ -44,14 +44,10 @@ class SmartPlaylistBenchmarkTest {
         }
 
         // Fix for adding files directly to cachedFiles variable since we cannot set cachedFiles (it has a private setter in Kotlin)
-        val methodClear = MediaCacheService::class.java.getDeclaredMethod("clearFiles")
-        methodClear.isAccessible = true
-        methodClear.invoke(mediaCacheService)
+        mediaCacheService.clearFiles()
 
-        val methodAdd = MediaCacheService::class.java.getDeclaredMethod("addFile", MediaFileInfo::class.java)
-        methodAdd.isAccessible = true
         for (file in files) {
-             methodAdd.invoke(mediaCacheService, file)
+             mediaCacheService.addFile(file)
         }
 
         // To access getSharedPreferences in MyMusicService we need a Context.
