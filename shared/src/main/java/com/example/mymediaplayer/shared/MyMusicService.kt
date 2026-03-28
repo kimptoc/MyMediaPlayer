@@ -2159,15 +2159,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
         val mediaFocus = extras?.getString(EXTRA_MEDIA_FOCUS_KEY)?.trim().orEmpty()
         val requestedPlaylist = extras?.getString(EXTRA_MEDIA_PLAYLIST_KEY)?.trim().orEmpty()
-        val requestedArtist = extras?.getString(EXTRA_MEDIA_ARTIST_KEY)?.trim().orEmpty()
-        val requestedAlbum = extras?.getString(EXTRA_MEDIA_ALBUM_KEY)?.trim().orEmpty()
-        val requestedGenre = extras?.getString(EXTRA_MEDIA_GENRE_KEY)?.trim().orEmpty()
-        val requestedTitle = extras?.getString(EXTRA_MEDIA_TITLE_KEY)?.trim().orEmpty()
         val focusPlaylist = mediaFocus.equals(FOCUS_PLAYLIST, ignoreCase = true)
-        val focusArtist = mediaFocus.equals(FOCUS_ARTIST, ignoreCase = true)
-        val focusAlbum = mediaFocus.equals(FOCUS_ALBUM, ignoreCase = true)
-        val focusGenre = mediaFocus.equals(FOCUS_GENRE, ignoreCase = true)
-        val focusTitle = mediaFocus.equals(FOCUS_TITLE, ignoreCase = true)
 
         val playlistNameQuery = when {
             requestedPlaylist.isNotBlank() -> requestedPlaylist
@@ -2178,38 +2170,103 @@ class MyMusicService : MediaBrowserServiceCompat() {
             playlistNameQuery.isNotBlank() -> playlistNameQuery
             else -> cleanedQuery
         }
+
         val smartPlaylistId = smartPlaylistIdFromQuery(smartPlaylistQuery)
-        if (smartPlaylistId != null) {
-            val smartTracks = resolveSmartPlaylistTracksById(smartPlaylistId)
-            if (smartTracks != null && smartTracks.isNotEmpty()) {
-                playlistQueue = if (wantsShuffle) smartTracks.shuffled() else smartTracks
-                currentQueueIndex = 0
-                currentPlaylistName = smartPlaylistTitleFromId(smartPlaylistId)
-                updateSessionQueue()
-                playTrack(playlistQueue[currentQueueIndex])
-                savePlaybackSnapshot()
-                return
-            }
+        if (smartPlaylistId != null && tryPlaySmartPlaylist(smartPlaylistId, wantsShuffle)) {
+            return
         }
-        if (playlistNameQuery.isNotBlank()) {
-            val playlist = mediaCacheService.discoveredPlaylists.firstOrNull {
-                it.displayName.removeSuffix(".m3u").contains(playlistNameQuery, ignoreCase = true)
-            }
-            if (playlist != null) {
-                val tracks = enrichFromCache(
-                    playlistService.readPlaylist(this, Uri.parse(playlist.uriString))
+
+        if (tryPlayRegularPlaylist(playlistNameQuery, wantsShuffle)) {
+            return
+        }
+
+        val (focusedMatches, focusLabel) = findFocusedMatches(raw, cleanedQuery, extras)
+
+        val queryForSongs = cleanedQuery.ifBlank { raw }.trim()
+        val matches = when {
+            focusedMatches != null && focusedMatches.isNotEmpty() -> focusedMatches
+            queryForSongs.isBlank() -> mediaCacheService.cachedFiles
+            else -> mediaCacheService.searchFiles(queryForSongs)
+        }
+        if (matches.isEmpty()) {
+            updatePlaybackState(PlaybackStateCompat.STATE_ERROR, "No results for \"$raw\"")
+            return
+        }
+
+        val finalPlaylistName = when {
+            focusLabel != null -> focusLabel
+            queryForSongs.isBlank() -> "All Songs"
+            else -> "Search: $queryForSongs"
+        }
+
+        playQueueAndSaveSnapshot(matches, wantsShuffle, finalPlaylistName)
+    }
+
+    private fun playQueueAndSaveSnapshot(
+        tracks: List<MediaFileInfo>,
+        wantsShuffle: Boolean,
+        playlistName: String
+    ) {
+        playlistQueue = if (wantsShuffle) tracks.shuffled() else tracks
+        currentQueueIndex = 0
+        currentPlaylistName = playlistName
+        updateSessionQueue()
+        playTrack(playlistQueue[currentQueueIndex])
+        savePlaybackSnapshot()
+    }
+
+    private fun tryPlaySmartPlaylist(smartPlaylistId: String, wantsShuffle: Boolean): Boolean {
+        val smartTracks = resolveSmartPlaylistTracksById(smartPlaylistId)
+        if (smartTracks != null && smartTracks.isNotEmpty()) {
+            playQueueAndSaveSnapshot(
+                smartTracks,
+                wantsShuffle,
+                smartPlaylistTitleFromId(smartPlaylistId)
+            )
+            return true
+        }
+        return false
+    }
+
+    private suspend fun tryPlayRegularPlaylist(
+        playlistNameQuery: String,
+        wantsShuffle: Boolean
+    ): Boolean {
+        if (playlistNameQuery.isBlank()) return false
+        val playlist = mediaCacheService.discoveredPlaylists.firstOrNull {
+            it.displayName.removeSuffix(".m3u").contains(playlistNameQuery, ignoreCase = true)
+        }
+        if (playlist != null) {
+            val tracks = enrichFromCache(
+                playlistService.readPlaylist(this, Uri.parse(playlist.uriString))
+            )
+            if (tracks.isNotEmpty()) {
+                playQueueAndSaveSnapshot(
+                    tracks,
+                    wantsShuffle,
+                    playlist.displayName.removeSuffix(".m3u")
                 )
-                if (tracks.isNotEmpty()) {
-                    playlistQueue = if (wantsShuffle) tracks.shuffled() else tracks
-                    currentQueueIndex = 0
-                    currentPlaylistName = playlist.displayName.removeSuffix(".m3u")
-                    updateSessionQueue()
-                    playTrack(playlistQueue[currentQueueIndex])
-                    savePlaybackSnapshot()
-                    return
-                }
+                return true
             }
         }
+        return false
+    }
+
+    private fun findFocusedMatches(
+        raw: String,
+        cleanedQuery: String,
+        extras: Bundle?
+    ): Pair<List<MediaFileInfo>?, String?> {
+        val requestedArtist = extras?.getString(EXTRA_MEDIA_ARTIST_KEY)?.trim().orEmpty()
+        val requestedAlbum = extras?.getString(EXTRA_MEDIA_ALBUM_KEY)?.trim().orEmpty()
+        val requestedGenre = extras?.getString(EXTRA_MEDIA_GENRE_KEY)?.trim().orEmpty()
+        val requestedTitle = extras?.getString(EXTRA_MEDIA_TITLE_KEY)?.trim().orEmpty()
+
+        val mediaFocus = extras?.getString(EXTRA_MEDIA_FOCUS_KEY)?.trim().orEmpty()
+        val focusArtist = mediaFocus.equals(FOCUS_ARTIST, ignoreCase = true)
+        val focusAlbum = mediaFocus.equals(FOCUS_ALBUM, ignoreCase = true)
+        val focusGenre = mediaFocus.equals(FOCUS_GENRE, ignoreCase = true)
+        val focusTitle = mediaFocus.equals(FOCUS_TITLE, ignoreCase = true)
 
         fun refine(
             base: List<MediaFileInfo>?,
@@ -2222,6 +2279,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         var focusedMatches: List<MediaFileInfo>? = null
         var focusLabel: String? = null
         val focusQuery = cleanedQuery.ifBlank { raw }.trim()
+
         if (requestedArtist.isNotBlank()) {
             focusedMatches = refine(focusedMatches) { file ->
                 file.artist?.contains(requestedArtist, ignoreCase = true) == true
@@ -2271,32 +2329,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 else -> focusLabel
             }
         }
-
-        val queryForSongs = cleanedQuery.ifBlank { raw }.trim()
-        val matches = when {
-            focusedMatches != null && focusedMatches.isNotEmpty() -> focusedMatches
-            queryForSongs.isBlank() -> mediaCacheService.cachedFiles
-            else -> mediaCacheService.searchFiles(queryForSongs)
-        }
-        if (matches.isEmpty()) {
-            updatePlaybackState(PlaybackStateCompat.STATE_ERROR, "No results for \"$raw\"")
-            return
-        }
-
-        playlistQueue = if (wantsShuffle) matches.shuffled() else matches
-        currentQueueIndex = 0
-        currentPlaylistName = when {
-            focusLabel != null -> focusLabel
-            queryForSongs.isBlank() -> {
-                "All Songs"
-            }
-            else -> {
-                "Search: $queryForSongs"
-            }
-        }
-        updateSessionQueue()
-        playTrack(playlistQueue[currentQueueIndex])
-        savePlaybackSnapshot()
+        return Pair(focusedMatches, focusLabel)
     }
 
     private suspend fun ensureCacheReadyForSearch() {
