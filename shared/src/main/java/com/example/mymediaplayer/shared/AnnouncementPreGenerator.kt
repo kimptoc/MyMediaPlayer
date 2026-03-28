@@ -238,8 +238,7 @@ internal class AnnouncementPreGenerator(
 
             val responseCode = conn.responseCode
             if (responseCode != 200) {
-                val errorBody = conn.errorStream?.bufferedReader()?.readText() ?: "no error body"
-                Log.w(TAG, "Kilo HTTP $responseCode: $errorBody")
+                Log.w(TAG, "Kilo HTTP $responseCode: API request failed")
                 return@withContext null
             }
 
