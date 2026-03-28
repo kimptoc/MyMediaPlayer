@@ -2312,11 +2312,6 @@ class MyMusicService : MediaBrowserServiceCompat() {
         mediaCacheService.loadPersistedCache(this, uri, limit)
     }
 
-    private fun resolveSmartPlaylistTitle(playlistNameQuery: String): String {
-        val smartId = smartPlaylistIdFromQuery(playlistNameQuery) ?: return playlistNameQuery
-        return smartPlaylistTitleFromId(smartId)
-    }
-
     private fun resolveSmartPlaylistTracks(playlistNameQuery: String): List<MediaFileInfo>? {
         val smartId = smartPlaylistIdFromQuery(playlistNameQuery) ?: return null
         return resolveSmartPlaylistTracksById(smartId)
