@@ -1691,7 +1691,7 @@ private fun SongsListSection(
 }
 
 @Composable
-private fun PlaylistsSection(
+fun PlaylistsSection(
     playlists: List<PlaylistInfo>,
     selectedPlaylist: PlaylistInfo?,
     playlistSongs: List<MediaFileInfo>,
@@ -1742,56 +1742,161 @@ private fun PlaylistsSection(
         return
     }
 
-    Surface(
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        LazyColumn(modifier = Modifier.padding(8.dp)) {
-            val visiblePlaylists = if (selectedPlaylist == null) {
-                playlists
-            } else {
-                playlists.filter { it.uriString == selectedPlaylist.uriString }
-            }
-            items(visiblePlaylists) { playlist ->
-                val isSmart = playlist.uriString.startsWith(MainViewModel.SMART_PREFIX)
-                PlaylistCard(
-                    playlist = playlist,
-                    isCompact = selectedPlaylist != null,
-                    isSmart = isSmart,
-                    onRename = { if (!isSmart) onRequestRenamePlaylist(playlist) },
-                    onDelete = { if (!isSmart) onRequestDeletePlaylist(playlist) },
-                    onClick = {
-                        if (hasUnsavedChanges && selectedPlaylist?.uriString != playlist.uriString) {
-                            pendingSelectPlaylist = playlist
-                            pendingClearSelection = false
-                            showDiscardChangesDialog = true
-                        } else {
-                            onPlaylistSelected(playlist)
-                        }
-                    }
-                )
+    PlaylistList(
+        playlists = playlists,
+        selectedPlaylist = selectedPlaylist,
+        hasUnsavedChanges = hasUnsavedChanges,
+        onRequestRenamePlaylist = onRequestRenamePlaylist,
+        onRequestDeletePlaylist = onRequestDeletePlaylist,
+        onPlaylistSelected = onPlaylistSelected,
+        onPendingSelectPlaylist = { pendingSelectPlaylist = it },
+        onPendingClearSelection = { pendingClearSelection = it },
+        onShowDiscardChangesDialog = { showDiscardChangesDialog = it }
+    )
+
+    Spacer(modifier = Modifier.height(8.dp))
+
+    if (selectedPlaylist != null) {
+        PlaylistDetails(
+            selectedPlaylist = selectedPlaylist,
+            hasUnsavedChanges = hasUnsavedChanges,
+            isEditing = isEditing,
+            isLoading = isLoading,
+            isPlaying = isPlaying,
+            isPlayingPlaylist = isPlayingPlaylist,
+            queueTitle = queueTitle,
+            hasNext = hasNext,
+            hasPrev = hasPrev,
+            playlistSongs = playlistSongs,
+            editableSongs = editableSongs,
+            dedupeOnSave = dedupeOnSave,
+            editSearchQuery = editSearchQuery,
+            draggingIndex = draggingIndex,
+            draggingOffsetY = draggingOffsetY,
+            currentMediaId = currentMediaId,
+            favoriteUris = favoriteUris,
+            dragSwapThresholdPx = dragSwapThresholdPx,
+            onEditSearchQueryChange = { editSearchQuery = it },
+            onDedupeOnSaveChange = { dedupeOnSave = it },
+            onEditableSongsChange = { editableSongs = it },
+            onIsEditingChange = { isEditing = it },
+            onDraggingIndexChange = { draggingIndex = it },
+            onDraggingOffsetYChange = { draggingOffsetY = it },
+            onPendingSelectPlaylist = { pendingSelectPlaylist = it },
+            onPendingClearSelection = { pendingClearSelection = it },
+            onShowDiscardChangesDialog = { showDiscardChangesDialog = it },
+            onClearPlaylistSelection = onClearPlaylistSelection,
+            onSavePlaylistEdits = onSavePlaylistEdits,
+            onPlayPlaylist = onPlayPlaylist,
+            onShufflePlaylistSongs = onShufflePlaylistSongs,
+            onStop = onStop,
+            onNext = onNext,
+            onPrev = onPrev,
+            onFileClick = onFileClick,
+            onAddToPlaylist = onAddToPlaylist,
+            onToggleFavorite = onToggleFavorite
+        )
+    } else {
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(12.dp)) {
+                Text("Select a playlist to view songs")
             }
         }
     }
 
-    Spacer(modifier = Modifier.height(8.dp))
+    if (showDiscardChangesDialog) {
+        AlertDialog(
+            onDismissRequest = { showDiscardChangesDialog = false },
+            title = { Text("Discard changes?") },
+            text = { Text("You have unsaved playlist edits.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDiscardChangesDialog = false
+                        isEditing = false
+                        editableSongs = playlistSongs
+                        dedupeOnSave = false
+                        editSearchQuery = ""
+                        val nextSelection = pendingSelectPlaylist
+                        val clearSelection = pendingClearSelection
+                        pendingSelectPlaylist = null
+                        pendingClearSelection = false
+                        if (clearSelection) onClearPlaylistSelection()
+                        if (nextSelection != null) onPlaylistSelected(nextSelection)
+                    }
+                ) {
+                    Text("Discard")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showDiscardChangesDialog = false
+                        pendingSelectPlaylist = null
+                        pendingClearSelection = false
+                    }
+                ) {
+                    Text("Keep editing")
+                }
+            }
+        )
+    }
+}
 
+@Composable
+private fun PlaylistDetails(
+    selectedPlaylist: PlaylistInfo,
+    hasUnsavedChanges: Boolean,
+    isEditing: Boolean,
+    isLoading: Boolean,
+    isPlaying: Boolean,
+    isPlayingPlaylist: Boolean,
+    queueTitle: String?,
+    hasNext: Boolean,
+    hasPrev: Boolean,
+    playlistSongs: List<MediaFileInfo>,
+    editableSongs: List<MediaFileInfo>,
+    dedupeOnSave: Boolean,
+    editSearchQuery: String,
+    draggingIndex: Int?,
+    draggingOffsetY: Float,
+    currentMediaId: String?,
+    favoriteUris: Set<String>,
+    dragSwapThresholdPx: Float,
+    onEditSearchQueryChange: (String) -> Unit,
+    onDedupeOnSaveChange: (Boolean) -> Unit,
+    onEditableSongsChange: (List<MediaFileInfo>) -> Unit,
+    onIsEditingChange: (Boolean) -> Unit,
+    onDraggingIndexChange: (Int?) -> Unit,
+    onDraggingOffsetYChange: (Float) -> Unit,
+    onPendingSelectPlaylist: (PlaylistInfo?) -> Unit,
+    onPendingClearSelection: (Boolean) -> Unit,
+    onShowDiscardChangesDialog: (Boolean) -> Unit,
+    onClearPlaylistSelection: () -> Unit,
+    onSavePlaylistEdits: (PlaylistInfo, List<MediaFileInfo>) -> Unit,
+    onPlayPlaylist: (PlaylistInfo) -> Unit,
+    onShufflePlaylistSongs: (PlaylistInfo, List<MediaFileInfo>) -> Unit,
+    onStop: () -> Unit,
+    onNext: () -> Unit,
+    onPrev: () -> Unit,
+    onFileClick: (MediaFileInfo) -> Unit,
+    onAddToPlaylist: (MediaFileInfo) -> Unit,
+    onToggleFavorite: (MediaFileInfo) -> Unit
+) {
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
-            if (selectedPlaylist == null) {
-                Text("Select a playlist to view songs")
-                return@Column
-            }
-
             TextButton(
                 onClick = {
                     if (hasUnsavedChanges) {
-                        pendingSelectPlaylist = null
-                        pendingClearSelection = true
-                        showDiscardChangesDialog = true
+                        onPendingSelectPlaylist(null)
+                        onPendingClearSelection(true)
+                        onShowDiscardChangesDialog(true)
                     } else {
                         onClearPlaylistSelection()
                     }
@@ -1810,8 +1915,8 @@ private fun PlaylistsSection(
                 if (!isEditing) {
                     TextButton(
                         onClick = {
-                            editableSongs = playlistSongs
-                            isEditing = true
+                            onEditableSongsChange(playlistSongs)
+                            onIsEditingChange(true)
                         },
                         enabled = playlistSongs.isNotEmpty() &&
                             !selectedPlaylist.uriString.startsWith(MainViewModel.SMART_PREFIX)
@@ -1827,12 +1932,12 @@ private fun PlaylistsSection(
                                 editableSongs
                             }
                             onSavePlaylistEdits(selectedPlaylist, songsToSave)
-                            editableSongs = songsToSave
-                            isEditing = false
-                            draggingIndex = null
-                            draggingOffsetY = 0f
-                            dedupeOnSave = false
-                            editSearchQuery = ""
+                            onEditableSongsChange(songsToSave)
+                            onIsEditingChange(false)
+                            onDraggingIndexChange(null)
+                            onDraggingOffsetYChange(0f)
+                            onDedupeOnSaveChange(false)
+                            onEditSearchQueryChange("")
                         },
                         enabled = editableSongs.isNotEmpty()
                     ) {
@@ -1840,12 +1945,12 @@ private fun PlaylistsSection(
                     }
                     TextButton(
                         onClick = {
-                            editableSongs = playlistSongs
-                            isEditing = false
-                            draggingIndex = null
-                            draggingOffsetY = 0f
-                            dedupeOnSave = false
-                            editSearchQuery = ""
+                            onEditableSongsChange(playlistSongs)
+                            onIsEditingChange(false)
+                            onDraggingIndexChange(null)
+                            onDraggingOffsetYChange(0f)
+                            onDedupeOnSaveChange(false)
+                            onEditSearchQueryChange("")
                         }
                     ) {
                         Text("Cancel")
@@ -1887,12 +1992,12 @@ private fun PlaylistsSection(
                 ) {
                     TextField(
                         value = editSearchQuery,
-                        onValueChange = { editSearchQuery = it },
+                        onValueChange = onEditSearchQueryChange,
                         singleLine = true,
                         placeholder = { Text("Filter songs while editing") },
                         modifier = Modifier.weight(1f)
                     )
-                    TextButton(onClick = { dedupeOnSave = !dedupeOnSave }) {
+                    TextButton(onClick = { onDedupeOnSaveChange(!dedupeOnSave) }) {
                         Text(if (dedupeOnSave) "Dedup: On" else "Dedup: Off")
                     }
                 }
@@ -1934,130 +2039,190 @@ private fun PlaylistsSection(
                             val sourceIndex = row.index
                             val file = row.value
                             val canDrag = editSearchQuery.isBlank()
-                            val dragModifier = if (canDrag) {
-                                Modifier.pointerInput(sourceIndex, editableSongs) {
-                                    detectDragGesturesAfterLongPress(
-                                        onDragStart = {
-                                            draggingIndex = sourceIndex
-                                            draggingOffsetY = 0f
-                                        },
-                                        onDragEnd = {
-                                            draggingIndex = null
-                                            draggingOffsetY = 0f
-                                        },
-                                        onDragCancel = {
-                                            draggingIndex = null
-                                            draggingOffsetY = 0f
-                                        },
-                                        onDrag = { change, dragAmount ->
-                                            if (draggingIndex != sourceIndex) return@detectDragGesturesAfterLongPress
-                                            change.consume()
-                                            draggingOffsetY += dragAmount.y
-                                            if (draggingOffsetY > dragSwapThresholdPx && sourceIndex < editableSongs.lastIndex) {
-                                                val list = editableSongs.toMutableList()
-                                                val tmp = list[sourceIndex + 1]
-                                                list[sourceIndex + 1] = list[sourceIndex]
-                                                list[sourceIndex] = tmp
-                                                editableSongs = list
-                                                draggingIndex = sourceIndex + 1
-                                                draggingOffsetY -= dragSwapThresholdPx
-                                            } else if (draggingOffsetY < -dragSwapThresholdPx && sourceIndex > 0) {
-                                                val list = editableSongs.toMutableList()
-                                                val tmp = list[sourceIndex - 1]
-                                                list[sourceIndex - 1] = list[sourceIndex]
-                                                list[sourceIndex] = tmp
-                                                editableSongs = list
-                                                draggingIndex = sourceIndex - 1
-                                                draggingOffsetY += dragSwapThresholdPx
-                                            }
-                                        }
-                                    )
+                            EditableSongItem(
+                                sourceIndex = sourceIndex,
+                                file = file,
+                                editableSongs = editableSongs,
+                                canDrag = canDrag,
+                                draggingIndex = draggingIndex,
+                                draggingOffsetY = draggingOffsetY,
+                                dragSwapThresholdPx = dragSwapThresholdPx,
+                                onDragStart = { idx, offset ->
+                                    onDraggingIndexChange(idx)
+                                    onDraggingOffsetYChange(offset)
+                                },
+                                onDragEnd = {
+                                    onDraggingIndexChange(null)
+                                    onDraggingOffsetYChange(0f)
+                                },
+                                onDragCancel = {
+                                    onDraggingIndexChange(null)
+                                    onDraggingOffsetYChange(0f)
+                                },
+                                onDrag = { idx, offset, list ->
+                                    onDraggingIndexChange(idx)
+                                    onDraggingOffsetYChange(offset)
+                                    onEditableSongsChange(list)
+                                },
+                                onRemove = { idx ->
+                                    if (idx in editableSongs.indices) {
+                                        val list = editableSongs.toMutableList()
+                                        list.removeAt(idx)
+                                        onEditableSongsChange(list)
+                                    }
                                 }
-                            } else {
-                                Modifier
-                            }
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 4.dp),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.secondaryContainer
-                                )
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .padding(12.dp)
-                                        .graphicsLayer {
-                                            translationY = if (draggingIndex == sourceIndex) draggingOffsetY else 0f
-                                        }
-                                        .then(dragModifier),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Text(
-                                        text = file.cleanTitle,
-                                        modifier = Modifier.weight(1f),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    Text(
-                                        text = if (canDrag) "Drag" else "Filtered",
-                                        style = MaterialTheme.typography.labelMedium
-                                    )
-                                    TextButton(
-                                        onClick = {
-                                            if (sourceIndex in editableSongs.indices) {
-                                                val list = editableSongs.toMutableList()
-                                                list.removeAt(sourceIndex)
-                                                editableSongs = list
-                                            }
-                                        }
-                                    ) { Text("Remove") }
-                                }
-                            }
+                            )
                         }
                     }
                 }
             }
         }
     }
+}
 
-    if (showDiscardChangesDialog) {
-        AlertDialog(
-            onDismissRequest = { showDiscardChangesDialog = false },
-            title = { Text("Discard changes?") },
-            text = { Text("You have unsaved playlist edits.") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showDiscardChangesDialog = false
-                        isEditing = false
-                        editableSongs = playlistSongs
-                        dedupeOnSave = false
-                        editSearchQuery = ""
-                        val nextSelection = pendingSelectPlaylist
-                        val clearSelection = pendingClearSelection
-                        pendingSelectPlaylist = null
-                        pendingClearSelection = false
-                        if (clearSelection) onClearPlaylistSelection()
-                        if (nextSelection != null) onPlaylistSelected(nextSelection)
-                    }
-                ) {
-                    Text("Discard")
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        showDiscardChangesDialog = false
-                        pendingSelectPlaylist = null
-                        pendingClearSelection = false
-                    }
-                ) {
-                    Text("Keep editing")
-                }
+@Composable
+private fun PlaylistList(
+    playlists: List<PlaylistInfo>,
+    selectedPlaylist: PlaylistInfo?,
+    hasUnsavedChanges: Boolean,
+    onRequestRenamePlaylist: (PlaylistInfo) -> Unit,
+    onRequestDeletePlaylist: (PlaylistInfo) -> Unit,
+    onPlaylistSelected: (PlaylistInfo) -> Unit,
+    onPendingSelectPlaylist: (PlaylistInfo?) -> Unit,
+    onPendingClearSelection: (Boolean) -> Unit,
+    onShowDiscardChangesDialog: (Boolean) -> Unit
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        LazyColumn(modifier = Modifier.padding(8.dp)) {
+            val visiblePlaylists = if (selectedPlaylist == null) {
+                playlists
+            } else {
+                playlists.filter { it.uriString == selectedPlaylist.uriString }
             }
+            items(visiblePlaylists) { playlist ->
+                val isSmart = playlist.uriString.startsWith(MainViewModel.SMART_PREFIX)
+                PlaylistCard(
+                    playlist = playlist,
+                    isCompact = selectedPlaylist != null,
+                    isSmart = isSmart,
+                    onRename = { if (!isSmart) onRequestRenamePlaylist(playlist) },
+                    onDelete = { if (!isSmart) onRequestDeletePlaylist(playlist) },
+                    onClick = {
+                        if (hasUnsavedChanges && selectedPlaylist?.uriString != playlist.uriString) {
+                            onPendingSelectPlaylist(playlist)
+                            onPendingClearSelection(false)
+                            onShowDiscardChangesDialog(true)
+                        } else {
+                            onPlaylistSelected(playlist)
+                        }
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EditableSongItem(
+    sourceIndex: Int,
+    file: MediaFileInfo,
+    editableSongs: List<MediaFileInfo>,
+    canDrag: Boolean,
+    draggingIndex: Int?,
+    draggingOffsetY: Float,
+    dragSwapThresholdPx: Float,
+    onDragStart: (Int, Float) -> Unit,
+    onDragEnd: () -> Unit,
+    onDragCancel: () -> Unit,
+    onDrag: (Int?, Float, List<MediaFileInfo>) -> Unit,
+    onRemove: (Int) -> Unit
+) {
+    val currentDraggingIndex by androidx.compose.runtime.rememberUpdatedState(draggingIndex)
+    val currentDraggingOffsetY by androidx.compose.runtime.rememberUpdatedState(draggingOffsetY)
+    val currentOnDragStart by androidx.compose.runtime.rememberUpdatedState(onDragStart)
+    val currentOnDragEnd by androidx.compose.runtime.rememberUpdatedState(onDragEnd)
+    val currentOnDragCancel by androidx.compose.runtime.rememberUpdatedState(onDragCancel)
+    val currentOnDrag by androidx.compose.runtime.rememberUpdatedState(onDrag)
+
+    val dragModifier = if (canDrag) {
+        Modifier.pointerInput(sourceIndex, editableSongs) {
+            detectDragGesturesAfterLongPress(
+                onDragStart = {
+                    currentOnDragStart(sourceIndex, 0f)
+                },
+                onDragEnd = {
+                    currentOnDragEnd()
+                },
+                onDragCancel = {
+                    currentOnDragCancel()
+                },
+                onDrag = { change, dragAmount ->
+                    if (currentDraggingIndex != sourceIndex) return@detectDragGesturesAfterLongPress
+                    change.consume()
+                    var newOffsetY = currentDraggingOffsetY + dragAmount.y
+                    var newList = editableSongs
+                    var newIndex = currentDraggingIndex
+
+                    if (newOffsetY > dragSwapThresholdPx && sourceIndex < editableSongs.lastIndex) {
+                        val list = editableSongs.toMutableList()
+                        val tmp = list[sourceIndex + 1]
+                        list[sourceIndex + 1] = list[sourceIndex]
+                        list[sourceIndex] = tmp
+                        newList = list
+                        newIndex = sourceIndex + 1
+                        newOffsetY -= dragSwapThresholdPx
+                    } else if (newOffsetY < -dragSwapThresholdPx && sourceIndex > 0) {
+                        val list = editableSongs.toMutableList()
+                        val tmp = list[sourceIndex - 1]
+                        list[sourceIndex - 1] = list[sourceIndex]
+                        list[sourceIndex] = tmp
+                        newList = list
+                        newIndex = sourceIndex - 1
+                        newOffsetY += dragSwapThresholdPx
+                    }
+                    currentOnDrag(newIndex, newOffsetY, newList)
+                }
+            )
+        }
+    } else {
+        Modifier
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer
         )
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(12.dp)
+                .graphicsLayer {
+                    translationY = if (draggingIndex == sourceIndex) draggingOffsetY else 0f
+                }
+                .then(dragModifier),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = file.cleanTitle,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = if (canDrag) "Drag" else "Filtered",
+                style = MaterialTheme.typography.labelMedium
+            )
+            TextButton(
+                onClick = { onRemove(sourceIndex) }
+            ) { Text("Remove") }
+        }
     }
 }
 
