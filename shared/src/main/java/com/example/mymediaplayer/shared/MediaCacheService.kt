@@ -590,66 +590,60 @@ class MediaCacheService {
 
                 val isAudio = isSupportedAudioFile(lowerName, mimeType)
                 addFileCandidateIfNeeded(
-                    AddCandidateParams(
-                        isAudio = isAudio,
-                        deepScan = deepScan,
-                        treeUri = treeUri,
-                        childId = childId,
-                        name = name,
-                        size = size,
-                        lastModified = lastModified,
-                        parentFolderName = parentFolderName,
-                        candidates = candidates,
-                        skippedReasons = skippedReasons
-                    )
+                    isAudio = isAudio,
+                    deepScan = deepScan,
+                    treeUri = treeUri,
+                    childId = childId,
+                    name = name,
+                    size = size,
+                    lastModified = lastModified,
+                    parentFolderName = parentFolderName,
+                    candidates = candidates,
+                    skippedReasons = skippedReasons
                 )
             }
             }
         }
     }
 
-    private data class AddCandidateParams(
-        val isAudio: Boolean,
-        val deepScan: Boolean,
-        val treeUri: Uri,
-        val childId: String,
-        val name: String,
-        val size: Long,
-        val lastModified: Long?,
-        val parentFolderName: String?,
-        val candidates: MutableList<FileCandidate>,
-        val skippedReasons: MutableMap<String, Int>
-    )
-
-    private fun addFileCandidateIfNeeded(params: AddCandidateParams) {
-        with(params) {
-            if (isAudio) {
-                val uri = DocumentsContract.buildDocumentUriUsingTree(treeUri, childId)
-                candidates.add(
-                    FileCandidate(
-                        uri = uri,
-                        name = name,
-                        size = size,
-                        lastModified = lastModified,
-                        parentFolderName = parentFolderName,
-                        requiresProbe = false
-                    )
+    private fun addFileCandidateIfNeeded(
+        isAudio: Boolean,
+        deepScan: Boolean,
+        treeUri: Uri,
+        childId: String,
+        name: String,
+        size: Long,
+        lastModified: Long?,
+        parentFolderName: String?,
+        candidates: MutableList<FileCandidate>,
+        skippedReasons: MutableMap<String, Int>
+    ) {
+        if (isAudio) {
+            val uri = DocumentsContract.buildDocumentUriUsingTree(treeUri, childId)
+            candidates.add(
+                FileCandidate(
+                    uri = uri,
+                    name = name,
+                    size = size,
+                    lastModified = lastModified,
+                    parentFolderName = parentFolderName,
+                    requiresProbe = false
                 )
-            } else if (deepScan) {
-                val uri = DocumentsContract.buildDocumentUriUsingTree(treeUri, childId)
-                candidates.add(
-                    FileCandidate(
-                        uri = uri,
-                        name = name,
-                        size = size,
-                        lastModified = lastModified,
-                        parentFolderName = parentFolderName,
-                        requiresProbe = true
-                    )
+            )
+        } else if (deepScan) {
+            val uri = DocumentsContract.buildDocumentUriUsingTree(treeUri, childId)
+            candidates.add(
+                FileCandidate(
+                    uri = uri,
+                    name = name,
+                    size = size,
+                    lastModified = lastModified,
+                    parentFolderName = parentFolderName,
+                    requiresProbe = true
                 )
-            } else {
-                skippedReasons["unsupported_type"] = (skippedReasons["unsupported_type"] ?: 0) + 1
-            }
+            )
+        } else {
+            skippedReasons["unsupported_type"] = (skippedReasons["unsupported_type"] ?: 0) + 1
         }
     }
 
