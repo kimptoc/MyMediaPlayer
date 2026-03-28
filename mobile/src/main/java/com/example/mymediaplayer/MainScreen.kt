@@ -2487,14 +2487,6 @@ fun FileCard(
     }
 }
 
-private fun formatFileSize(bytes: Long): String {
-    return when {
-        bytes >= 1_048_576 -> "%.1f MB".format(bytes / 1_048_576.0)
-        bytes >= 1_024 -> "%.1f KB".format(bytes / 1_024.0)
-        else -> "$bytes B"
-    }
-}
-
 private fun buildSongDetails(file: MediaFileInfo): String {
     val parts = mutableListOf<String>()
     file.artist?.takeIf { it.isNotBlank() }?.let { parts.add(it) }
