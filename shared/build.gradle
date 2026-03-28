@@ -33,4 +33,5 @@ dependencies {
     testImplementation libs.androidx.test.core
     testImplementation libs.robolectric
     testImplementation libs.kotlinx.coroutines.core
+    testImplementation libs.kotlinx.coroutines.test
 }
