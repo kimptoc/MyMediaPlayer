@@ -719,202 +719,55 @@ fun MainScreen(
     }
 
     if (showScanDialog) {
-        val countValue = scanCountText.toIntOrNull()
-        val isValid = countValue != null && countValue > 0
-        val helperText = when {
-            countValue == null -> "Enter a number greater than 0."
-            countValue <= 0 -> "Enter a number greater than 0."
-            else -> "OK"
-        }
-
-        androidx.compose.material3.AlertDialog(
+        ScanDialogContent(
+            scanCountText = scanCountText,
+            onScanCountTextChange = { scanCountText = it },
+            scanWholeDriveMode = scanWholeDriveMode,
+            onScanWholeDriveModeChange = { scanWholeDriveMode = it },
+            scanDeepMode = scanDeepMode,
+            onScanDeepModeChange = { scanDeepMode = it },
             onDismissRequest = { showScanDialog = false },
-            title = { Text("Scan Music") },
-            text = {
-                Column {
-                    Text("How many songs should be scanned?")
-                    Spacer(modifier = Modifier.height(8.dp))
-                    TextField(
-                        value = scanCountText,
-                        onValueChange = { scanCountText = it },
-                        singleLine = true,
-                        placeholder = { Text("e.g. 50000") }
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Checkbox(
-                            checked = scanWholeDriveMode,
-                            onCheckedChange = { scanWholeDriveMode = it }
-                        )
-                        Text("Whole drive (uses device media index)")
-                    }
-                    if (!scanWholeDriveMode) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Checkbox(
-                            checked = scanDeepMode,
-                            onCheckedChange = { scanDeepMode = it }
-                        )
-                            Text("Deep scan (slower, tries unknown file types)")
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = helperText,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (isValid) {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        } else {
-                            MaterialTheme.colorScheme.error
-                        }
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        if (isValid) {
-                            showScanDialog = false
-                            if (scanWholeDriveMode) {
-                                onScanWholeDriveWithLimit(countValue!!)
-                            } else {
-                                onSelectFolderWithLimit(countValue!!, scanDeepMode)
-                            }
-                        }
-                    },
-                    enabled = isValid
-                ) {
-                    Text(if (scanWholeDriveMode) "Scan" else "Continue")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showScanDialog = false }) {
-                    Text("Cancel")
-                }
-            }
+            onScanWholeDriveWithLimit = onScanWholeDriveWithLimit,
+            onSelectFolderWithLimit = onSelectFolderWithLimit
         )
     }
 
     if (showAddToPlaylistDialog) {
-        val files = pendingAddFiles
-        val firstName = files.firstOrNull()?.cleanTitle ?: "songs"
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { showAddToPlaylistDialog = false },
-            title = { Text("Add to playlist") },
-            text = {
-                Column {
-                    Text(
-                        if (files.size <= 1) {
-                            "Choose a playlist for $firstName"
-                        } else {
-                            "Choose a playlist for ${files.size} songs"
-                        }
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    TextButton(
-                        onClick = {
-                            if (files.isNotEmpty()) {
-                                createFromSelectionNameText = ""
-                                showCreateFromSelectionDialog = true
-                            }
-                        },
-                        enabled = files.isNotEmpty()
-                    ) {
-                        Text("Create new playlist")
-                    }
-                    val visiblePlaylists = (localCreatedPlaylists + uiState.scan.discoveredPlaylists)
-                        .distinctBy { it.uriString }
-                    if (visiblePlaylists.isEmpty()) {
-                        Text(
-                            text = "No existing playlists",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    } else {
-                        LazyColumn(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(max = 260.dp)
-                        ) {
-                            items(visiblePlaylists) { playlist ->
-                                TextButton(
-                                    onClick = {
-                                        if (files.isNotEmpty()) onAddToExistingPlaylist(playlist, files)
-                                        showAddToPlaylistDialog = false
-                                        pendingAddFiles = emptyList()
-                                    },
-                                    enabled = files.isNotEmpty()
-                                ) {
-                                    Text(playlist.displayName.removeSuffix(".m3u"))
-                                }
-                            }
-                        }
-                    }
-                }
+        AddToPlaylistDialogContent(
+            pendingAddFiles = pendingAddFiles,
+            localCreatedPlaylists = localCreatedPlaylists,
+            discoveredPlaylists = uiState.scan.discoveredPlaylists,
+            onDismissRequest = {
+                showAddToPlaylistDialog = false
+                pendingAddFiles = emptyList()
             },
-            confirmButton = {},
-            dismissButton = {
-                TextButton(onClick = {
-                    showAddToPlaylistDialog = false
-                    pendingAddFiles = emptyList()
-                }) {
-                    Text("Close")
-                }
+            onCreateNewPlaylistClick = {
+                createFromSelectionNameText = ""
+                showCreateFromSelectionDialog = true
+            },
+            onAddToExistingPlaylist = { playlist, files ->
+                onAddToExistingPlaylist(playlist, files)
+                showAddToPlaylistDialog = false
+                pendingAddFiles = emptyList()
             }
         )
     }
 
     if (showCreateFromSelectionDialog) {
-        val nameTrimmed = createFromSelectionNameText.trim()
-        val files = pendingAddFiles
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { showCreateFromSelectionDialog = false },
-            title = { Text("New playlist") },
-            text = {
-                Column {
-                    Text("Playlist name (optional)")
-                    Spacer(modifier = Modifier.height(8.dp))
-                    TextField(
-                        value = createFromSelectionNameText,
-                        onValueChange = { createFromSelectionNameText = it },
-                        singleLine = true,
-                        placeholder = { Text("Leave blank for auto name") }
-                    )
-                }
+        CreateFromSelectionDialogContent(
+            createFromSelectionNameText = createFromSelectionNameText,
+            onCreateFromSelectionNameTextChange = { createFromSelectionNameText = it },
+            pendingAddFiles = pendingAddFiles,
+            onCreatePlaylistFromSongs = onCreatePlaylistFromSongs,
+            onChoosePlaylistSaveFolder = onChoosePlaylistSaveFolder,
+            onPlaylistCreated = { created ->
+                localCreatedPlaylists = (localCreatedPlaylists + created).distinctBy { it.uriString }
+                showCreateFromSelectionDialog = false
+                showAddToPlaylistDialog = false
+                pendingAddFiles = emptyList()
+                createFromSelectionNameText = ""
             },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        val created = onCreatePlaylistFromSongs(nameTrimmed, files)
-                        if (created != null) {
-                            localCreatedPlaylists = (localCreatedPlaylists + created)
-                                .distinctBy { it.uriString }
-                            showCreateFromSelectionDialog = false
-                            showAddToPlaylistDialog = false
-                            pendingAddFiles = emptyList()
-                            createFromSelectionNameText = ""
-                        }
-                    },
-                    enabled = files.isNotEmpty()
-                ) {
-                    Text("Create")
-                }
-            },
-            dismissButton = {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = onChoosePlaylistSaveFolder) {
-                        Text("Choose save folder")
-                    }
-                    TextButton(onClick = { showCreateFromSelectionDialog = false }) {
-                        Text("Cancel")
-                    }
-                }
-            }
+            onDismissRequest = { showCreateFromSelectionDialog = false }
         )
     }
 
@@ -1066,56 +919,11 @@ fun MainScreen(
     }
 
     if (showManageTrustedBluetoothDialog) {
-        AlertDialog(
-            onDismissRequest = { showManageTrustedBluetoothDialog = false },
-            title = { Text("Trusted Bluetooth Devices") },
-            text = {
-                Column {
-                    if (trustedBluetoothDevices.isEmpty()) {
-                        Text("No trusted devices yet")
-                    } else {
-                        LazyColumn {
-                            items(trustedBluetoothDevices) { device ->
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = device.name?.ifBlank { null } ?: "Unknown device",
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                        Text(
-                                            text = device.address,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                    }
-                                    TextButton(onClick = { onRemoveTrustedBluetoothDevice(device.address) }) {
-                                        Text("Remove")
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = { onClearTrustedBluetoothDevices() },
-                    enabled = trustedBluetoothDevices.isNotEmpty()
-                ) {
-                    Text("Clear all")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showManageTrustedBluetoothDialog = false }) {
-                    Text("Close")
-                }
-            }
+        ManageTrustedBluetoothDialogContent(
+            trustedBluetoothDevices = trustedBluetoothDevices,
+            onRemoveTrustedBluetoothDevice = onRemoveTrustedBluetoothDevice,
+            onClearTrustedBluetoothDevices = onClearTrustedBluetoothDevices,
+            onDismissRequest = { showManageTrustedBluetoothDialog = false }
         )
     }
 
@@ -1144,68 +952,13 @@ fun MainScreen(
     }
 
     if (showCloudAnnouncementSettingsDialog) {
-        var kiloKeyInput by remember { mutableStateOf(cloudAnnouncementKiloKey) }
-        var ttsKeyInput by remember { mutableStateOf(cloudAnnouncementTtsKey) }
-        AlertDialog(
-            onDismissRequest = { showCloudAnnouncementSettingsDialog = false },
-            title = { Text("AI Announcement Settings") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(
-                        "API keys for cloud-generated announcements. Kilo works anonymously (no key needed). Google TTS key optional for higher quality.",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    TextField(
-                        value = kiloKeyInput,
-                        onValueChange = { kiloKeyInput = it },
-                        label = { Text("Kilo API key (optional)") },
-                        placeholder = { Text("Leave blank for anonymous") },
-                        singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    TextField(
-                        value = ttsKeyInput,
-                        onValueChange = { ttsKeyInput = it },
-                        label = { Text("Google Cloud TTS key (optional)") },
-                        singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Debug mode", style = MaterialTheme.typography.bodyMedium)
-                            Text(
-                                "Show toast when cloud TTS is used",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Switch(
-                            checked = debugCloudAnnouncements,
-                            onCheckedChange = onSetDebugCloudAnnouncements
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(
-                        onClick = {
-                            onSaveCloudAnnouncementKeys(kiloKeyInput.trim(), ttsKeyInput.trim()) {
-                                showCloudAnnouncementSettingsDialog = false
-                            }
-                        }
-                ) { Text("Save") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showCloudAnnouncementSettingsDialog = false }) {
-                    Text("Cancel")
-                }
-            }
+        CloudAnnouncementSettingsDialogContent(
+            cloudAnnouncementKiloKey = cloudAnnouncementKiloKey,
+            cloudAnnouncementTtsKey = cloudAnnouncementTtsKey,
+            debugCloudAnnouncements = debugCloudAnnouncements,
+            onSetDebugCloudAnnouncements = onSetDebugCloudAnnouncements,
+            onSaveCloudAnnouncementKeys = onSaveCloudAnnouncementKeys,
+            onDismissRequest = { showCloudAnnouncementSettingsDialog = false }
         )
     }
 
@@ -1228,6 +981,355 @@ fun MainScreen(
             }
         )
     }
+}
+
+@Composable
+private fun CloudAnnouncementSettingsDialogContent(
+    cloudAnnouncementKiloKey: String,
+    cloudAnnouncementTtsKey: String,
+    debugCloudAnnouncements: Boolean,
+    onSetDebugCloudAnnouncements: (Boolean) -> Unit,
+    onSaveCloudAnnouncementKeys: (String, String, () -> Unit) -> Unit,
+    onDismissRequest: () -> Unit
+) {
+    var kiloKeyInput by remember { mutableStateOf(cloudAnnouncementKiloKey) }
+    var ttsKeyInput by remember { mutableStateOf(cloudAnnouncementTtsKey) }
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        title = { Text("AI Announcement Settings") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    "API keys for cloud-generated announcements. Kilo works anonymously (no key needed). Google TTS key optional for higher quality.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                TextField(
+                    value = kiloKeyInput,
+                    onValueChange = { kiloKeyInput = it },
+                    label = { Text("Kilo API key (optional)") },
+                    placeholder = { Text("Leave blank for anonymous") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                TextField(
+                    value = ttsKeyInput,
+                    onValueChange = { ttsKeyInput = it },
+                    label = { Text("Google Cloud TTS key (optional)") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Debug mode", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            "Show toast when cloud TTS is used",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = debugCloudAnnouncements,
+                        onCheckedChange = onSetDebugCloudAnnouncements
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onSaveCloudAnnouncementKeys(kiloKeyInput.trim(), ttsKeyInput.trim(), onDismissRequest)
+                }
+            ) { Text("Save") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismissRequest) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+private fun ManageTrustedBluetoothDialogContent(
+    trustedBluetoothDevices: List<TrustedBluetoothDevice>,
+    onRemoveTrustedBluetoothDevice: (String) -> Unit,
+    onClearTrustedBluetoothDevices: () -> Unit,
+    onDismissRequest: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        title = { Text("Trusted Bluetooth Devices") },
+        text = {
+            Column {
+                if (trustedBluetoothDevices.isEmpty()) {
+                    Text("No trusted devices yet")
+                } else {
+                    LazyColumn {
+                        items(trustedBluetoothDevices) { device ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = device.name?.ifBlank { null } ?: "Unknown device",
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = device.address,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                                TextButton(onClick = { onRemoveTrustedBluetoothDevice(device.address) }) {
+                                    Text("Remove")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onClearTrustedBluetoothDevices,
+                enabled = trustedBluetoothDevices.isNotEmpty()
+            ) {
+                Text("Clear all")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismissRequest) {
+                Text("Close")
+            }
+        }
+    )
+}
+
+@Composable
+private fun CreateFromSelectionDialogContent(
+    createFromSelectionNameText: String,
+    onCreateFromSelectionNameTextChange: (String) -> Unit,
+    pendingAddFiles: List<MediaFileInfo>,
+    onCreatePlaylistFromSongs: (String, List<MediaFileInfo>) -> PlaylistInfo?,
+    onChoosePlaylistSaveFolder: () -> Unit,
+    onPlaylistCreated: (PlaylistInfo) -> Unit,
+    onDismissRequest: () -> Unit
+) {
+    val nameTrimmed = createFromSelectionNameText.trim()
+    val files = pendingAddFiles
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        title = { Text("New playlist") },
+        text = {
+            Column {
+                Text("Playlist name (optional)")
+                Spacer(modifier = Modifier.height(8.dp))
+                TextField(
+                    value = createFromSelectionNameText,
+                    onValueChange = onCreateFromSelectionNameTextChange,
+                    singleLine = true,
+                    placeholder = { Text("Leave blank for auto name") }
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    val created = onCreatePlaylistFromSongs(nameTrimmed, files)
+                    if (created != null) {
+                        onPlaylistCreated(created)
+                    }
+                },
+                enabled = files.isNotEmpty()
+            ) {
+                Text("Create")
+            }
+        },
+        dismissButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onChoosePlaylistSaveFolder) {
+                    Text("Choose save folder")
+                }
+                TextButton(onClick = onDismissRequest) {
+                    Text("Cancel")
+                }
+            }
+        }
+    )
+}
+
+@Composable
+private fun AddToPlaylistDialogContent(
+    pendingAddFiles: List<MediaFileInfo>,
+    localCreatedPlaylists: List<PlaylistInfo>,
+    discoveredPlaylists: List<PlaylistInfo>,
+    onDismissRequest: () -> Unit,
+    onCreateNewPlaylistClick: () -> Unit,
+    onAddToExistingPlaylist: (PlaylistInfo, List<MediaFileInfo>) -> Unit
+) {
+    val files = pendingAddFiles
+    val firstName = files.firstOrNull()?.cleanTitle ?: "songs"
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        title = { Text("Add to playlist") },
+        text = {
+            Column {
+                Text(
+                    if (files.size <= 1) {
+                        "Choose a playlist for $firstName"
+                    } else {
+                        "Choose a playlist for ${files.size} songs"
+                    }
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                TextButton(
+                    onClick = {
+                        if (files.isNotEmpty()) {
+                            onCreateNewPlaylistClick()
+                        }
+                    },
+                    enabled = files.isNotEmpty()
+                ) {
+                    Text("Create new playlist")
+                }
+                val visiblePlaylists = (localCreatedPlaylists + discoveredPlaylists)
+                    .distinctBy { it.uriString }
+                if (visiblePlaylists.isEmpty()) {
+                    Text(
+                        text = "No existing playlists",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 260.dp)
+                    ) {
+                        items(visiblePlaylists) { playlist ->
+                            TextButton(
+                                onClick = {
+                                    if (files.isNotEmpty()) onAddToExistingPlaylist(playlist, files)
+                                },
+                                enabled = files.isNotEmpty()
+                            ) {
+                                Text(playlist.displayName.removeSuffix(".m3u"))
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismissRequest) {
+                Text("Close")
+            }
+        }
+    )
+}
+
+@Composable
+private fun ScanDialogContent(
+    scanCountText: String,
+    onScanCountTextChange: (String) -> Unit,
+    scanWholeDriveMode: Boolean,
+    onScanWholeDriveModeChange: (Boolean) -> Unit,
+    scanDeepMode: Boolean,
+    onScanDeepModeChange: (Boolean) -> Unit,
+    onDismissRequest: () -> Unit,
+    onScanWholeDriveWithLimit: (Int) -> Unit,
+    onSelectFolderWithLimit: (Int, Boolean) -> Unit
+) {
+    val countValue = scanCountText.toIntOrNull()
+    val isValid = countValue != null && countValue > 0
+    val helperText = when {
+        countValue == null -> "Enter a number greater than 0."
+        countValue <= 0 -> "Enter a number greater than 0."
+        else -> "OK"
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        title = { Text("Scan Music") },
+        text = {
+            Column {
+                Text("How many songs should be scanned?")
+                Spacer(modifier = Modifier.height(8.dp))
+                TextField(
+                    value = scanCountText,
+                    onValueChange = onScanCountTextChange,
+                    singleLine = true,
+                    placeholder = { Text("e.g. 50000") }
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Checkbox(
+                        checked = scanWholeDriveMode,
+                        onCheckedChange = onScanWholeDriveModeChange
+                    )
+                    Text("Whole drive (uses device media index)")
+                }
+                if (!scanWholeDriveMode) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Checkbox(
+                            checked = scanDeepMode,
+                            onCheckedChange = onScanDeepModeChange
+                        )
+                        Text("Deep scan (slower, tries unknown file types)")
+                    }
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = helperText,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (isValid) {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    } else {
+                        MaterialTheme.colorScheme.error
+                    }
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    if (isValid) {
+                        onDismissRequest()
+                        if (scanWholeDriveMode) {
+                            onScanWholeDriveWithLimit(countValue!!)
+                        } else {
+                            onSelectFolderWithLimit(countValue!!, scanDeepMode)
+                        }
+                    }
+                },
+                enabled = isValid
+            ) {
+                Text(if (scanWholeDriveMode) "Scan" else "Continue")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismissRequest) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 @Composable
@@ -1344,113 +1446,180 @@ private fun CategoryTabContent(
             headerContent()
             Spacer(modifier = Modifier.height(8.dp))
         }
-        Surface(
-            color = MaterialTheme.colorScheme.secondaryContainer,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            LazyColumn(modifier = Modifier.padding(8.dp)) {
-                val filteredCategories = if (selectedLetter == null) {
-                    categories
-                } else {
-                    categories.filter {
-                        it.trim().firstOrNull()?.uppercaseChar()?.toString() == selectedLetter
-                    }
-                }
-                val visibleCategories = if (selectedLabel == null) {
-                    filteredCategories
-                } else {
-                    filteredCategories.filter { it == selectedLabel }
-                }
-                if (selectedLabel == null && enableAlphaIndex && letters.isNotEmpty()) {
-                    item {
-                        LazyRow(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 8.dp),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            item {
-                                TextButton(
-                                    onClick = { selectedLetter = null },
-                                    modifier = Modifier.wrapContentWidth()
-                                ) {
-                                    Text("All")
-                                }
-                            }
-                            items(letters) { letter ->
-                                TextButton(
-                                    onClick = { selectedLetter = letter },
-                                    modifier = Modifier.wrapContentWidth()
-                                ) {
-                                    Text(letter)
-                                }
-                            }
-                        }
-                    }
-                }
-                items(visibleCategories) { category ->
-                    val displayTitle = categoryCounts[category]?.let { count ->
-                        "$category ($count)"
-                    } ?: category
-                    CategoryCard(
-                        title = displayTitle,
-                        isSelected = category == selectedLabel,
-                        isCompact = selectedLabel != null,
-                        onClick = { onCategorySelected(category) }
-                    )
-                }
-            }
-        }
+
+        CategoryListSection(
+            categories = categories,
+            categoryCounts = categoryCounts,
+            selectedLabel = selectedLabel,
+            selectedLetter = selectedLetter,
+            enableAlphaIndex = enableAlphaIndex,
+            letters = letters,
+            onSelectedLetterChanged = { selectedLetter = it },
+            onCategorySelected = onCategorySelected
+        )
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        Surface(
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.padding(12.dp)) {
-                if (selectedLabel != null) {
-                    TextButton(onClick = onClearCategorySelection) {
-                        Text("Back to all $title")
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "Songs in $selectedLabel",
-                        style = MaterialTheme.typography.titleSmall
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    PlaybackButtonsRow(
-                        isPlaying = isPlaying,
-                        isPlayingPlaylist = isPlayingPlaylist,
-                        hasNext = hasNext,
-                        hasPrev = hasPrev,
-                        showNavForNonPlaylist = true,
-                        onPlay = onPlay,
-                        onShuffle = onShuffle,
-                        onStop = onStop,
-                        onNext = onNext,
-                        onPrev = onPrev
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    if (songs.isEmpty()) {
-                        Text("No songs in $selectedLabel")
-                    } else {
-                        LazyColumn {
-                            items(songs) { file ->
-                                FileCard(
-                                    file = file,
-                                    isCurrentTrack = file.uriString == currentMediaId,
-                                    onClick = { onFileClick(file) },
-                                    onAddToPlaylist = { onAddToPlaylist(file) },
-                                    isFavorite = file.uriString in favoriteUris,
-                                    onToggleFavorite = { onToggleFavorite(file) }
-                                )
+        CategorySongsSection(
+            title = title,
+            selectedLabel = selectedLabel,
+            songs = songs,
+            isPlaying = isPlaying,
+            isPlayingPlaylist = isPlayingPlaylist,
+            hasNext = hasNext,
+            hasPrev = hasPrev,
+            onClearCategorySelection = onClearCategorySelection,
+            onPlay = onPlay,
+            onShuffle = onShuffle,
+            onStop = onStop,
+            onNext = onNext,
+            onPrev = onPrev,
+            onFileClick = onFileClick,
+            onAddToPlaylist = onAddToPlaylist,
+            favoriteUris = favoriteUris,
+            onToggleFavorite = onToggleFavorite,
+            currentMediaId = currentMediaId
+        )
+    }
+}
+
+@Composable
+private fun CategoryListSection(
+    categories: List<String>,
+    categoryCounts: Map<String, Int>,
+    selectedLabel: String?,
+    selectedLetter: String?,
+    enableAlphaIndex: Boolean,
+    letters: List<String>,
+    onSelectedLetterChanged: (String?) -> Unit,
+    onCategorySelected: (String) -> Unit
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        LazyColumn(modifier = Modifier.padding(8.dp)) {
+            val filteredCategories = if (selectedLetter == null) {
+                categories
+            } else {
+                categories.filter {
+                    it.trim().firstOrNull()?.uppercaseChar()?.toString() == selectedLetter
+                }
+            }
+            val visibleCategories = if (selectedLabel == null) {
+                filteredCategories
+            } else {
+                filteredCategories.filter { it == selectedLabel }
+            }
+            if (selectedLabel == null && enableAlphaIndex && letters.isNotEmpty()) {
+                item {
+                    LazyRow(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        item {
+                            TextButton(
+                                onClick = { onSelectedLetterChanged(null) },
+                                modifier = Modifier.wrapContentWidth()
+                            ) {
+                                Text("All")
+                            }
+                        }
+                        items(letters) { letter ->
+                            TextButton(
+                                onClick = { onSelectedLetterChanged(letter) },
+                                modifier = Modifier.wrapContentWidth()
+                            ) {
+                                Text(letter)
                             }
                         }
                     }
-                } else {
-                    Text("Select a $title to view songs")
                 }
+            }
+            items(visibleCategories) { category ->
+                val displayTitle = categoryCounts[category]?.let { count ->
+                    "$category ($count)"
+                } ?: category
+                CategoryCard(
+                    title = displayTitle,
+                    isSelected = category == selectedLabel,
+                    isCompact = selectedLabel != null,
+                    onClick = { onCategorySelected(category) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CategorySongsSection(
+    title: String,
+    selectedLabel: String?,
+    songs: List<MediaFileInfo>,
+    isPlaying: Boolean,
+    isPlayingPlaylist: Boolean,
+    hasNext: Boolean,
+    hasPrev: Boolean,
+    onClearCategorySelection: () -> Unit,
+    onPlay: () -> Unit,
+    onShuffle: () -> Unit,
+    onStop: () -> Unit,
+    onNext: () -> Unit,
+    onPrev: () -> Unit,
+    onFileClick: (MediaFileInfo) -> Unit,
+    onAddToPlaylist: (MediaFileInfo) -> Unit,
+    favoriteUris: Set<String>,
+    onToggleFavorite: (MediaFileInfo) -> Unit,
+    currentMediaId: String?
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            if (selectedLabel != null) {
+                TextButton(onClick = onClearCategorySelection) {
+                    Text("Back to all $title")
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Songs in $selectedLabel",
+                    style = MaterialTheme.typography.titleSmall
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                PlaybackButtonsRow(
+                    isPlaying = isPlaying,
+                    isPlayingPlaylist = isPlayingPlaylist,
+                    hasNext = hasNext,
+                    hasPrev = hasPrev,
+                    showNavForNonPlaylist = true,
+                    onPlay = onPlay,
+                    onShuffle = onShuffle,
+                    onStop = onStop,
+                    onNext = onNext,
+                    onPrev = onPrev
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                if (songs.isEmpty()) {
+                    Text("No songs in $selectedLabel")
+                } else {
+                    LazyColumn {
+                        items(songs) { file ->
+                            FileCard(
+                                file = file,
+                                isCurrentTrack = file.uriString == currentMediaId,
+                                onClick = { onFileClick(file) },
+                                onAddToPlaylist = { onAddToPlaylist(file) },
+                                isFavorite = file.uriString in favoriteUris,
+                                onToggleFavorite = { onToggleFavorite(file) }
+                            )
+                        }
+                    }
+                }
+            } else {
+                Text("Select a $title to view songs")
             }
         }
     }
@@ -2484,14 +2653,6 @@ fun FileCard(
                 }
             }
         }
-    }
-}
-
-private fun formatFileSize(bytes: Long): String {
-    return when {
-        bytes >= 1_048_576 -> "%.1f MB".format(bytes / 1_048_576.0)
-        bytes >= 1_024 -> "%.1f KB".format(bytes / 1_024.0)
-        else -> "$bytes B"
     }
 }
 

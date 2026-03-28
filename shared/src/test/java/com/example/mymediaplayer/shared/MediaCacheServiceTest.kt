@@ -26,9 +26,9 @@ class MediaCacheServiceTest {
         val service = MediaCacheService()
         val progress = mutableListOf<Pair<Int, Int>>()
 
-        service.scanDirectory(context, treeUri, maxFiles = 10) { songsFound, foldersScanned ->
+        service.scanDirectory(ScanContext(context, treeUri, maxFiles = 10, onProgress = { songsFound, foldersScanned ->
             progress += songsFound to foldersScanned
-        }
+        }))
 
         assertTrue(service.cachedFiles.size <= 10)
         assertTrue(progress.isNotEmpty())
@@ -44,7 +44,7 @@ class MediaCacheServiceTest {
         val service = MediaCacheService()
 
         val job: Job = launch {
-            service.scanDirectory(context, treeUri, maxFiles = 10) { _, _ -> }
+            service.scanDirectory(ScanContext(context, treeUri, maxFiles = 10, onProgress = { _, _ -> }))
         }
         job.cancel()
         job.join()

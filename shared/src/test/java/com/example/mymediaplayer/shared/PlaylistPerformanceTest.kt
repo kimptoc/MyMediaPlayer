@@ -1,6 +1,5 @@
 package com.example.mymediaplayer.shared
 
-import android.content.Context
 import android.net.Uri
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Test
