@@ -16,6 +16,9 @@ class GenreBucketsTest {
         assertEquals("Other", bucketGenre("Original Soundtrack"))
         assertEquals("Country/Folk", bucketGenre("Bluegrass"))
         assertEquals("Latin", bucketGenre("Reggaeton"))
+        assertEquals("Reggae", bucketGenre("Reggae"))
+        assertEquals("Reggae", bucketGenre("Dancehall"))
+        assertEquals("Reggae", bucketGenre("Ska"))
         assertEquals("Other", bucketGenre("Post-Blackgaze-Experimental"))
         assertEquals("Other", bucketGenre(null))
     }
