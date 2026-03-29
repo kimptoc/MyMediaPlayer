@@ -55,9 +55,10 @@ fun bucketGenre(raw: String?): String {
         normalized.contains("classical") || normalized.contains("orchestra") ||
             normalized.contains("baroque") || normalized.contains("opera") -> "Classical"
         normalized.contains("latin") || normalized.contains("reggaeton") ||
-            normalized.contains("salsa") || normalized.contains("bachata") -> "Latin"
+            normalized.contains("salsa") || normalized.contains("bachata") ||
+            normalized.contains("afrobeat") -> "Latin"
         normalized.contains("reggae") || normalized.contains("dancehall") ||
-            normalized.contains("ska") || normalized.contains("afrobeat") -> "Latin"
+            normalized.contains("ska") || normalized == "dub" -> "Reggae"
         normalized.contains("soundtrack") || normalized.contains("score") ||
             normalized.contains("ost") || normalized.contains("musical") ||
             normalized.contains("spoken") || normalized.contains("podcast") ||
