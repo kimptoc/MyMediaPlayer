@@ -9,6 +9,7 @@ import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -37,6 +38,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.ScrollableTabRow
+import androidx.compose.material3.ScrollableTabRowDefaults
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
@@ -65,6 +67,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.unit.dp
 import com.example.mymediaplayer.shared.bucketGenre
 import com.example.mymediaplayer.shared.MediaFileInfo
@@ -219,94 +223,112 @@ fun MainScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("MyMediaPlayer") },
-                actions = {
-                    TextButton(onClick = { menuExpanded = true }) {
-                        Text("Menu")
-                    }
-                    DropdownMenu(
-                        expanded = menuExpanded,
-                        onDismissRequest = { menuExpanded = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("Select Folder") },
-                            onClick = {
-                                menuExpanded = false
-                                scanCountText = uiState.scan.lastScanLimit.toString()
-                                scanDeepMode = uiState.scan.deepScanEnabled
-                                showScanDialog = true
+            Surface(
+                color = MaterialTheme.colorScheme.surface,
+                contentColor = MaterialTheme.colorScheme.onSurface
+            ) {
+                Column {
+                    TopAppBar(
+                        title = { Text("MyMediaPlayer") },
+                        actions = {
+                            TextButton(onClick = { menuExpanded = true }) {
+                                Text("Menu")
                             }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Select Playlist Save Folder") },
-                            onClick = {
-                                menuExpanded = false
-                                onChoosePlaylistSaveFolder()
+                            DropdownMenu(
+                                expanded = menuExpanded,
+                                onDismissRequest = { menuExpanded = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Select Folder") },
+                                    onClick = {
+                                        menuExpanded = false
+                                        scanCountText = uiState.scan.lastScanLimit.toString()
+                                        scanDeepMode = uiState.scan.deepScanEnabled
+                                        showScanDialog = true
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Select Playlist Save Folder") },
+                                    onClick = {
+                                        menuExpanded = false
+                                        onChoosePlaylistSaveFolder()
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Create Random Playlist") },
+                                    onClick = {
+                                        menuExpanded = false
+                                        playlistCountText = uiState.playlist.lastPlaylistCount.toString()
+                                        showPlaylistDialog = true
+                                    },
+                                    enabled = uiState.scan.scannedFiles.isNotEmpty()
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(if (trackVoiceIntroEnabled) "Track Voice Intro: On" else "Track Voice Intro: Off") },
+                                    onClick = {
+                                        menuExpanded = false
+                                        onToggleTrackVoiceIntro()
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(if (trackVoiceOutroEnabled) "Track Voice Outro: On" else "Track Voice Outro: Off") },
+                                    onClick = {
+                                        menuExpanded = false
+                                        onToggleTrackVoiceOutro()
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("AI Announcement Settings") },
+                                    onClick = {
+                                        menuExpanded = false
+                                        showCloudAnnouncementSettingsDialog = true
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(if (bluetoothAutoPlayEnabled) "Bluetooth Auto-Play: On" else "Bluetooth Auto-Play: Off") },
+                                    onClick = {
+                                        menuExpanded = false
+                                        onToggleBluetoothAutoPlay()
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Trust Connected Bluetooth") },
+                                    onClick = {
+                                        menuExpanded = false
+                                        onAddCurrentBluetoothDevice()
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Manage Trusted Bluetooth") },
+                                    onClick = {
+                                        menuExpanded = false
+                                        showManageTrustedBluetoothDialog = true
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Bluetooth Diagnostics") },
+                                    onClick = {
+                                        menuExpanded = false
+                                        onRefreshBluetoothDiagnostics()
+                                        showBluetoothDiagnosticsDialog = true
+                                    }
+                                )
                             }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Create Random Playlist") },
-                            onClick = {
-                                menuExpanded = false
-                                playlistCountText = uiState.playlist.lastPlaylistCount.toString()
-                                showPlaylistDialog = true
-                            },
-                            enabled = uiState.scan.scannedFiles.isNotEmpty()
-                        )
-                        DropdownMenuItem(
-                            text = { Text(if (trackVoiceIntroEnabled) "Track Voice Intro: On" else "Track Voice Intro: Off") },
-                            onClick = {
-                                menuExpanded = false
-                                onToggleTrackVoiceIntro()
+                        }
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(2.dp)
+                            .drawBehind {
+                                drawRoundRect(
+                                    color = MaterialTheme.colorScheme.primary,
+                                    cornerRadius = CornerRadius(2.dp.toPx())
+                                )
                             }
-                        )
-                        DropdownMenuItem(
-                            text = { Text(if (trackVoiceOutroEnabled) "Track Voice Outro: On" else "Track Voice Outro: Off") },
-                            onClick = {
-                                menuExpanded = false
-                                onToggleTrackVoiceOutro()
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("AI Announcement Settings") },
-                            onClick = {
-                                menuExpanded = false
-                                showCloudAnnouncementSettingsDialog = true
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text(if (bluetoothAutoPlayEnabled) "Bluetooth Auto-Play: On" else "Bluetooth Auto-Play: Off") },
-                            onClick = {
-                                menuExpanded = false
-                                onToggleBluetoothAutoPlay()
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Trust Connected Bluetooth") },
-                            onClick = {
-                                menuExpanded = false
-                                onAddCurrentBluetoothDevice()
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Manage Trusted Bluetooth") },
-                            onClick = {
-                                menuExpanded = false
-                                showManageTrustedBluetoothDialog = true
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Bluetooth Diagnostics") },
-                            onClick = {
-                                menuExpanded = false
-                                onRefreshBluetoothDiagnostics()
-                                showBluetoothDiagnosticsDialog = true
-                            }
-                        )
-                    }
+                    )
                 }
-            )
+            }
         },
         bottomBar = {
             if (uiState.playback.currentTrackName != null) {
@@ -476,7 +498,14 @@ fun MainScreen(
 
             val tabs = LibraryTab.values().toList()
             ScrollableTabRow(
-                selectedTabIndex = tabs.indexOf(uiState.library.selectedTab)
+                selectedTabIndex = tabs.indexOf(uiState.library.selectedTab),
+                containerColor = MaterialTheme.colorScheme.surface,
+                edgePadding = 16.dp,
+                indicator = { tabPositions ->
+                    ScrollableTabRowDefaults.SecondaryIndicator(
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
             ) {
                 tabs.forEach { tab ->
                     Tab(
@@ -2354,49 +2383,64 @@ fun PlaybackBar(
     onOpenExpanded: () -> Unit
 ) {
     Surface(
-        tonalElevation = 3.dp,
+        color = MaterialTheme.colorScheme.surfaceVariant,
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onOpenExpanded() }
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp)
-        ) {
-            Text(
-                text = trackName,
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            if (!artistName.isNullOrBlank()) {
-                Text(
-                    text = artistName,
-                    style = MaterialTheme.typography.labelSmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            if (queuePosition != null) {
-                Text(
-                    text = "${queueTitle ?: "Queue"} • Track $queuePosition",
-                    style = MaterialTheme.typography.labelSmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            Spacer(modifier = Modifier.height(6.dp))
-            Row(
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    .height(3.dp)
+                    .drawBehind {
+                        drawRoundRect(
+                            color = MaterialTheme.colorScheme.primary,
+                            cornerRadius = CornerRadius(3.dp.toPx())
+                        )
+                    }
+            )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
             ) {
-                TextButton(onClick = onPlayPause) {
-                    Text(if (isPlaying) "Pause" else "Play")
+                Text(
+                    text = trackName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (!artistName.isNullOrBlank()) {
+                    Text(
+                        text = artistName,
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
+                if (queuePosition != null) {
+                    Text(
+                        text = "${queueTitle ?: "Queue"} • Track $queuePosition",
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    TextButton(
+                        onClick = onPlayPause,
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
+                    ) {
+                        Text(if (isPlaying) "Pause" else "Play")
+                    }
                 TextButton(onClick = onToggleRepeat) {
                     Text("Repeat: ${repeatModeShortLabel(repeatMode)}")
                 }
@@ -2637,7 +2681,10 @@ fun FileCard(
     onSelectionToggle: (() -> Unit)? = null
 ) {
     val colors = if (isCurrentTrack) {
-        CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+        CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+            contentColor = MaterialTheme.colorScheme.onSurface
+        )
     } else {
         CardDefaults.cardColors()
     }
