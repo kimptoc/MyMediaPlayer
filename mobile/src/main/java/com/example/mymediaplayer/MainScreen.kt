@@ -27,6 +27,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -224,8 +225,15 @@ fun MainScreen(
     Scaffold(
         topBar = {
             Surface(
-                color = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.onSurface
+                color = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                modifier = Modifier.drawBehind {
+                    drawLine(
+                        color = MaterialTheme.colorScheme.tertiary,
+                        strokeWidth = 3.dp.toPx(),
+                        size = size
+                    )
+                }
             ) {
                 Column {
                     TopAppBar(
@@ -500,9 +508,9 @@ fun MainScreen(
             ScrollableTabRow(
                 selectedTabIndex = tabs.indexOf(uiState.library.selectedTab),
                 containerColor = MaterialTheme.colorScheme.surface,
-                edgePadding = 16.dp,
+                edgePadding = 20.dp,
                 indicator = { tabPositions ->
-                    ScrollableTabRowDefaults.SecondaryIndicator(
+                    ScrollableTabRowDefaults.Indicator(
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
@@ -2435,9 +2443,12 @@ fun PlaybackBar(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    TextButton(
+                    FilledTonalButton(
                         onClick = onPlayPause,
-                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
                     ) {
                         Text(if (isPlaying) "Pause" else "Play")
                     }
@@ -2682,8 +2693,8 @@ fun FileCard(
 ) {
     val colors = if (isCurrentTrack) {
         CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-            contentColor = MaterialTheme.colorScheme.onSurface
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
         )
     } else {
         CardDefaults.cardColors()
