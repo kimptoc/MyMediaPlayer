@@ -2,4 +2,18 @@
 <resources>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
+    <!-- LCARS Color Palette -->
+    <color name="lcars_orange">#FFFF9900</color>
+    <color name="lcars_cyan">#FF00CCCC</color>
+    <color name="lcars_purple">#FF9966CC</color>
+    <color name="lcars_hot_pink">#FFFF4488</color>
+    <color name="lcars_warm_white">#FFFFEECC</color>
+    <color name="lcars_dim_white">#FFBBAA99</color>
+    <color name="lcars_black">#FF0D0D0D</color>
+    <color name="lcars_dark_purple">#FF1A1025</color>
+    <color name="lcars_surface">#FF221133</color>
+    <color name="lcars_surface_variant">#FF332244</color>
+    <color name="lcars_light_bg">#FFFFF8F0</color>
+    <color name="lcars_light_orange">#FFCC6600</color>
 </resources>

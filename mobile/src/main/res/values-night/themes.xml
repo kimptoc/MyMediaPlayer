@@ -1,7 +1,23 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Base application theme. -->
     <style name="Base.Theme.MyMediaPlayer" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Customize your dark theme here. -->
-        <!-- <item name="colorPrimary">@color/my_dark_primary</item> -->
+        <!-- LCARS Dark Theme -->
+        <item name="colorPrimary">@color/lcars_orange</item>
+        <item name="colorOnPrimary">@color/lcars_black</item>
+        <item name="colorPrimaryContainer">@color/lcars_surface_variant</item>
+        <item name="colorOnPrimaryContainer">@color/lcars_orange</item>
+        <item name="colorSecondary">@color/lcars_cyan</item>
+        <item name="colorOnSecondary">@color/lcars_black</item>
+        <item name="colorSecondaryContainer">@color/lcars_surface</item>
+        <item name="colorOnSecondaryContainer">@color/lcars_cyan</item>
+        <item name="colorTertiary">@color/lcars_purple</item>
+        <item name="colorOnTertiary">@color/white</item>
+        <item name="colorTertiaryContainer">@color/lcars_surface_variant</item>
+        <item name="colorOnTertiaryContainer">@color/lcars_purple</item>
+        <item name="colorSurface">@color/lcars_dark_purple</item>
+        <item name="colorOnSurface">@color/lcars_warm_white</item>
+        <item name="colorSurfaceVariant">@color/lcars_surface_variant</item>
+        <item name="colorOnSurfaceVariant">@color/lcars_dim_white</item>
+        <item name="colorError">@color/lcars_hot_pink</item>
     </style>
 </resources>

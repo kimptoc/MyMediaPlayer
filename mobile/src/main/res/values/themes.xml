@@ -1,8 +1,24 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Base application theme. -->
     <style name="Base.Theme.MyMediaPlayer" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Customize your light theme here. -->
-        <!-- <item name="colorPrimary">@color/my_light_primary</item> -->
+        <!-- LCARS Light Theme -->
+        <item name="colorPrimary">@color/lcars_orange</item>
+        <item name="colorOnPrimary">@color/lcars_black</item>
+        <item name="colorPrimaryContainer">@color/lcars_warm_white</item>
+        <item name="colorOnPrimaryContainer">@color/lcars_black</item>
+        <item name="colorSecondary">@color/lcars_cyan</item>
+        <item name="colorOnSecondary">@color/lcars_black</item>
+        <item name="colorSecondaryContainer">@color/lcars_light_bg</item>
+        <item name="colorOnSecondaryContainer">@color/lcars_black</item>
+        <item name="colorTertiary">@color/lcars_purple</item>
+        <item name="colorOnTertiary">@color/white</item>
+        <item name="colorTertiaryContainer">@color/lcars_warm_white</item>
+        <item name="colorOnTertiaryContainer">@color/lcars_black</item>
+        <item name="colorSurface">@color/lcars_light_bg</item>
+        <item name="colorOnSurface">@color/lcars_black</item>
+        <item name="colorSurfaceVariant">@color/lcars_warm_white</item>
+        <item name="colorOnSurfaceVariant">@color/lcars_dim_white</item>
+        <item name="colorError">@color/lcars_hot_pink</item>
     </style>
 
     <style name="Theme.MyMediaPlayer" parent="Base.Theme.MyMediaPlayer" />
