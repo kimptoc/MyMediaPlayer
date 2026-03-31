@@ -19,7 +19,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.lifecycleScope
@@ -265,7 +264,7 @@ class MainActivity : ComponentActivity() {
         observeViewModel()
 
         setContent {
-            MaterialTheme {
+            LcarsTheme {
                 val uiState = viewModel.uiState.collectAsState()
                 MainScreen(
                     uiState = uiState.value,

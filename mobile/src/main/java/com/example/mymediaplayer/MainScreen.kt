@@ -2,11 +2,14 @@ package com.example.mymediaplayer
 
 import android.graphics.Bitmap
 import android.os.SystemClock
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -15,12 +18,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -32,13 +39,16 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.ScrollableTabRow
+import androidx.compose.material3.ScrollableTabRowDefaults
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Switch
@@ -58,6 +68,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.unit.dp
 import com.example.mymediaplayer.shared.bucketGenre
 import com.example.mymediaplayer.shared.MediaFileInfo
@@ -212,94 +224,119 @@ fun MainScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("MyMediaPlayer") },
-                actions = {
-                    TextButton(onClick = { menuExpanded = true }) {
-                        Text("Menu")
-                    }
-                    DropdownMenu(
-                        expanded = menuExpanded,
-                        onDismissRequest = { menuExpanded = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("Select Folder") },
-                            onClick = {
-                                menuExpanded = false
-                                scanCountText = uiState.scan.lastScanLimit.toString()
-                                scanDeepMode = uiState.scan.deepScanEnabled
-                                showScanDialog = true
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Select Playlist Save Folder") },
-                            onClick = {
-                                menuExpanded = false
-                                onChoosePlaylistSaveFolder()
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Create Random Playlist") },
-                            onClick = {
-                                menuExpanded = false
-                                playlistCountText = uiState.playlist.lastPlaylistCount.toString()
-                                showPlaylistDialog = true
-                            },
-                            enabled = uiState.scan.scannedFiles.isNotEmpty()
-                        )
-                        DropdownMenuItem(
-                            text = { Text(if (trackVoiceIntroEnabled) "Track Voice Intro: On" else "Track Voice Intro: Off") },
-                            onClick = {
-                                menuExpanded = false
-                                onToggleTrackVoiceIntro()
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text(if (trackVoiceOutroEnabled) "Track Voice Outro: On" else "Track Voice Outro: Off") },
-                            onClick = {
-                                menuExpanded = false
-                                onToggleTrackVoiceOutro()
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("AI Announcement Settings") },
-                            onClick = {
-                                menuExpanded = false
-                                showCloudAnnouncementSettingsDialog = true
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text(if (bluetoothAutoPlayEnabled) "Bluetooth Auto-Play: On" else "Bluetooth Auto-Play: Off") },
-                            onClick = {
-                                menuExpanded = false
-                                onToggleBluetoothAutoPlay()
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Trust Connected Bluetooth") },
-                            onClick = {
-                                menuExpanded = false
-                                onAddCurrentBluetoothDevice()
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Manage Trusted Bluetooth") },
-                            onClick = {
-                                menuExpanded = false
-                                showManageTrustedBluetoothDialog = true
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Bluetooth Diagnostics") },
-                            onClick = {
-                                menuExpanded = false
-                                onRefreshBluetoothDiagnostics()
-                                showBluetoothDiagnosticsDialog = true
-                            }
-                        )
-                    }
+            Surface(
+                color = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                modifier = Modifier.drawBehind {
+                    drawLine(
+                        color = MaterialTheme.colorScheme.tertiary,
+                        strokeWidth = 3.dp.toPx(),
+                        size = size
+                    )
                 }
-            )
+            ) {
+                Column {
+                    TopAppBar(
+                        title = { Text("MyMediaPlayer") },
+                        actions = {
+                            TextButton(onClick = { menuExpanded = true }) {
+                                Text("Menu")
+                            }
+                            DropdownMenu(
+                                expanded = menuExpanded,
+                                onDismissRequest = { menuExpanded = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Select Folder") },
+                                    onClick = {
+                                        menuExpanded = false
+                                        scanCountText = uiState.scan.lastScanLimit.toString()
+                                        scanDeepMode = uiState.scan.deepScanEnabled
+                                        showScanDialog = true
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Select Playlist Save Folder") },
+                                    onClick = {
+                                        menuExpanded = false
+                                        onChoosePlaylistSaveFolder()
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Create Random Playlist") },
+                                    onClick = {
+                                        menuExpanded = false
+                                        playlistCountText = uiState.playlist.lastPlaylistCount.toString()
+                                        showPlaylistDialog = true
+                                    },
+                                    enabled = uiState.scan.scannedFiles.isNotEmpty()
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(if (trackVoiceIntroEnabled) "Track Voice Intro: On" else "Track Voice Intro: Off") },
+                                    onClick = {
+                                        menuExpanded = false
+                                        onToggleTrackVoiceIntro()
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(if (trackVoiceOutroEnabled) "Track Voice Outro: On" else "Track Voice Outro: Off") },
+                                    onClick = {
+                                        menuExpanded = false
+                                        onToggleTrackVoiceOutro()
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("AI Announcement Settings") },
+                                    onClick = {
+                                        menuExpanded = false
+                                        showCloudAnnouncementSettingsDialog = true
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(if (bluetoothAutoPlayEnabled) "Bluetooth Auto-Play: On" else "Bluetooth Auto-Play: Off") },
+                                    onClick = {
+                                        menuExpanded = false
+                                        onToggleBluetoothAutoPlay()
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Trust Connected Bluetooth") },
+                                    onClick = {
+                                        menuExpanded = false
+                                        onAddCurrentBluetoothDevice()
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Manage Trusted Bluetooth") },
+                                    onClick = {
+                                        menuExpanded = false
+                                        showManageTrustedBluetoothDialog = true
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Bluetooth Diagnostics") },
+                                    onClick = {
+                                        menuExpanded = false
+                                        onRefreshBluetoothDiagnostics()
+                                        showBluetoothDiagnosticsDialog = true
+                                    }
+                                )
+                            }
+                        }
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(2.dp)
+                            .drawBehind {
+                                drawRoundRect(
+                                    color = MaterialTheme.colorScheme.primary,
+                                    cornerRadius = CornerRadius(2.dp.toPx())
+                                )
+                            }
+                    )
+                }
+            }
         },
         bottomBar = {
             if (uiState.playback.currentTrackName != null) {
@@ -353,9 +390,16 @@ fun MainScreen(
                 TextField(
                     value = uiState.search.searchQuery,
                     onValueChange = onSearchQueryChanged,
-                    placeholder = { Text("Search title, artist, album, genre") },
+                    placeholder = { Text("Search title, artist, album, genre", color = MaterialTheme.colorScheme.onSurfaceVariant) },
                     singleLine = true,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    colors = TextFieldDefaults.colors(
+                        focusedIndicatorColor = MaterialTheme.colorScheme.primary,
+                        unfocusedIndicatorColor = MaterialTheme.colorScheme.outline,
+                        cursorColor = MaterialTheme.colorScheme.primary,
+                        focusedContainerColor = MaterialTheme.colorScheme.surface,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                    )
                 )
                 if (uiState.search.searchQuery.isNotEmpty()) {
                     TextButton(onClick = onClearSearch) {
@@ -462,7 +506,14 @@ fun MainScreen(
 
             val tabs = LibraryTab.values().toList()
             ScrollableTabRow(
-                selectedTabIndex = tabs.indexOf(uiState.library.selectedTab)
+                selectedTabIndex = tabs.indexOf(uiState.library.selectedTab),
+                containerColor = MaterialTheme.colorScheme.surface,
+                edgePadding = 20.dp,
+                indicator = { tabPositions ->
+                    ScrollableTabRowDefaults.Indicator(
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
             ) {
                 tabs.forEach { tab ->
                     Tab(
@@ -788,7 +839,7 @@ fun MainScreen(
                         showDeletePlaylistDialog = false
                     }
                 ) {
-                    Text("Delete")
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
@@ -1091,7 +1142,7 @@ private fun ManageTrustedBluetoothDialogContent(
                                     )
                                 }
                                 TextButton(onClick = { onRemoveTrustedBluetoothDevice(device.address) }) {
-                                    Text("Remove")
+                                    Text("Remove", color = MaterialTheme.colorScheme.error)
                                 }
                             }
                         }
@@ -1104,7 +1155,7 @@ private fun ManageTrustedBluetoothDialogContent(
                 onClick = onClearTrustedBluetoothDevices,
                 enabled = trustedBluetoothDevices.isNotEmpty()
             ) {
-                Text("Clear all")
+                Text("Clear all", color = MaterialTheme.colorScheme.error)
             }
         },
         dismissButton = {
@@ -2212,7 +2263,7 @@ private fun PlaylistsSection(
                         if (nextSelection != null) onPlaylistSelected(nextSelection)
                     }
                 ) {
-                    Text("Discard")
+                    Text("Discard", color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
@@ -2289,6 +2340,17 @@ private fun CategoryCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = if (isCompact) 2.dp else 4.dp)
+            .then(
+                if (isSelected) {
+                    Modifier.border(
+                        width = 3.dp,
+                        color = MaterialTheme.colorScheme.primary,
+                        shape = RoundedCornerShape(topStart = 12.dp, bottomStart = 12.dp)
+                    )
+                } else {
+                    Modifier
+                }
+            )
             .clickable { onClick() },
         colors = colors
     ) {
@@ -2329,49 +2391,67 @@ fun PlaybackBar(
     onOpenExpanded: () -> Unit
 ) {
     Surface(
-        tonalElevation = 3.dp,
+        color = MaterialTheme.colorScheme.surfaceVariant,
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onOpenExpanded() }
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp)
-        ) {
-            Text(
-                text = trackName,
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            if (!artistName.isNullOrBlank()) {
-                Text(
-                    text = artistName,
-                    style = MaterialTheme.typography.labelSmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            if (queuePosition != null) {
-                Text(
-                    text = "${queueTitle ?: "Queue"} • Track $queuePosition",
-                    style = MaterialTheme.typography.labelSmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            Spacer(modifier = Modifier.height(6.dp))
-            Row(
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    .height(3.dp)
+                    .drawBehind {
+                        drawRoundRect(
+                            color = MaterialTheme.colorScheme.primary,
+                            cornerRadius = CornerRadius(3.dp.toPx())
+                        )
+                    }
+            )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
             ) {
-                TextButton(onClick = onPlayPause) {
-                    Text(if (isPlaying) "Pause" else "Play")
+                Text(
+                    text = trackName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (!artistName.isNullOrBlank()) {
+                    Text(
+                        text = artistName,
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
+                if (queuePosition != null) {
+                    Text(
+                        text = "${queueTitle ?: "Queue"} • Track $queuePosition",
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    FilledTonalButton(
+                        onClick = onPlayPause,
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    ) {
+                        Text(if (isPlaying) "Pause" else "Play")
+                    }
                 TextButton(onClick = onToggleRepeat) {
                     Text("Repeat: ${repeatModeShortLabel(repeatMode)}")
                 }
@@ -2462,6 +2542,7 @@ private fun ExpandedNowPlayingDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Now Playing") },
+        containerColor = MaterialTheme.colorScheme.surfaceVariant,
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (artwork != null) {
@@ -2496,7 +2577,12 @@ private fun ExpandedNowPlayingDialog(
                         onValueChangeFinished = {
                             isSeeking = false
                             onSeekTo(seekValueMs.toLong())
-                        }
+                        },
+                        colors = SliderDefaults.colors(
+                            thumbColor = MaterialTheme.colorScheme.primary,
+                            activeTrackColor = MaterialTheme.colorScheme.primary,
+                            inactiveTrackColor = MaterialTheme.colorScheme.outline
+                        )
                     )
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -2521,7 +2607,10 @@ private fun ExpandedNowPlayingDialog(
                         TextButton(onClick = onNext, enabled = hasNext) { Text("Next") }
                     }
                     TextButton(onClick = onToggleFlag) {
-                        Text(if (isFlagged) "Unflag" else "Flag")
+                        Text(
+                            if (isFlagged) "Unflag" else "Flag",
+                            color = if (isFlagged) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                        )
                     }
                 }
             }
@@ -2603,7 +2692,10 @@ fun FileCard(
     onSelectionToggle: (() -> Unit)? = null
 ) {
     val colors = if (isCurrentTrack) {
-        CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+        CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+        )
     } else {
         CardDefaults.cardColors()
     }
