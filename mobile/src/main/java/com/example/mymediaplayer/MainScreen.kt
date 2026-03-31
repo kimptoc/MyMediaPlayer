@@ -2,6 +2,8 @@ package com.example.mymediaplayer
 
 import android.graphics.Bitmap
 import android.os.SystemClock
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.horizontalScroll
@@ -15,10 +17,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -38,7 +43,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Switch
@@ -353,9 +360,16 @@ fun MainScreen(
                 TextField(
                     value = uiState.search.searchQuery,
                     onValueChange = onSearchQueryChanged,
-                    placeholder = { Text("Search title, artist, album, genre") },
+                    placeholder = { Text("Search title, artist, album, genre", color = MaterialTheme.colorScheme.onSurfaceVariant) },
                     singleLine = true,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    colors = TextFieldDefaults.colors(
+                        focusedIndicatorColor = MaterialTheme.colorScheme.primary,
+                        unfocusedIndicatorColor = MaterialTheme.colorScheme.outline,
+                        cursorColor = MaterialTheme.colorScheme.primary,
+                        focusedContainerColor = MaterialTheme.colorScheme.surface,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                    )
                 )
                 if (uiState.search.searchQuery.isNotEmpty()) {
                     TextButton(onClick = onClearSearch) {
@@ -788,7 +802,7 @@ fun MainScreen(
                         showDeletePlaylistDialog = false
                     }
                 ) {
-                    Text("Delete")
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
@@ -1091,7 +1105,7 @@ private fun ManageTrustedBluetoothDialogContent(
                                     )
                                 }
                                 TextButton(onClick = { onRemoveTrustedBluetoothDevice(device.address) }) {
-                                    Text("Remove")
+                                    Text("Remove", color = MaterialTheme.colorScheme.error)
                                 }
                             }
                         }
@@ -1104,7 +1118,7 @@ private fun ManageTrustedBluetoothDialogContent(
                 onClick = onClearTrustedBluetoothDevices,
                 enabled = trustedBluetoothDevices.isNotEmpty()
             ) {
-                Text("Clear all")
+                Text("Clear all", color = MaterialTheme.colorScheme.error)
             }
         },
         dismissButton = {
@@ -2212,7 +2226,7 @@ private fun PlaylistsSection(
                         if (nextSelection != null) onPlaylistSelected(nextSelection)
                     }
                 ) {
-                    Text("Discard")
+                    Text("Discard", color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
@@ -2289,6 +2303,17 @@ private fun CategoryCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = if (isCompact) 2.dp else 4.dp)
+            .then(
+                if (isSelected) {
+                    Modifier.border(
+                        width = 3.dp,
+                        color = MaterialTheme.colorScheme.primary,
+                        shape = RoundedCornerShape(topStart = 12.dp, bottomStart = 12.dp)
+                    )
+                } else {
+                    Modifier
+                }
+            )
             .clickable { onClick() },
         colors = colors
     ) {
@@ -2462,6 +2487,7 @@ private fun ExpandedNowPlayingDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Now Playing") },
+        containerColor = MaterialTheme.colorScheme.surfaceVariant,
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (artwork != null) {
@@ -2496,7 +2522,12 @@ private fun ExpandedNowPlayingDialog(
                         onValueChangeFinished = {
                             isSeeking = false
                             onSeekTo(seekValueMs.toLong())
-                        }
+                        },
+                        colors = SliderDefaults.colors(
+                            thumbColor = MaterialTheme.colorScheme.primary,
+                            activeTrackColor = MaterialTheme.colorScheme.primary,
+                            inactiveTrackColor = MaterialTheme.colorScheme.outline
+                        )
                     )
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -2521,7 +2552,10 @@ private fun ExpandedNowPlayingDialog(
                         TextButton(onClick = onNext, enabled = hasNext) { Text("Next") }
                     }
                     TextButton(onClick = onToggleFlag) {
-                        Text(if (isFlagged) "Unflag" else "Flag")
+                        Text(
+                            if (isFlagged) "Unflag" else "Flag",
+                            color = if (isFlagged) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                        )
                     }
                 }
             }
