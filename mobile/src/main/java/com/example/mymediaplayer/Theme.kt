@@ -4,13 +4,19 @@ import android.app.UiModeManager
 import android.content.Context
 import android.content.res.Configuration
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
+import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 private val LcarsBlack = Color(0xFF0D0D0D)
 private val LcarsDarkPurple = Color(0xFF1A1025)
@@ -24,6 +30,19 @@ private val LcarsSurface = Color(0xFF221133)
 private val LcarsSurfaceVariant = Color(0xFF332244)
 private val LcarsLightBg = Color(0xFFFFF8F0)
 private val LcarsLightOrange = Color(0xFFCC6600)
+
+private val LcarsShapes = Shapes(
+    small = RoundedCornerShape(4.dp),
+    medium = RoundedCornerShape(12.dp),
+    large = RoundedCornerShape(16.dp)
+)
+
+private val LcarsTypography = Typography(
+    titleLarge = Typography().titleLarge.copy(fontWeight = FontWeight.Bold),
+    titleMedium = Typography().titleMedium.copy(fontWeight = FontWeight.SemiBold),
+    bodyLarge = Typography().bodyLarge.copy(fontWeight = FontWeight.Medium),
+    bodyMedium = Typography().bodyMedium.copy(fontWeight = FontWeight.Medium)
+)
 
 fun lcarsDarkColorScheme(): ColorScheme = darkColorScheme(
     primary = LcarsOrange,
@@ -86,6 +105,8 @@ fun LcarsTheme(
 
     MaterialTheme(
         colorScheme = colorScheme,
+        shapes = LcarsShapes,
+        typography = LcarsTypography,
         content = content,
     )
 }

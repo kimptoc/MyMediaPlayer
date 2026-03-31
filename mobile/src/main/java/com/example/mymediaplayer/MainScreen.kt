@@ -2423,6 +2423,7 @@ fun PlaybackBar(
                     Text(
                         text = artistName,
                         style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -2431,6 +2432,7 @@ fun PlaybackBar(
                     Text(
                         text = "${queueTitle ?: "Queue"} • Track $queuePosition",
                         style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -2546,17 +2548,29 @@ private fun ExpandedNowPlayingDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (artwork != null) {
-                    Image(
-                        bitmap = artwork.asImageBitmap(),
-                        contentDescription = "Album art",
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(220.dp)
-                    )
+                            .drawBehind {
+                                drawRoundRect(
+                                    color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.3f),
+                                    cornerRadius = CornerRadius(12.dp.toPx()),
+                                    topLeft = androidx.compose.ui.geometry.Offset(-4.dp.toPx(), -4.dp.toPx())
+                                )
+                            }
+                            .padding(4.dp)
+                    ) {
+                        Image(
+                            bitmap = artwork.asImageBitmap(),
+                            contentDescription = "Album art",
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
                 }
                 Text(trackName, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 if (!artistName.isNullOrBlank()) {
-                    Text(artistName, style = MaterialTheme.typography.bodySmall)
+                    Text(artistName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 val details = listOfNotNull(
                     album?.takeIf { it.isNotBlank() },
@@ -2590,11 +2604,13 @@ private fun ExpandedNowPlayingDialog(
                     ) {
                         Text(
                             formatPlaybackDuration(seekValueMs.toLong()),
-                            style = MaterialTheme.typography.labelSmall
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
                             formatPlaybackDuration(durationSafe),
-                            style = MaterialTheme.typography.labelSmall
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -2716,7 +2732,8 @@ fun FileCard(
             if (secondary.isNotEmpty()) {
                 Text(
                     text = secondary,
-                    style = MaterialTheme.typography.bodySmall
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             if (onAddToPlaylist != null || onToggleFavorite != null || (isSelectionEnabled && onSelectionToggle != null)) {
