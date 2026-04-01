@@ -156,6 +156,13 @@ fun MainScreen(
     var showExpandedNowPlayingDialog by remember { mutableStateOf(false) }
     var songsFavoritesOnly by rememberSaveable { mutableStateOf(false) }
     var searchFavoritesOnly by rememberSaveable { mutableStateOf(false) }
+    var isSearchExpanded by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(uiState.search.searchQuery) {
+        if (uiState.search.searchQuery.isNotBlank()) {
+            isSearchExpanded = true
+        }
+    }
 
     LaunchedEffect(uiState.search.searchQuery, uiState.search.searchResults) {
         selectedSearchUris = selectedSearchUris.intersect(uiState.search.searchResults.map { it.uriString }.toSet())
@@ -219,40 +226,72 @@ fun MainScreen(
             ) {
                 Column {
                     TopAppBar(
-                        title = { Text("MyMediaPlayer") },
-                        actions = {
-                            TextButton(onClick = { menuExpanded = true }) {
-                                Text("Menu")
+                        title = {
+                            if (isSearchExpanded) {
+                                TextField(
+                                    value = uiState.search.searchQuery,
+                                    onValueChange = onSearchQueryChanged,
+                                    placeholder = { Text("Search title, artist, album, genre", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = TextFieldDefaults.colors(
+                                        focusedIndicatorColor = MaterialTheme.colorScheme.primary,
+                                        unfocusedIndicatorColor = MaterialTheme.colorScheme.outline,
+                                        cursorColor = MaterialTheme.colorScheme.primary,
+                                        focusedContainerColor = MaterialTheme.colorScheme.surface,
+                                        unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                                    )
+                                )
+                            } else {
+                                Text("MyMediaPlayer")
                             }
-                            DropdownMenu(
-                                expanded = menuExpanded,
-                                onDismissRequest = { menuExpanded = false }
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text("Select Folder") },
-                                    onClick = {
-                                        menuExpanded = false
-                                        scanCountText = uiState.scan.lastScanLimit.toString()
-                                        scanDeepMode = uiState.scan.deepScanEnabled
-                                        showScanDialog = true
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Create Random Playlist") },
-                                    onClick = {
-                                        menuExpanded = false
-                                        playlistCountText = uiState.playlist.lastPlaylistCount.toString()
-                                        showPlaylistDialog = true
-                                    },
-                                    enabled = uiState.scan.scannedFiles.isNotEmpty()
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Settings") },
-                                    onClick = {
-                                        menuExpanded = false
-                                        onOpenSettings()
-                                    }
-                                )
+                        },
+                        navigationIcon = {
+                            if (isSearchExpanded) {
+                                TextButton(onClick = {
+                                    isSearchExpanded = false
+                                    onClearSearch()
+                                }) { Text("Back") }
+                            }
+                        },
+                        actions = {
+                            if (!isSearchExpanded) {
+                                TextButton(onClick = { isSearchExpanded = true }) { Text("Search") }
+                                TextButton(onClick = { menuExpanded = true }) {
+                                    Text("Menu")
+                                }
+                                DropdownMenu(
+                                    expanded = menuExpanded,
+                                    onDismissRequest = { menuExpanded = false }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("Select Folder") },
+                                        onClick = {
+                                            menuExpanded = false
+                                            scanCountText = uiState.scan.lastScanLimit.toString()
+                                            scanDeepMode = uiState.scan.deepScanEnabled
+                                            showScanDialog = true
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Create Random Playlist") },
+                                        onClick = {
+                                            menuExpanded = false
+                                            playlistCountText = uiState.playlist.lastPlaylistCount.toString()
+                                            showPlaylistDialog = true
+                                        },
+                                        enabled = uiState.scan.scannedFiles.isNotEmpty()
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Settings") },
+                                        onClick = {
+                                            menuExpanded = false
+                                            onOpenSettings()
+                                        }
+                                    )
+                                }
+                            } else if (uiState.search.searchQuery.isNotEmpty()) {
+                                TextButton(onClick = onClearSearch) { Text("Clear") }
                             }
                         }
                     )
@@ -303,32 +342,6 @@ fun MainScreen(
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.align(Alignment.CenterHorizontally)
                     )
-                }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                TextField(
-                    value = uiState.search.searchQuery,
-                    onValueChange = onSearchQueryChanged,
-                    placeholder = { Text("Search title, artist, album, genre", color = MaterialTheme.colorScheme.onSurfaceVariant) },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f),
-                    colors = TextFieldDefaults.colors(
-                        focusedIndicatorColor = MaterialTheme.colorScheme.primary,
-                        unfocusedIndicatorColor = MaterialTheme.colorScheme.outline,
-                        cursorColor = MaterialTheme.colorScheme.primary,
-                        focusedContainerColor = MaterialTheme.colorScheme.surface,
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surface
-                    )
-                )
-                if (uiState.search.searchQuery.isNotEmpty()) {
-                    TextButton(onClick = onClearSearch) {
-                        Text("Clear")
-                    }
                 }
             }
 
