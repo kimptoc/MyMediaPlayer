@@ -297,7 +297,7 @@ class MainActivity : ComponentActivity() {
                         onBack = { showSettingsScreen.value = false }
                     )
                 } else {
-                MainScreen(
+                    MainScreen(
                     uiState = uiState.value,
                     onSelectFolderWithLimit = { limit, deepScan ->
                         pendingScanLimit = limit
@@ -391,7 +391,7 @@ class MainActivity : ComponentActivity() {
                             mediaController?.transportControls?.playFromMediaId(mediaId, null)
                         }
                     }
-                )
+                    )
                 }
             }
         }

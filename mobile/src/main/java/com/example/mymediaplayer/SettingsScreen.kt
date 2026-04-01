@@ -1,5 +1,6 @@
 package com.example.mymediaplayer
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -59,6 +60,8 @@ fun SettingsScreen(
     var showCloudAnnouncementSettingsDialog by remember { mutableStateOf(false) }
     var showManageTrustedBluetoothDialog by remember { mutableStateOf(false) }
     var showBluetoothDiagnosticsDialog by remember { mutableStateOf(false) }
+
+    BackHandler { onBack() }
 
     Scaffold(
         topBar = {
@@ -186,7 +189,7 @@ fun SettingsScreen(
 }
 
 @Composable
-fun SettingsToggleRow(
+private fun SettingsToggleRow(
     label: String,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit
@@ -211,7 +214,7 @@ fun SettingsToggleRow(
 }
 
 @Composable
-fun SettingsClickRow(
+private fun SettingsClickRow(
     label: String,
     onClick: () -> Unit
 ) {
