@@ -20,7 +20,7 @@ class GenreBucketsTest {
         assertEquals("Reggae", bucketGenre("Dancehall"))
         assertEquals("Reggae", bucketGenre("Ska"))
         assertEquals("Reggae", bucketGenre("Dub"))
-        assertEquals("Other", bucketGenre("Dub Techno"))
+        assertEquals("Electronic/Dance", bucketGenre("Dub Techno"))
         assertEquals("Other", bucketGenre("Post-Blackgaze-Experimental"))
         assertEquals("Other", bucketGenre(null))
     }

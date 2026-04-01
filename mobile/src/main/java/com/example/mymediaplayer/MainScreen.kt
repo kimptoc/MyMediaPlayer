@@ -39,7 +39,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.ScrollableTabRow
-import androidx.compose.material3.ScrollableTabRowDefaults
+import androidx.compose.material3.TabRowDefaults
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
@@ -57,7 +58,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -227,12 +227,16 @@ fun MainScreen(
             Surface(
                 color = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
-                modifier = Modifier.drawBehind {
-                    drawLine(
-                        color = MaterialTheme.colorScheme.tertiary,
-                        strokeWidth = 3.dp.toPx(),
-                        size = size
-                    )
+                modifier = run {
+                    val lineColor = MaterialTheme.colorScheme.tertiary
+                    Modifier.drawBehind {
+                        drawLine(
+                            color = lineColor,
+                            start = androidx.compose.ui.geometry.Offset(0f, size.height),
+                            end = androidx.compose.ui.geometry.Offset(size.width, size.height),
+                            strokeWidth = 3.dp.toPx()
+                        )
+                    }
                 }
             ) {
                 Column {
@@ -325,15 +329,18 @@ fun MainScreen(
                         }
                     )
                     Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(2.dp)
-                            .drawBehind {
-                                drawRoundRect(
-                                    color = MaterialTheme.colorScheme.primary,
-                                    cornerRadius = CornerRadius(2.dp.toPx())
-                                )
-                            }
+                        modifier = run {
+                            val boxColor = MaterialTheme.colorScheme.primary
+                            Modifier
+                                .fillMaxWidth()
+                                .height(2.dp)
+                                .drawBehind {
+                                    drawRoundRect(
+                                        color = boxColor,
+                                        cornerRadius = CornerRadius(2.dp.toPx())
+                                    )
+                                }
+                        }
                     )
                 }
             }
@@ -510,9 +517,13 @@ fun MainScreen(
                 containerColor = MaterialTheme.colorScheme.surface,
                 edgePadding = 20.dp,
                 indicator = { tabPositions ->
-                    ScrollableTabRowDefaults.Indicator(
-                        color = MaterialTheme.colorScheme.primary
-                    )
+                    val index = tabs.indexOf(uiState.library.selectedTab)
+                    if (index in tabPositions.indices) {
+                        TabRowDefaults.SecondaryIndicator(
+                            modifier = Modifier.tabIndicatorOffset(tabPositions[index]),
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
             ) {
                 tabs.forEach { tab ->
@@ -2398,15 +2409,18 @@ fun PlaybackBar(
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(3.dp)
-                    .drawBehind {
-                        drawRoundRect(
-                            color = MaterialTheme.colorScheme.primary,
-                            cornerRadius = CornerRadius(3.dp.toPx())
-                        )
-                    }
+                modifier = run {
+                    val barColor = MaterialTheme.colorScheme.primary
+                    Modifier
+                        .fillMaxWidth()
+                        .height(3.dp)
+                        .drawBehind {
+                            drawRoundRect(
+                                color = barColor,
+                                cornerRadius = CornerRadius(3.dp.toPx())
+                            )
+                        }
+                }
             )
             Column(
                 modifier = Modifier
@@ -2472,6 +2486,7 @@ fun PlaybackBar(
             }
         }
     }
+}
 }
 
 @Composable
