@@ -6,7 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
-import androidx.compose.foundation.horizontalScroll
+
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,7 +23,7 @@ import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
+
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Button
@@ -74,7 +74,7 @@ import androidx.compose.ui.unit.dp
 import com.example.mymediaplayer.shared.bucketGenre
 import com.example.mymediaplayer.shared.MediaFileInfo
 import com.example.mymediaplayer.shared.PlaylistInfo
-import android.support.v4.media.session.PlaybackStateCompat
+
 
 data class TrustedBluetoothDevice(
     val address: String,
@@ -351,19 +351,8 @@ fun MainScreen(
                     trackName = uiState.playback.currentTrackName,
                     artistName = uiState.playback.currentArtistName,
                     isPlaying = uiState.playback.isPlaying,
-                    isPlayingPlaylist = uiState.playback.isPlayingPlaylist,
-                    repeatMode = uiState.playback.repeatMode,
-                    queueTitle = uiState.playback.queueTitle,
-                    queuePosition = uiState.playback.queuePosition,
                     onPlayPause = onPlayPause,
-                    onStop = onStop,
-                    onNext = onNext,
-                    onPrev = onPrev,
-                    onToggleRepeat = onToggleRepeat,
-                    onShowQueue = { showQueueDialog = true },
-                    onOpenExpanded = { showExpandedNowPlayingDialog = true },
-                    hasNext = uiState.playback.hasNext,
-                    hasPrev = uiState.playback.hasPrev
+                    onOpenExpanded = { showExpandedNowPlayingDialog = true }
                 )
             }
         },
@@ -2387,18 +2376,7 @@ fun PlaybackBar(
     trackName: String,
     artistName: String?,
     isPlaying: Boolean,
-    isPlayingPlaylist: Boolean,
-    repeatMode: Int,
-    queueTitle: String?,
-    hasNext: Boolean,
-    hasPrev: Boolean,
-    queuePosition: String?,
     onPlayPause: () -> Unit,
-    onStop: () -> Unit,
-    onNext: () -> Unit,
-    onPrev: () -> Unit,
-    onToggleRepeat: () -> Unit,
-    onShowQueue: () -> Unit,
     onOpenExpanded: () -> Unit
 ) {
     Surface(
@@ -2422,71 +2400,40 @@ fun PlaybackBar(
                         }
                 }
             )
-            Column(
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = trackName,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                if (!artistName.isNullOrBlank()) {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = artistName,
-                        style = MaterialTheme.typography.labelSmall,
+                        text = trackName,
+                        style = MaterialTheme.typography.bodyMedium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                }
-                if (queuePosition != null) {
-                    Text(
-                        text = "${queueTitle ?: "Queue"} • Track $queuePosition",
-                        style = MaterialTheme.typography.labelSmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                Spacer(modifier = Modifier.height(6.dp))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    FilledTonalButton(
-                        onClick = onPlayPause,
-                        colors = ButtonDefaults.filledTonalButtonColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    if (!artistName.isNullOrBlank()) {
+                        Text(
+                            text = artistName,
+                            style = MaterialTheme.typography.labelSmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
-                    ) {
-                        Text(if (isPlaying) "Pause" else "Play")
-                    }
-                TextButton(onClick = onToggleRepeat) {
-                    Text("Repeat: ${repeatModeShortLabel(repeatMode)}")
-                }
-                TextButton(onClick = onShowQueue) {
-                    Text("Queue")
-                }
-                if (isPlayingPlaylist) {
-                    TextButton(onClick = onPrev, enabled = hasPrev) {
-                        Text("Prev")
-                    }
-                    TextButton(onClick = onNext, enabled = hasNext) {
-                        Text("Next")
                     }
                 }
-                TextButton(onClick = onStop) {
-                    Text("Stop")
+                FilledTonalButton(
+                    onClick = onPlayPause,
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                ) {
+                    Text(if (isPlaying) "Pause" else "Play")
                 }
             }
         }
     }
-}
 }
 
 @Composable
@@ -2643,13 +2590,6 @@ private fun formatPlaybackDuration(durationMs: Long): String {
     return "%d:%02d".format(minutes, seconds)
 }
 
-private fun repeatModeShortLabel(mode: Int): String {
-    return when (mode) {
-        PlaybackStateCompat.REPEAT_MODE_ALL -> "All"
-        PlaybackStateCompat.REPEAT_MODE_ONE -> "One"
-        else -> "Off"
-    }
-}
 
 @Composable
 fun PlaylistCard(
