@@ -122,6 +122,7 @@ class MainActivity : ComponentActivity() {
     private val cloudAnnouncementTtsKey = mutableStateOf("")
     private val debugCloudAnnouncements = mutableStateOf(false)
     private val nowPlayingArt = mutableStateOf<Bitmap?>(null)
+    private val showSettingsScreen = mutableStateOf(false)
 
     private val bluetoothPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -266,6 +267,36 @@ class MainActivity : ComponentActivity() {
         setContent {
             LcarsTheme {
                 val uiState = viewModel.uiState.collectAsState()
+                if (showSettingsScreen.value) {
+                    SettingsScreen(
+                        trackVoiceIntroEnabled = trackVoiceIntroEnabled.value,
+                        trackVoiceOutroEnabled = trackVoiceOutroEnabled.value,
+                        onToggleTrackVoiceIntro = { toggleTrackVoiceIntro() },
+                        onToggleTrackVoiceOutro = { toggleTrackVoiceOutro() },
+                        cloudAnnouncementKiloKey = cloudAnnouncementKiloKey.value,
+                        cloudAnnouncementTtsKey = cloudAnnouncementTtsKey.value,
+                        debugCloudAnnouncements = debugCloudAnnouncements.value,
+                        onSetDebugCloudAnnouncements = { enabled ->
+                            debugCloudAnnouncements.value = enabled
+                            getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                                .edit()
+                                .putBoolean(KEY_DEBUG_CLOUD_ANNOUNCEMENTS, enabled)
+                                .apply()
+                            sendDebugCloudSettingToService(enabled)
+                        },
+                        onSaveCloudAnnouncementKeys = ::saveCloudAnnouncementKeys,
+                        bluetoothAutoPlayEnabled = bluetoothAutoPlayEnabled.value,
+                        onToggleBluetoothAutoPlay = { toggleBluetoothAutoPlay() },
+                        onAddCurrentBluetoothDevice = { addCurrentBluetoothDeviceToAllowlist() },
+                        trustedBluetoothDevices = trustedBluetoothDevices.value,
+                        bluetoothDiagnostics = bluetoothDiagnostics.value,
+                        onRemoveTrustedBluetoothDevice = { address -> removeTrustedBluetoothDevice(address) },
+                        onClearTrustedBluetoothDevices = { clearTrustedBluetoothDevices() },
+                        onRefreshBluetoothDiagnostics = { refreshBluetoothState() },
+                        onChoosePlaylistSaveFolder = { openPlaylistDocumentTree.launch(null) },
+                        onBack = { showSettingsScreen.value = false }
+                    )
+                } else {
                 MainScreen(
                     uiState = uiState.value,
                     onSelectFolderWithLimit = { limit, deepScan ->
@@ -336,32 +367,6 @@ class MainActivity : ComponentActivity() {
                     onToggleFavorite = { file ->
                         viewModel.toggleFavorite(file.uriString)
                     },
-                    bluetoothAutoPlayEnabled = bluetoothAutoPlayEnabled.value,
-                    trackVoiceIntroEnabled = trackVoiceIntroEnabled.value,
-                    trackVoiceOutroEnabled = trackVoiceOutroEnabled.value,
-                    onToggleBluetoothAutoPlay = {
-                        toggleBluetoothAutoPlay()
-                    },
-                    onToggleTrackVoiceIntro = {
-                        toggleTrackVoiceIntro()
-                    },
-                    onToggleTrackVoiceOutro = {
-                        toggleTrackVoiceOutro()
-                    },
-                    onAddCurrentBluetoothDevice = {
-                        addCurrentBluetoothDeviceToAllowlist()
-                    },
-                    trustedBluetoothDevices = trustedBluetoothDevices.value,
-                    bluetoothDiagnostics = bluetoothDiagnostics.value,
-                    onRemoveTrustedBluetoothDevice = { address ->
-                        removeTrustedBluetoothDevice(address)
-                    },
-                    onClearTrustedBluetoothDevices = {
-                        clearTrustedBluetoothDevices()
-                    },
-                    onRefreshBluetoothDiagnostics = {
-                        refreshBluetoothState()
-                    },
                     nowPlayingArt = nowPlayingArt.value,
                     showPlaylistSaveFolderPrompt = showPlaylistSaveFolderPrompt.value,
                     onDismissPlaylistSaveFolderPrompt = {
@@ -371,18 +376,7 @@ class MainActivity : ComponentActivity() {
                         showPlaylistSaveFolderPrompt.value = false
                         openPlaylistDocumentTree.launch(null)
                     },
-                    cloudAnnouncementKiloKey = cloudAnnouncementKiloKey.value,
-                    cloudAnnouncementTtsKey = cloudAnnouncementTtsKey.value,
-                    onSaveCloudAnnouncementKeys = ::saveCloudAnnouncementKeys,
-                    debugCloudAnnouncements = debugCloudAnnouncements.value,
-                    onSetDebugCloudAnnouncements = { enabled ->
-                        debugCloudAnnouncements.value = enabled
-                        getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-                            .edit()
-                            .putBoolean(KEY_DEBUG_CLOUD_ANNOUNCEMENTS, enabled)
-                            .apply()
-                        sendDebugCloudSettingToService(enabled)
-                    },
+                    onOpenSettings = { showSettingsScreen.value = true },
                     onPlayPlaylist = { playlist ->
                         sendFilesToServiceIfNeeded(uiState.value.scan.scannedFiles)
                         sendPlaylistsToServiceIfNeeded(uiState.value.scan.discoveredPlaylists)
@@ -398,6 +392,7 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 )
+                }
             }
         }
     }

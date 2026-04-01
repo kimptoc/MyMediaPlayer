@@ -52,7 +52,6 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -66,7 +65,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
@@ -129,27 +127,11 @@ fun MainScreen(
     onAddToExistingPlaylist: (PlaylistInfo, List<MediaFileInfo>) -> Unit,
     onCreatePlaylistFromSongs: (String, List<MediaFileInfo>) -> PlaylistInfo?,
     onToggleFavorite: (MediaFileInfo) -> Unit,
-    bluetoothAutoPlayEnabled: Boolean,
-    trackVoiceIntroEnabled: Boolean,
-    trackVoiceOutroEnabled: Boolean,
-    onToggleBluetoothAutoPlay: () -> Unit,
-    onToggleTrackVoiceIntro: () -> Unit,
-    onToggleTrackVoiceOutro: () -> Unit,
-    onAddCurrentBluetoothDevice: () -> Unit,
-    trustedBluetoothDevices: List<TrustedBluetoothDevice>,
-    bluetoothDiagnostics: String,
-    onRemoveTrustedBluetoothDevice: (String) -> Unit,
-    onClearTrustedBluetoothDevices: () -> Unit,
-    onRefreshBluetoothDiagnostics: () -> Unit,
     nowPlayingArt: Bitmap?,
     showPlaylistSaveFolderPrompt: Boolean,
     onDismissPlaylistSaveFolderPrompt: () -> Unit,
     onSetPlaylistSaveFolderNow: () -> Unit,
-    cloudAnnouncementKiloKey: String,
-    cloudAnnouncementTtsKey: String,
-    onSaveCloudAnnouncementKeys: (kiloKey: String, ttsKey: String, onValidated: () -> Unit) -> Unit,
-    debugCloudAnnouncements: Boolean,
-    onSetDebugCloudAnnouncements: (Boolean) -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     var menuExpanded by remember { mutableStateOf(false) }
@@ -173,9 +155,6 @@ fun MainScreen(
     var renamePlaylistNameText by remember { mutableStateOf("") }
     var showQueueDialog by remember { mutableStateOf(false) }
     var showExpandedNowPlayingDialog by remember { mutableStateOf(false) }
-    var showBluetoothDiagnosticsDialog by remember { mutableStateOf(false) }
-    var showManageTrustedBluetoothDialog by remember { mutableStateOf(false) }
-    var showCloudAnnouncementSettingsDialog by remember { mutableStateOf(false) }
     var songsFavoritesOnly by rememberSaveable { mutableStateOf(false) }
     var searchFavoritesOnly by rememberSaveable { mutableStateOf(false) }
 
@@ -260,13 +239,6 @@ fun MainScreen(
                                     }
                                 )
                                 DropdownMenuItem(
-                                    text = { Text("Select Playlist Save Folder") },
-                                    onClick = {
-                                        menuExpanded = false
-                                        onChoosePlaylistSaveFolder()
-                                    }
-                                )
-                                DropdownMenuItem(
                                     text = { Text("Create Random Playlist") },
                                     onClick = {
                                         menuExpanded = false
@@ -276,53 +248,10 @@ fun MainScreen(
                                     enabled = uiState.scan.scannedFiles.isNotEmpty()
                                 )
                                 DropdownMenuItem(
-                                    text = { Text(if (trackVoiceIntroEnabled) "Track Voice Intro: On" else "Track Voice Intro: Off") },
+                                    text = { Text("Settings") },
                                     onClick = {
                                         menuExpanded = false
-                                        onToggleTrackVoiceIntro()
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text(if (trackVoiceOutroEnabled) "Track Voice Outro: On" else "Track Voice Outro: Off") },
-                                    onClick = {
-                                        menuExpanded = false
-                                        onToggleTrackVoiceOutro()
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("AI Announcement Settings") },
-                                    onClick = {
-                                        menuExpanded = false
-                                        showCloudAnnouncementSettingsDialog = true
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text(if (bluetoothAutoPlayEnabled) "Bluetooth Auto-Play: On" else "Bluetooth Auto-Play: Off") },
-                                    onClick = {
-                                        menuExpanded = false
-                                        onToggleBluetoothAutoPlay()
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Trust Connected Bluetooth") },
-                                    onClick = {
-                                        menuExpanded = false
-                                        onAddCurrentBluetoothDevice()
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Manage Trusted Bluetooth") },
-                                    onClick = {
-                                        menuExpanded = false
-                                        showManageTrustedBluetoothDialog = true
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Bluetooth Diagnostics") },
-                                    onClick = {
-                                        menuExpanded = false
-                                        onRefreshBluetoothDiagnostics()
-                                        showBluetoothDiagnosticsDialog = true
+                                        onOpenSettings()
                                     }
                                 )
                             }
@@ -980,50 +909,6 @@ fun MainScreen(
         )
     }
 
-    if (showManageTrustedBluetoothDialog) {
-        ManageTrustedBluetoothDialogContent(
-            trustedBluetoothDevices = trustedBluetoothDevices,
-            onRemoveTrustedBluetoothDevice = onRemoveTrustedBluetoothDevice,
-            onClearTrustedBluetoothDevices = onClearTrustedBluetoothDevices,
-            onDismissRequest = { showManageTrustedBluetoothDialog = false }
-        )
-    }
-
-    if (showBluetoothDiagnosticsDialog) {
-        AlertDialog(
-            onDismissRequest = { showBluetoothDiagnosticsDialog = false },
-            title = { Text("Bluetooth Diagnostics") },
-            text = {
-                Text(bluetoothDiagnostics)
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        onRefreshBluetoothDiagnostics()
-                    }
-                ) {
-                    Text("Refresh")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showBluetoothDiagnosticsDialog = false }) {
-                    Text("Close")
-                }
-            }
-        )
-    }
-
-    if (showCloudAnnouncementSettingsDialog) {
-        CloudAnnouncementSettingsDialogContent(
-            cloudAnnouncementKiloKey = cloudAnnouncementKiloKey,
-            cloudAnnouncementTtsKey = cloudAnnouncementTtsKey,
-            debugCloudAnnouncements = debugCloudAnnouncements,
-            onSetDebugCloudAnnouncements = onSetDebugCloudAnnouncements,
-            onSaveCloudAnnouncementKeys = onSaveCloudAnnouncementKeys,
-            onDismissRequest = { showCloudAnnouncementSettingsDialog = false }
-        )
-    }
-
     if (showPlaylistSaveFolderPrompt) {
         AlertDialog(
             onDismissRequest = onDismissPlaylistSaveFolderPrompt,
@@ -1043,138 +928,6 @@ fun MainScreen(
             }
         )
     }
-}
-
-@Composable
-private fun CloudAnnouncementSettingsDialogContent(
-    cloudAnnouncementKiloKey: String,
-    cloudAnnouncementTtsKey: String,
-    debugCloudAnnouncements: Boolean,
-    onSetDebugCloudAnnouncements: (Boolean) -> Unit,
-    onSaveCloudAnnouncementKeys: (String, String, () -> Unit) -> Unit,
-    onDismissRequest: () -> Unit
-) {
-    var kiloKeyInput by remember { mutableStateOf(cloudAnnouncementKiloKey) }
-    var ttsKeyInput by remember { mutableStateOf(cloudAnnouncementTtsKey) }
-    AlertDialog(
-        onDismissRequest = onDismissRequest,
-        title = { Text("AI Announcement Settings") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    "API keys for cloud-generated announcements. Kilo works anonymously (no key needed). Google TTS key optional for higher quality.",
-                    style = MaterialTheme.typography.bodySmall
-                )
-                TextField(
-                    value = kiloKeyInput,
-                    onValueChange = { kiloKeyInput = it },
-                    label = { Text("Kilo API key (optional)") },
-                    placeholder = { Text("Leave blank for anonymous") },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                TextField(
-                    value = ttsKeyInput,
-                    onValueChange = { ttsKeyInput = it },
-                    label = { Text("Google Cloud TTS key (optional)") },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Debug mode", style = MaterialTheme.typography.bodyMedium)
-                        Text(
-                            "Show toast when cloud TTS is used",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = debugCloudAnnouncements,
-                        onCheckedChange = onSetDebugCloudAnnouncements
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    onSaveCloudAnnouncementKeys(kiloKeyInput.trim(), ttsKeyInput.trim(), onDismissRequest)
-                }
-            ) { Text("Save") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismissRequest) {
-                Text("Cancel")
-            }
-        }
-    )
-}
-
-@Composable
-private fun ManageTrustedBluetoothDialogContent(
-    trustedBluetoothDevices: List<TrustedBluetoothDevice>,
-    onRemoveTrustedBluetoothDevice: (String) -> Unit,
-    onClearTrustedBluetoothDevices: () -> Unit,
-    onDismissRequest: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismissRequest,
-        title = { Text("Trusted Bluetooth Devices") },
-        text = {
-            Column {
-                if (trustedBluetoothDevices.isEmpty()) {
-                    Text("No trusted devices yet")
-                } else {
-                    LazyColumn {
-                        items(trustedBluetoothDevices) { device ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = device.name?.ifBlank { null } ?: "Unknown device",
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    Text(
-                                        text = device.address,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                                TextButton(onClick = { onRemoveTrustedBluetoothDevice(device.address) }) {
-                                    Text("Remove", color = MaterialTheme.colorScheme.error)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = onClearTrustedBluetoothDevices,
-                enabled = trustedBluetoothDevices.isNotEmpty()
-            ) {
-                Text("Clear all", color = MaterialTheme.colorScheme.error)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismissRequest) {
-                Text("Close")
-            }
-        }
-    )
 }
 
 @Composable
