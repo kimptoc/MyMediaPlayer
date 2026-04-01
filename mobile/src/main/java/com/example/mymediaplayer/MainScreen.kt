@@ -1672,7 +1672,6 @@ private fun PlaylistsSection(
     var dedupeOnSave by remember(selectedPlaylist?.uriString) { mutableStateOf(false) }
     var editSearchQuery by remember(selectedPlaylist?.uriString) { mutableStateOf("") }
     var showDiscardChangesDialog by remember(selectedPlaylist?.uriString) { mutableStateOf(false) }
-    var pendingSelectPlaylist by remember(selectedPlaylist?.uriString) { mutableStateOf<PlaylistInfo?>(null) }
     var pendingClearSelection by remember(selectedPlaylist?.uriString) { mutableStateOf(false) }
     val dragSwapThresholdPx = with(androidx.compose.ui.platform.LocalDensity.current) { 56.dp.toPx() }
     LaunchedEffect(selectedPlaylist?.uriString, playlistSongs, isEditing) {
@@ -1717,7 +1716,6 @@ private fun PlaylistsSection(
                 TextButton(
                 onClick = {
                     if (hasUnsavedChanges) {
-                        pendingSelectPlaylist = null
                         pendingClearSelection = true
                         showDiscardChangesDialog = true
                     } else {
@@ -1964,12 +1962,9 @@ private fun PlaylistsSection(
                         editableSongs = playlistSongs
                         dedupeOnSave = false
                         editSearchQuery = ""
-                        val nextSelection = pendingSelectPlaylist
                         val clearSelection = pendingClearSelection
-                        pendingSelectPlaylist = null
                         pendingClearSelection = false
                         if (clearSelection) onClearPlaylistSelection()
-                        if (nextSelection != null) onPlaylistSelected(nextSelection)
                     }
                 ) {
                     Text("Discard", color = MaterialTheme.colorScheme.error)
@@ -1979,7 +1974,6 @@ private fun PlaylistsSection(
                 TextButton(
                     onClick = {
                         showDiscardChangesDialog = false
-                        pendingSelectPlaylist = null
                         pendingClearSelection = false
                     }
                 ) {
