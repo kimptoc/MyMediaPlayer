@@ -156,7 +156,7 @@ fun MainScreen(
     var showExpandedNowPlayingDialog by remember { mutableStateOf(false) }
     var songsFavoritesOnly by rememberSaveable { mutableStateOf(false) }
     var searchFavoritesOnly by rememberSaveable { mutableStateOf(false) }
-    var isSearchExpanded by remember { mutableStateOf(false) }
+    var isSearchExpanded by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(uiState.search.searchQuery) {
         if (uiState.search.searchQuery.isNotBlank()) {
@@ -260,38 +260,38 @@ fun MainScreen(
                                 TextButton(onClick = { menuExpanded = true }) {
                                     Text("Menu")
                                 }
+                                DropdownMenu(
+                                    expanded = menuExpanded,
+                                    onDismissRequest = { menuExpanded = false }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("Select Folder") },
+                                        onClick = {
+                                            menuExpanded = false
+                                            scanCountText = uiState.scan.lastScanLimit.toString()
+                                            scanDeepMode = uiState.scan.deepScanEnabled
+                                            showScanDialog = true
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Create Random Playlist") },
+                                        onClick = {
+                                            menuExpanded = false
+                                            playlistCountText = uiState.playlist.lastPlaylistCount.toString()
+                                            showPlaylistDialog = true
+                                        },
+                                        enabled = uiState.scan.scannedFiles.isNotEmpty()
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Settings") },
+                                        onClick = {
+                                            menuExpanded = false
+                                            onOpenSettings()
+                                        }
+                                    )
+                                }
                             } else if (uiState.search.searchQuery.isNotEmpty()) {
                                 TextButton(onClick = onClearSearch) { Text("Clear") }
-                            }
-                            DropdownMenu(
-                                expanded = menuExpanded,
-                                onDismissRequest = { menuExpanded = false }
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text("Select Folder") },
-                                    onClick = {
-                                        menuExpanded = false
-                                        scanCountText = uiState.scan.lastScanLimit.toString()
-                                        scanDeepMode = uiState.scan.deepScanEnabled
-                                        showScanDialog = true
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Create Random Playlist") },
-                                    onClick = {
-                                        menuExpanded = false
-                                        playlistCountText = uiState.playlist.lastPlaylistCount.toString()
-                                        showPlaylistDialog = true
-                                    },
-                                    enabled = uiState.scan.scannedFiles.isNotEmpty()
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Settings") },
-                                    onClick = {
-                                        menuExpanded = false
-                                        onOpenSettings()
-                                    }
-                                )
                             }
                         }
                     )
