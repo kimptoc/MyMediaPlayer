@@ -1681,11 +1681,6 @@ private fun buildGenreCounts(files: List<MediaFileInfo>): Map<String, Int> =
         bucketGenre(file.genre)
     }.eachCount()
 
-private fun buildDecadeCounts(files: List<MediaFileInfo>): Map<String, Int> =
-    files.groupingBy { file ->
-        decadeLabelForYear(file.year)
-    }.eachCount()
-
 private fun decadeLabelForYear(year: Int?): String {
     if (year == null || year <= 0) return "Unknown Decade"
     val decade = (year / 10) * 10
