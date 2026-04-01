@@ -1689,51 +1689,32 @@ private fun PlaylistsSection(
         return
     }
 
-    Surface(
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        LazyColumn(modifier = Modifier.padding(8.dp)) {
-            val visiblePlaylists = if (selectedPlaylist == null) {
-                playlists
-            } else {
-                playlists.filter { it.uriString == selectedPlaylist.uriString }
-            }
-            items(visiblePlaylists) { playlist ->
-                val isSmart = playlist.uriString.startsWith(MainViewModel.SMART_PREFIX)
-                PlaylistCard(
-                    playlist = playlist,
-                    isCompact = selectedPlaylist != null,
-                    isSmart = isSmart,
-                    onRename = { if (!isSmart) onRequestRenamePlaylist(playlist) },
-                    onDelete = { if (!isSmart) onRequestDeletePlaylist(playlist) },
-                    onClick = {
-                        if (hasUnsavedChanges && selectedPlaylist?.uriString != playlist.uriString) {
-                            pendingSelectPlaylist = playlist
-                            pendingClearSelection = false
-                            showDiscardChangesDialog = true
-                        } else {
-                            onPlaylistSelected(playlist)
-                        }
-                    }
-                )
+    if (selectedPlaylist == null) {
+        Surface(
+            color = MaterialTheme.colorScheme.secondaryContainer,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            LazyColumn(modifier = Modifier.padding(8.dp)) {
+                items(playlists) { playlist ->
+                    val isSmart = playlist.uriString.startsWith(MainViewModel.SMART_PREFIX)
+                    PlaylistCard(
+                        playlist = playlist,
+                        isCompact = false,
+                        isSmart = isSmart,
+                        onRename = { if (!isSmart) onRequestRenamePlaylist(playlist) },
+                        onDelete = { if (!isSmart) onRequestDeletePlaylist(playlist) },
+                        onClick = { onPlaylistSelected(playlist) }
+                    )
+                }
             }
         }
-    }
-
-    Spacer(modifier = Modifier.height(8.dp))
-
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            if (selectedPlaylist == null) {
-                Text("Select a playlist to view songs")
-                return@Column
-            }
-
-            TextButton(
+    } else {
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(12.dp)) {
+                TextButton(
                 onClick = {
                     if (hasUnsavedChanges) {
                         pendingSelectPlaylist = null
@@ -1966,6 +1947,7 @@ private fun PlaylistsSection(
                     }
                 }
             }
+        }
         }
     }
 
