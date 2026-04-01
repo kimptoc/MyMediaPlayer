@@ -69,7 +69,7 @@ class MyMusicServiceTest {
     }
 
     @Test
-    fun buildCategoryListItems_appliesCountsToLabels() {
+    fun buildCategoryListItems_appliesCountsAsSubtitle() {
         val categories = listOf("Rock", "Pop")
         val counts = mapOf("Rock" to 2)
 
@@ -77,9 +77,11 @@ class MyMusicServiceTest {
 
         assertEquals(2, items.size)
         assertEquals("genre:Rock", items[0].description.mediaId)
-        assertEquals("Rock (2)", items[0].description.title)
+        assertEquals("Rock", items[0].description.title)
+        assertEquals("2 songs", items[0].description.subtitle)
         assertEquals("genre:Pop", items[1].description.mediaId)
         assertEquals("Pop", items[1].description.title)
+        assertNull(items[1].description.subtitle)
     }
 
     @Test

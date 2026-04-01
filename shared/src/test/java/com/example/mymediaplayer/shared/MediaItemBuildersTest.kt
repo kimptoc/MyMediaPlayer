@@ -113,7 +113,7 @@ class MediaItemBuildersTest {
     }
 
     @Test
-    fun buildCategoryListItems_withCounts_includesCountsInTitle() {
+    fun buildCategoryListItems_withCounts_showsCountAsSubtitle() {
         val categories = listOf("Rock", "Pop")
         val prefix = "category_prefix/"
         val counts = mapOf("Rock" to 10, "Pop" to 5)
@@ -123,14 +123,29 @@ class MediaItemBuildersTest {
         assertEquals(2, result.size)
 
         assertEquals("category_prefix/Rock", result[0].mediaId)
-        assertEquals("Rock (10)", result[0].description.title)
+        assertEquals("Rock", result[0].description.title)
+        assertEquals("10 songs", result[0].description.subtitle)
         assertNull(result[0].description.iconUri)
         assertEquals(MediaItem.FLAG_BROWSABLE, result[0].flags)
 
         assertEquals("category_prefix/Pop", result[1].mediaId)
-        assertEquals("Pop (5)", result[1].description.title)
+        assertEquals("Pop", result[1].description.title)
+        assertEquals("5 songs", result[1].description.subtitle)
         assertNull(result[1].description.iconUri)
         assertEquals(MediaItem.FLAG_BROWSABLE, result[1].flags)
+    }
+
+    @Test
+    fun buildCategoryListItems_withSingularCount_showsSongNotSongs() {
+        val categories = listOf("Jazz")
+        val prefix = "category_prefix/"
+        val counts = mapOf("Jazz" to 1)
+
+        val result = buildCategoryListItems(categories, prefix, counts = counts)
+
+        assertEquals(1, result.size)
+        assertEquals("Jazz", result[0].description.title)
+        assertEquals("1 song", result[0].description.subtitle)
     }
 
     @Test
