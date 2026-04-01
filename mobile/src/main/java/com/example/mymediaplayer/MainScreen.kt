@@ -109,7 +109,6 @@ fun MainScreen(
     onAlbumSortModeChanged: (AlbumSortMode) -> Unit,
     onGenreSelected: (String) -> Unit,
     onArtistSelected: (String) -> Unit,
-    onDecadeSelected: (String) -> Unit,
     onSearchQueryChanged: (String) -> Unit,
     onClearCategorySelection: () -> Unit,
     onClearSearch: () -> Unit,
@@ -427,8 +426,6 @@ fun MainScreen(
             val albumCounts = remember(uiState.scan.scannedFiles) { buildAlbumCounts(uiState.scan.scannedFiles) }
             val artistCounts = remember(uiState.scan.scannedFiles) { buildArtistCounts(uiState.scan.scannedFiles) }
             val genreCounts = remember(uiState.scan.scannedFiles) { buildGenreCounts(uiState.scan.scannedFiles) }
-            val decadeCounts = remember(uiState.scan.scannedFiles) { buildDecadeCounts(uiState.scan.scannedFiles) }
-
             val tabs = LibraryTab.values().toList()
             ScrollableTabRow(
                 selectedTabIndex = tabs.indexOf(uiState.library.selectedTab),
@@ -457,9 +454,20 @@ fun MainScreen(
 
             when (uiState.library.selectedTab) {
                 LibraryTab.Songs -> {
+                    var selectedDecade by rememberSaveable { mutableStateOf<String?>(null) }
+                    val availableDecades = remember(uiState.scan.scannedFiles) {
+                        uiState.scan.scannedFiles
+                            .map { decadeLabelForYear(it.year) }
+                            .filter { it != "Unknown Decade" }
+                            .distinct()
+                            .sorted()
+                    }
                     SongsTabContent(
                         songsFavoritesOnly = songsFavoritesOnly,
                         onToggleSongsFavoritesOnly = { songsFavoritesOnly = !songsFavoritesOnly },
+                        selectedDecade = selectedDecade,
+                        availableDecades = availableDecades,
+                        onDecadeSelected = { selectedDecade = it },
                         scannedFiles = uiState.scan.scannedFiles,
                         favoriteUris = uiState.favoriteUris,
                         isPlayingPlaylist = uiState.playback.isPlayingPlaylist,
@@ -635,35 +643,6 @@ fun MainScreen(
                         onCategorySelected = onArtistSelected,
                         onClearCategorySelection = onClearCategorySelection,
                         enableAlphaIndex = true,
-                        songs = uiState.library.filteredSongs,
-                        isPlaying = false,
-                        isPlayingPlaylist = uiState.playback.isPlayingPlaylist,
-                        hasNext = uiState.playback.hasNext,
-                        hasPrev = uiState.playback.hasPrev,
-                        onPlay = { onPlaySongs(uiState.library.filteredSongs) },
-                        onShuffle = { onShuffleSongs(uiState.library.filteredSongs) },
-                        onStop = onStop,
-                        onNext = onNext,
-                        onPrev = onPrev,
-                        onFileClick = onFileClick,
-                        onAddToPlaylist = {
-                            pendingAddFiles = listOf(it)
-                            showAddToPlaylistDialog = true
-                        },
-                        favoriteUris = uiState.favoriteUris,
-                        onToggleFavorite = onToggleFavorite,
-                        currentMediaId = uiState.playback.currentMediaId
-                    )
-                }
-                LibraryTab.Decades -> {
-                    CategoryTabContent(
-                        title = "Decades",
-                        categories = uiState.library.decades,
-                        categoryCounts = decadeCounts,
-                        isLoading = uiState.library.isMetadataLoading,
-                        selectedLabel = uiState.library.selectedDecade,
-                        onCategorySelected = onDecadeSelected,
-                        onClearCategorySelection = onClearCategorySelection,
                         songs = uiState.library.filteredSongs,
                         isPlaying = false,
                         isPlayingPlaylist = uiState.playback.isPlayingPlaylist,
@@ -1442,11 +1421,6 @@ private fun buildArtistCounts(files: List<MediaFileInfo>): Map<String, Int> =
 private fun buildGenreCounts(files: List<MediaFileInfo>): Map<String, Int> =
     files.groupingBy { file ->
         bucketGenre(file.genre)
-    }.eachCount()
-
-private fun buildDecadeCounts(files: List<MediaFileInfo>): Map<String, Int> =
-    files.groupingBy { file ->
-        decadeLabelForYear(file.year)
     }.eachCount()
 
 private fun decadeLabelForYear(year: Int?): String {
@@ -2477,6 +2451,9 @@ private fun formatDuration(durationMs: Long): String {
 private fun SongsTabContent(
     songsFavoritesOnly: Boolean,
     onToggleSongsFavoritesOnly: () -> Unit,
+    selectedDecade: String?,
+    availableDecades: List<String>,
+    onDecadeSelected: (String?) -> Unit,
     scannedFiles: List<MediaFileInfo>,
     favoriteUris: Set<String>,
     isPlayingPlaylist: Boolean,
@@ -2492,17 +2469,49 @@ private fun SongsTabContent(
     onToggleFavorite: (MediaFileInfo) -> Unit,
     currentMediaId: String?
 ) {
-    val songsForTab = if (songsFavoritesOnly) {
-        scannedFiles.filter { it.uriString in favoriteUris }
+    val filteredByDecade = if (selectedDecade != null) {
+        scannedFiles.filter { decadeLabelForYear(it.year) == selectedDecade }
     } else {
         scannedFiles
     }
+    val songsForTab = if (songsFavoritesOnly) {
+        filteredByDecade.filter { it.uriString in favoriteUris }
+    } else {
+        filteredByDecade
+    }
+
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         TextButton(onClick = onToggleSongsFavoritesOnly) {
             Text(if (songsFavoritesOnly) "Show all songs" else "Favorites only")
+        }
+
+        var decadeMenuExpanded by remember { mutableStateOf(false) }
+        TextButton(onClick = { decadeMenuExpanded = true }) {
+            Text("Decade: ${selectedDecade ?: "All"}")
+        }
+        DropdownMenu(
+            expanded = decadeMenuExpanded,
+            onDismissRequest = { decadeMenuExpanded = false }
+        ) {
+            DropdownMenuItem(
+                text = { Text("All") },
+                onClick = {
+                    decadeMenuExpanded = false
+                    onDecadeSelected(null)
+                }
+            )
+            availableDecades.forEach { decade ->
+                DropdownMenuItem(
+                    text = { Text(decade) },
+                    onClick = {
+                        decadeMenuExpanded = false
+                        onDecadeSelected(decade)
+                    }
+                )
+            }
         }
     }
     Spacer(modifier = Modifier.height(4.dp))
