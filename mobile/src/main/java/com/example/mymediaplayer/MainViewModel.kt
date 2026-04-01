@@ -64,12 +64,10 @@ data class LibraryState(
     val selectedAlbum: String? = null,
     val selectedGenre: String? = null,
     val selectedArtist: String? = null,
-    val selectedDecade: String? = null,
     val filteredSongs: List<MediaFileInfo> = emptyList(),
     val albums: List<String> = emptyList(),
     val genres: List<String> = emptyList(),
     val artists: List<String> = emptyList(),
-    val decades: List<String> = emptyList(),
     val isMetadataLoading: Boolean = false
 )
 
@@ -103,8 +101,7 @@ enum class LibraryTab(val label: String) {
     Playlists("Playlists"),
     Albums("Albums"),
     Genres("Genres"),
-    Artists("Artists"),
-    Decades("Decades")
+    Artists("Artists")
 }
 
 enum class AlbumSortMode(val label: String) {
@@ -461,12 +458,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 selectedAlbum = if (tab == LibraryTab.Albums) lib.selectedAlbum else null,
                 selectedGenre = if (tab == LibraryTab.Genres) lib.selectedGenre else null,
                 selectedArtist = if (tab == LibraryTab.Artists) lib.selectedArtist else null,
-                selectedDecade = if (tab == LibraryTab.Decades) lib.selectedDecade else null,
                 filteredSongs = if (
                     tab == LibraryTab.Albums ||
                     tab == LibraryTab.Genres ||
-                    tab == LibraryTab.Artists ||
-                    tab == LibraryTab.Decades
+                    tab == LibraryTab.Artists
                 ) {
                     lib.filteredSongs
                 } else {
@@ -477,8 +472,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (
             tab == LibraryTab.Albums ||
             tab == LibraryTab.Genres ||
-            tab == LibraryTab.Artists ||
-            tab == LibraryTab.Decades
+            tab == LibraryTab.Artists
         ) {
             ensureMetadataLoaded()
         }
@@ -514,21 +508,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             library = current.library.copy(
                 selectedAlbum = null,
                 selectedGenre = null,
-                selectedArtist = artist,
-                selectedDecade = null
-            )
-        )
-        applyFilteredSongs()
-    }
-
-    fun selectDecade(decade: String) {
-        val current = _uiState.value
-        _uiState.value = current.copy(
-            library = current.library.copy(
-                selectedAlbum = null,
-                selectedGenre = null,
-                selectedArtist = null,
-                selectedDecade = decade
+                selectedArtist = artist
             )
         )
         applyFilteredSongs()
@@ -557,7 +537,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 selectedAlbum = null,
                 selectedGenre = null,
                 selectedArtist = null,
-                selectedDecade = null,
                 filteredSongs = emptyList()
             )
         )
@@ -1178,7 +1157,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             mediaCacheService.buildAlbumArtistIndexesFromCache()
             val artists = mediaCacheService.artists()
             val genres = mediaCacheService.genres()
-            val decades = mediaCacheService.decades()
             metadataKey = sourceKey
             val cur2 = _uiState.value
             _uiState.value = cur2.copy(
@@ -1186,7 +1164,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     albums = sortedAlbumsForMode(cur2.library.albumSortMode),
                     genres = genres,
                     artists = artists,
-                    decades = decades,
                     isMetadataLoading = false
                 )
             )
@@ -1204,8 +1181,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 mediaCacheService.songsForGenre(lib.selectedGenre)
             lib.selectedArtist != null ->
                 mediaCacheService.songsForArtist(lib.selectedArtist)
-            lib.selectedDecade != null ->
-                mediaCacheService.songsForDecade(lib.selectedDecade)
             else -> emptyList()
         }
         _uiState.value = current.copy(

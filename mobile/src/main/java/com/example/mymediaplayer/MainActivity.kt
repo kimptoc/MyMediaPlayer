@@ -294,7 +294,6 @@ class MainActivity : ComponentActivity() {
                     onAlbumSortModeChanged = { viewModel.setAlbumSortMode(it) },
                     onGenreSelected = { viewModel.selectGenre(it) },
                     onArtistSelected = { viewModel.selectArtist(it) },
-                    onDecadeSelected = { viewModel.selectDecade(it) },
                     onSearchQueryChanged = { viewModel.updateSearchQuery(it) },
                     onClearSearch = { viewModel.clearSearch() },
                     onClearCategorySelection = { viewModel.clearCategorySelection() },
@@ -707,7 +706,6 @@ class MainActivity : ComponentActivity() {
                 lib.selectedGenre != null -> "genre:${android.net.Uri.encode(lib.selectedGenre)}"
                 lib.selectedAlbum != null -> "album:${android.net.Uri.encode(lib.selectedAlbum)}"
                 lib.selectedArtist != null -> "artist:${android.net.Uri.encode(lib.selectedArtist)}"
-                lib.selectedDecade != null -> "decade:${android.net.Uri.encode(lib.selectedDecade)}"
                 else -> "songs"
             }
             controller.transportControls.playFromMediaId(prefix + browseId, null)
@@ -728,7 +726,6 @@ class MainActivity : ComponentActivity() {
             LibraryTab.Albums -> lib.selectedAlbum ?: "Albums"
             LibraryTab.Genres -> lib.selectedGenre ?: "Genres"
             LibraryTab.Artists -> lib.selectedArtist ?: "Artists"
-            LibraryTab.Decades -> lib.selectedDecade ?: "Decades"
             else -> "All Songs"
         }
     }
