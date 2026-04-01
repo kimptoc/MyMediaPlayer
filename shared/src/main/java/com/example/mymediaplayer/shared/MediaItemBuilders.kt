@@ -57,10 +57,13 @@ internal fun buildCategoryListItems(
     iconUri: Uri? = null
 ): MutableList<MediaItem> {
     return categories.map { category ->
-        val label = counts?.get(category)?.let { "$category ($it)" } ?: category
         val builder = MediaDescriptionCompat.Builder()
             .setMediaId(prefix + Uri.encode(category))
-            .setTitle(label)
+            .setTitle(category)
+        val count = counts?.get(category)
+        if (count != null) {
+            builder.setSubtitle("$count song${if (count != 1) "s" else ""}")
+        }
         if (iconUri != null) {
             builder.setIconUri(iconUri)
         }
