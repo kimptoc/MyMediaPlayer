@@ -4,10 +4,21 @@ plugins {
 }
 apply plugin: 'org.jetbrains.kotlin.kapt'
 android {
+    buildFeatures {
+        buildConfig = true
+    }
     namespace 'com.example.mymediaplayer.shared'
     compileSdk 36
 
     defaultConfig {
+        def localProperties = new Properties()
+        def localPropertiesFile = rootProject.file('local.properties')
+        if (localPropertiesFile.exists()) {
+            localProperties.load(new FileInputStream(localPropertiesFile))
+        }
+        def kiloEndpoint = localProperties.getProperty("KILO_ENDPOINT", "https://api.kilo.ai/api/gateway")
+
+        buildConfigField "String", "KILO_ENDPOINT", "\"${kiloEndpoint}\""
         minSdk 28
         targetSdk 36
 

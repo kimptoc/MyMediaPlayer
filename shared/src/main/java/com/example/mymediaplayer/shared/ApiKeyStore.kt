@@ -29,7 +29,6 @@ object ApiKeyStore {
 
     private const val TAG = "ApiKeyStore"
     private const val ENCRYPTED_PREFS_NAME = "mymediaplayer_api_keys"
-    private const val KILO_ENDPOINT = "https://api.kilo.ai/api/gateway"
 
     sealed class ValidationResult {
         data object Success : ValidationResult()
@@ -62,7 +61,7 @@ object ApiKeyStore {
 
     private suspend fun validateKiloKey(apiKey: String): ValidationResult = withContext(Dispatchers.IO) {
         runCatching {
-            val conn = URL("$KILO_ENDPOINT/chat/completions")
+            val conn = URL("${BuildConfig.KILO_ENDPOINT}/chat/completions")
                 .openConnection() as HttpURLConnection
             conn.connectTimeout = 5_000
             conn.readTimeout = 8_000
