@@ -679,7 +679,8 @@ class MediaCacheService {
             return !mime.contains("mpegurl") && !mime.contains("x-mpegurl")
         }
         if (mime == "application/ogg" || mime == "application/x-ogg") return true
-        return SUPPORTED_AUDIO_EXTENSIONS.any { nameLowercase.endsWith(it) }
+
+        return SUPPORTED_AUDIO_EXTENSIONS.contains(fileExtension(nameLowercase))
     }
 
     internal fun isSupportedPlaylistFile(nameLowercase: String, mimeType: String?): Boolean {
