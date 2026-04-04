@@ -2622,6 +2622,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         updateNowPlayingNotification(lastPlaybackState()?.state ?: PlaybackStateCompat.STATE_NONE)
     }
 
+    @Volatile
     private var cachedPlaceholderArt: Bitmap? = null
 
     private fun loadPlaceholderArt(): Bitmap? {
