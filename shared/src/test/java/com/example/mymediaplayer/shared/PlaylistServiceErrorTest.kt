@@ -55,6 +55,27 @@ class PlaylistServiceErrorTest {
     }
 
     @Test
+    fun writePlaylistWithName_returnsNullOnSecurityException() {
+        val baseContext = ApplicationProvider.getApplicationContext<Context>()
+        val info = ProviderInfo().apply { authority = "myauth_valid" }
+        Robolectric.buildContentProvider(ValidInsertProvider::class.java).create(info)
+
+        val treeUri = Uri.parse("content://myauth_valid/tree/doc")
+
+        val shadowResolver = Shadows.shadowOf(baseContext.contentResolver)
+        val targetUri = Uri.parse("content://myauth_valid/document/new_file")
+        shadowResolver.registerOutputStreamSupplier(targetUri) {
+            throw SecurityException("Mocked exception")
+        }
+
+        val service = PlaylistService()
+        val files = listOf(MediaFileInfo("content://test/song1", "Song One", 1L, "Song One"))
+
+        val result = service.writePlaylistWithName(baseContext, treeUri, files, "test_playlist")
+        assertNull(result)
+    }
+
+    @Test
     fun writePlaylistWithName_returnsNullOnIOException() {
         val baseContext = ApplicationProvider.getApplicationContext<Context>()
         val info = ProviderInfo().apply { authority = "myauth_valid" }
@@ -67,6 +88,27 @@ class PlaylistServiceErrorTest {
         val targetUri = Uri.parse("content://myauth_valid/document/new_file")
         shadowResolver.registerOutputStreamSupplier(targetUri) {
             throw IOException("Mocked exception")
+        }
+
+        val service = PlaylistService()
+        val files = listOf(MediaFileInfo("content://test/song1", "Song One", 1L, "Song One"))
+
+        val result = service.writePlaylistWithName(baseContext, treeUri, files, "test_playlist")
+        assertNull(result)
+    }
+
+    @Test
+    fun writePlaylistWithName_returnsNullOnFileNotFoundException() {
+        val baseContext = ApplicationProvider.getApplicationContext<Context>()
+        val info = ProviderInfo().apply { authority = "myauth_valid" }
+        Robolectric.buildContentProvider(ValidInsertProvider::class.java).create(info)
+
+        val treeUri = Uri.parse("content://myauth_valid/tree/doc")
+
+        val shadowResolver = Shadows.shadowOf(baseContext.contentResolver)
+        val targetUri = Uri.parse("content://myauth_valid/document/new_file")
+        shadowResolver.registerOutputStreamSupplier(targetUri) {
+            throw java.io.FileNotFoundException("Mocked missing file exception")
         }
 
         val service = PlaylistService()

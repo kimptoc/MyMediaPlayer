@@ -68,4 +68,28 @@ class PlaylistServiceTest {
         assertNull(result)
     }
 
+    @Test
+    fun writePlaylistWithName_returnsNullOnEmptyFiles() {
+        val baseContext = ApplicationProvider.getApplicationContext<Context>()
+        val treeUri = Uri.parse("content://test/tree")
+        val service = PlaylistService()
+        val files = emptyList<MediaFileInfo>()
+
+        val result = service.writePlaylistWithName(baseContext, treeUri, files, "test_playlist")
+
+        assertNull(result)
+    }
+
+    @Test
+    fun writePlaylistWithName_returnsNullOnBlankName() {
+        val baseContext = ApplicationProvider.getApplicationContext<Context>()
+        val treeUri = Uri.parse("content://test/tree")
+        val service = PlaylistService()
+        val files = listOf(MediaFileInfo("content://test/song1", "Song One", 1L, "Song One"))
+
+        val result = service.writePlaylistWithName(baseContext, treeUri, files, "   ")
+
+        assertNull(result)
+    }
+
 }
