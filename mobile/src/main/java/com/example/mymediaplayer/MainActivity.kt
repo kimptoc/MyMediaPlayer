@@ -1,6 +1,7 @@
 package com.example.mymediaplayer
 
 import android.content.ComponentName
+import android.annotation.SuppressLint
 import android.content.Intent
 import android.media.AudioManager
 import android.net.Uri
@@ -825,6 +826,7 @@ class MainActivity : ComponentActivity() {
         ).show()
     }
 
+    @SuppressLint("MissingPermission")
     private fun addCurrentBluetoothDeviceToAllowlist() {
         if (!hasBluetoothConnectPermission()) {
             requestBluetoothConnectPermission()
