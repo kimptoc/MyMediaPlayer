@@ -17,6 +17,7 @@ import java.io.File
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -303,7 +304,8 @@ internal class AnnouncementPreGenerator(
                     .getString("audioContent")
                 val audioBytes = Base64.decode(audioBase64, Base64.DEFAULT)
 
-                val file = File.createTempFile("announcement_", ".mp3", context.cacheDir)
+                val fileName = "announcement_${UUID.randomUUID()}.mp3"
+                val file = File(context.cacheDir, fileName)
                 file.writeBytes(audioBytes)
                 Log.d(TAG, "Saved pre-generated announcement to ${file.name} (${audioBytes.size} bytes)")
                 file
