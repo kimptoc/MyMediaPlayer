@@ -10,8 +10,6 @@ import android.os.SystemClock
 import androidx.core.content.ContextCompat
 import com.example.mymediaplayer.shared.MyMusicService
 
-import android.annotation.SuppressLint
-
 class BluetoothAutoPlayReceiver : BroadcastReceiver() {
 
     companion object {
@@ -27,7 +25,6 @@ class BluetoothAutoPlayReceiver : BroadcastReceiver() {
         private const val KEY_RESUME_MEDIA_URI = "resume_media_uri"
     }
 
-    @SuppressLint("MissingPermission")
     override fun onReceive(context: Context, intent: Intent?) {
         if (intent?.action != BluetoothDevice.ACTION_ACL_CONNECTED) return
 

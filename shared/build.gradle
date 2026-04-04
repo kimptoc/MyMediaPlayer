@@ -16,7 +16,7 @@ android {
         if (localPropertiesFile.exists()) {
             localProperties.load(new FileInputStream(localPropertiesFile))
         }
-        def kiloEndpoint = localProperties.getProperty("KILO_ENDPOINT", "")
+        def kiloEndpoint = localProperties.getProperty("KILO_ENDPOINT", "https://api.kilo.ai/api/gateway")
 
         buildConfigField "String", "KILO_ENDPOINT", "\"${kiloEndpoint}\""
         minSdk 28
