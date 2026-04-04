@@ -803,17 +803,17 @@ class MediaCacheService {
         decadeIndex[decade]?.toList() ?: emptyList()
 
     fun searchFiles(query: String): List<MediaFileInfo> {
-        val needle = query.trim().lowercase(Locale.US)
+        val needle = query.trim()
         if (needle.isBlank()) return emptyList()
         val snapshot = synchronized(cacheLock) { _cachedFiles.toList() }
         return snapshot.filter { file ->
-            val haystack = listOfNotNull(
-                file.cleanTitle,
-                file.artist,
-                file.album,
-                file.genre
-            ).joinToString(" ").lowercase(Locale.US)
-            haystack.contains(needle)
+            val haystack = buildString {
+                append(file.cleanTitle)
+                file.artist?.let { append(' ').append(it) }
+                file.album?.let { append(' ').append(it) }
+                file.genre?.let { append(' ').append(it) }
+            }
+            haystack.contains(needle, ignoreCase = true)
         }
     }
 
