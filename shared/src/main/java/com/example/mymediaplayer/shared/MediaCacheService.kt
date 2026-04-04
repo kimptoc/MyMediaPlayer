@@ -680,12 +680,7 @@ class MediaCacheService {
         }
         if (mime == "application/ogg" || mime == "application/x-ogg") return true
 
-        val lastDotIndex = nameLowercase.lastIndexOf('.')
-        if (lastDotIndex != -1) {
-            val extension = nameLowercase.substring(lastDotIndex)
-            return SUPPORTED_AUDIO_EXTENSIONS.contains(extension)
-        }
-        return false
+        return SUPPORTED_AUDIO_EXTENSIONS.contains(fileExtension(nameLowercase))
     }
 
     internal fun isSupportedPlaylistFile(nameLowercase: String, mimeType: String?): Boolean {
