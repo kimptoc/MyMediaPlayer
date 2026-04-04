@@ -303,13 +303,10 @@ internal class AnnouncementPreGenerator(
                     .getString("audioContent")
                 val audioBytes = Base64.decode(audioBase64, Base64.DEFAULT)
 
-                val file = File.createTempFile("announcement_", ".mp3", context.cacheDir).apply {
-                    setReadable(false, false)
-                    setWritable(false, false)
-                    setExecutable(false, false)
-                    setReadable(true, true)
-                    setWritable(true, true)
-                }
+                val file = File.createTempFile("announcement_", ".mp3", context.cacheDir)
+                file.setReadable(true, true)
+                file.setWritable(true, true)
+                file.setExecutable(false)
                 file.writeBytes(audioBytes)
                 Log.d(TAG, "Saved pre-generated announcement to ${file.name} (${audioBytes.size} bytes)")
                 file
