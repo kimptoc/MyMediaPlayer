@@ -2622,7 +2622,11 @@ class MyMusicService : MediaBrowserServiceCompat() {
         updateNowPlayingNotification(lastPlaybackState()?.state ?: PlaybackStateCompat.STATE_NONE)
     }
 
+    @Volatile
+    private var cachedPlaceholderArt: Bitmap? = null
+
     private fun loadPlaceholderArt(): Bitmap? {
+        cachedPlaceholderArt?.let { return it }
         val drawable = ContextCompat.getDrawable(this, R.drawable.ic_album_placeholder) ?: return null
         val width = if (drawable.intrinsicWidth > 0) drawable.intrinsicWidth else 512
         val height = if (drawable.intrinsicHeight > 0) drawable.intrinsicHeight else 512
@@ -2630,6 +2634,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         val canvas = Canvas(bitmap)
         drawable.setBounds(0, 0, canvas.width, canvas.height)
         drawable.draw(canvas)
+        cachedPlaceholderArt = bitmap
         return bitmap
     }
 
