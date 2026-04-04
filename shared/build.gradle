@@ -4,10 +4,14 @@ plugins {
 }
 apply plugin: 'org.jetbrains.kotlin.kapt'
 android {
+    buildFeatures {
+        buildConfig = true
+    }
     namespace 'com.example.mymediaplayer.shared'
     compileSdk 36
 
     defaultConfig {
+        buildConfigField "String", "KILO_ENDPOINT", "\"https://api.kilo.ai/api/gateway\""
         minSdk 28
         targetSdk 36
 
