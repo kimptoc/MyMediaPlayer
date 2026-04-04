@@ -806,10 +806,13 @@ class MediaCacheService {
         if (needle.isBlank()) return emptyList()
         val snapshot = synchronized(cacheLock) { _cachedFiles.toList() }
         return snapshot.filter { file ->
-            file.cleanTitle.contains(needle, ignoreCase = true) ||
-            (file.artist?.contains(needle, ignoreCase = true) == true) ||
-            (file.album?.contains(needle, ignoreCase = true) == true) ||
-            (file.genre?.contains(needle, ignoreCase = true) == true)
+            val haystack = buildString {
+                append(file.cleanTitle)
+                file.artist?.let { append(' ').append(it) }
+                file.album?.let { append(' ').append(it) }
+                file.genre?.let { append(' ').append(it) }
+            }
+            haystack.contains(needle, ignoreCase = true)
         }
     }
 
