@@ -492,6 +492,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
                             )
                         )
                     }
+                    serviceScope.launch {
+                        mediaCacheService.persistPlaylists(this@MyMusicService)
+                    }
                     notifyChildrenChanged(ROOT_ID)
                     notifyChildrenChanged(PLAYLISTS_ID)
                 }
