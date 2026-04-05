@@ -205,6 +205,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
     internal val mediaCacheService = MediaCacheService()
     private val playlistService = PlaylistService()
     private val playlistShortIds = mutableMapOf<String, String>() // shortId -> uriString
+    private val uriToShortId = mutableMapOf<String, String>() // uriString -> shortId
     private var currentFileInfo: MediaFileInfo? = null
     private var currentMediaId: String? = null
     private lateinit var audioManager: AudioManager
@@ -1075,6 +1076,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
     private fun rebuildPlaylistShortIds() {
         playlistShortIds.clear()
+        uriToShortId.clear()
         for (playlist in mediaCacheService.discoveredPlaylists) {
             var shortId = playlistShortId(playlist.uriString)
             var attempt = 0
@@ -1084,14 +1086,14 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 shortId = (playlist.uriString.hashCode().toUInt() + attempt.toUInt()).toString(36)
             }
             playlistShortIds[shortId] = playlist.uriString
+            uriToShortId[playlist.uriString] = shortId
         }
     }
 
     @VisibleForTesting
     internal fun playlistEntriesForBrowse(discoveredPlaylists: List<PlaylistInfo>): List<PlaylistBrowseEntry> {
         val discoveredEntries = discoveredPlaylists.map { playlist ->
-            val shortId = playlistShortIds.entries
-                .firstOrNull { it.value == playlist.uriString }?.key
+            val shortId = uriToShortId[playlist.uriString]
                 ?: playlistShortId(playlist.uriString)
             PlaylistBrowseEntry(
                 mediaId = PLAYLIST_PREFIX + shortId,
@@ -2028,9 +2030,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
     }
 
     private suspend fun handlePlayPlaylist(resolvedMediaId: String) {
-        val shortIdOrUri = resolvedMediaId.removePrefix(PLAYLIST_PREFIX)
-        val playlistUri = playlistShortIds[shortIdOrUri]
-            ?: Uri.decode(shortIdOrUri) // fallback for legacy full-URI format
+        val shortId = resolvedMediaId.removePrefix(PLAYLIST_PREFIX)
+        val playlistUri = playlistShortIds[shortId] ?: return
         val playlistInfo = mediaCacheService.discoveredPlaylists.firstOrNull {
             it.uriString == playlistUri
         }
