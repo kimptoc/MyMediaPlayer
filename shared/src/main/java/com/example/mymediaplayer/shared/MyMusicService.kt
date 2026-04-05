@@ -1083,7 +1083,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
             while (playlistShortIds.containsKey(shortId) &&
                    playlistShortIds[shortId] != playlist.uriString) {
                 attempt++
-                shortId = (playlist.uriString.hashCode().toUInt() + attempt.toUInt()).toString(36)
+                shortId = playlistShortId(playlist.uriString + attempt)
             }
             playlistShortIds[shortId] = playlist.uriString
             uriToShortId[playlist.uriString] = shortId

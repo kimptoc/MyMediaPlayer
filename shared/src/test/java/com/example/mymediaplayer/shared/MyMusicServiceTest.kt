@@ -379,6 +379,9 @@ class MyMusicServiceTest {
         val id2 = playlistShortId(uri2)
         assertTrue("Short ID '$id1' should be under 10 chars", id1.length < 10)
         assertTrue("Short ID '$id2' should be under 10 chars", id2.length < 10)
+        // Determinism: same URI always produces same short ID
+        assertEquals("Short ID must be deterministic", id1, playlistShortId(uri1))
+        // Distinctness: different URIs must not collide
         assertNotEquals("Different URIs should produce different short IDs", id1, id2)
     }
 }
