@@ -1,3 +1,5 @@
+![Build & Test](https://github.com/kimptoc/MyMediaPlayer/actions/workflows/build.yml/badge.svg)
+
 Basic media player for use with android auto
 
 DEV NOTES
