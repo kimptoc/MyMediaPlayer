@@ -66,7 +66,6 @@ class MyMusicService : MediaBrowserServiceCompat() {
         private const val SEARCH_ID = "search"
         private const val PLAYLIST_PREFIX = "playlist:"
         private const val SMART_PLAYLIST_PREFIX = "smart_playlist:"
-        private const val PLAYLIST_URI_PREFIX = "playlist_uri:"
         private const val PLAYLIST_SHORT_PREFIX = "pl:"
         private const val ALBUM_PREFIX = "album:"
         private const val GENRE_PREFIX = "genre:"
@@ -206,6 +205,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
     internal val mediaCacheService = MediaCacheService()
     private val playlistService = PlaylistService()
     private val playlistShortIds = mutableMapOf<String, String>() // shortId -> uriString
+    private val uriToShortId = mutableMapOf<String, String>() // uriString -> shortId
     private var currentFileInfo: MediaFileInfo? = null
     private var currentMediaId: String? = null
     private lateinit var audioManager: AudioManager
@@ -760,12 +760,12 @@ class MyMusicService : MediaBrowserServiceCompat() {
             )
         }
         if (parentId.startsWith(PLAYLIST_PREFIX)) {
-            val playlistUri = Uri.decode(parentId.removePrefix(PLAYLIST_PREFIX))
+            val shortId = parentId.removePrefix(PLAYLIST_PREFIX)
+            val playlistUri = playlistShortIds[shortId] ?: return mutableListOf()
             val songs = enrichFromCache(
                 playlistService.readPlaylist(this, Uri.parse(playlistUri))
             )
             val songIconUri = resourceIconUri(R.drawable.ic_album_placeholder)
-            val shortId = playlistShortIds.entries.firstOrNull { it.value == playlistUri }?.key ?: ""
             return buildSongListItems(songs, PLAYLIST_SHORT_PREFIX + shortId, songIconUri)
         }
         if (parentId.startsWith(ALBUM_PREFIX)) {
@@ -1076,23 +1076,27 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
     private fun rebuildPlaylistShortIds() {
         playlistShortIds.clear()
+        uriToShortId.clear()
         for (playlist in mediaCacheService.discoveredPlaylists) {
-            var shortId = playlist.uriString.hashCode().toUInt().toString(36)
+            var shortId = playlistShortId(playlist.uriString)
             var attempt = 0
             while (playlistShortIds.containsKey(shortId) &&
                    playlistShortIds[shortId] != playlist.uriString) {
                 attempt++
-                shortId = (playlist.uriString.hashCode().toUInt() + attempt.toUInt()).toString(36)
+                shortId = playlistShortId(playlist.uriString + attempt)
             }
             playlistShortIds[shortId] = playlist.uriString
+            uriToShortId[playlist.uriString] = shortId
         }
     }
 
     @VisibleForTesting
     internal fun playlistEntriesForBrowse(discoveredPlaylists: List<PlaylistInfo>): List<PlaylistBrowseEntry> {
         val discoveredEntries = discoveredPlaylists.map { playlist ->
+            val shortId = uriToShortId[playlist.uriString]
+                ?: playlistShortId(playlist.uriString)
             PlaylistBrowseEntry(
-                mediaId = PLAYLIST_PREFIX + Uri.encode(playlist.uriString),
+                mediaId = PLAYLIST_PREFIX + shortId,
                 title = playlist.displayName.removeSuffix(".m3u")
             )
         }
@@ -1933,16 +1937,6 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     )
                 )
             }
-            listKey.startsWith(PLAYLIST_URI_PREFIX) -> {
-                val playlistUri =
-                    Uri.decode(listKey.removePrefix(PLAYLIST_URI_PREFIX))
-                enrichFromCache(
-                    playlistService.readPlaylist(
-                        this,
-                        Uri.parse(playlistUri)
-                    )
-                )
-            }
             listKey.startsWith(SMART_PLAYLIST_PREFIX) -> {
                 val smartId = Uri.decode(listKey.removePrefix(SMART_PLAYLIST_PREFIX))
                 resolveSmartPlaylistTracksById(smartId) ?: emptyList()
@@ -2006,9 +2000,6 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     .firstOrNull { it.uriString == uri }
                     ?.displayName ?: "Playlist"
             }
-            listKey.startsWith(PLAYLIST_URI_PREFIX) -> {
-                Uri.decode(listKey.removePrefix(PLAYLIST_URI_PREFIX))
-            }
             listKey.startsWith(SMART_PLAYLIST_PREFIX) -> {
                 val smartId = Uri.decode(listKey.removePrefix(SMART_PLAYLIST_PREFIX))
                 smartPlaylistTitleFromId(smartId)
@@ -2039,7 +2030,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
     }
 
     private suspend fun handlePlayPlaylist(resolvedMediaId: String) {
-        val playlistUri = Uri.decode(resolvedMediaId.removePrefix(PLAYLIST_PREFIX))
+        val shortId = resolvedMediaId.removePrefix(PLAYLIST_PREFIX)
+        val playlistUri = playlistShortIds[shortId] ?: return
         val playlistInfo = mediaCacheService.discoveredPlaylists.firstOrNull {
             it.uriString == playlistUri
         }

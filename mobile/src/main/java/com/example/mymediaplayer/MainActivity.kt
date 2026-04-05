@@ -33,6 +33,7 @@ import com.example.mymediaplayer.shared.ApiKeyStore
 import com.example.mymediaplayer.shared.MediaCacheService
 import com.example.mymediaplayer.shared.MyMusicService
 import com.example.mymediaplayer.shared.PlaylistInfo
+import com.example.mymediaplayer.shared.playlistShortId
 import kotlinx.coroutines.launch
 import androidx.core.content.ContextCompat
 import androidx.core.app.NotificationManagerCompat
@@ -71,7 +72,7 @@ class MainActivity : ComponentActivity() {
         private const val ACTION_PLAY_UI_LIST = "PLAY_UI_LIST"
         private const val ACTION_SHUFFLE_PREFIX = "action:shuffle:"
         private const val SMART_PLAYLIST_PREFIX = "smart_playlist:"
-        private const val PLAYLIST_URI_PREFIX = "playlist_uri:"
+        private const val PLAYLIST_SHORT_PREFIX = "pl:"
         private const val ACTION_SET_TRACK_VOICE_INTRO = "SET_TRACK_VOICE_INTRO"
         private const val ACTION_SET_TRACK_VOICE_OUTRO = "SET_TRACK_VOICE_OUTRO"
         private const val ACTION_SET_DEBUG_CLOUD = "SET_DEBUG_CLOUD"
@@ -961,7 +962,7 @@ class MainActivity : ComponentActivity() {
             val smartId = uriString.removePrefix(MainViewModel.SMART_PREFIX)
             SMART_PLAYLIST_PREFIX + Uri.encode(smartId)
         } else {
-            "playlist:$uriString"
+            "playlist:" + playlistShortId(uriString)
         }
     }
 
@@ -970,7 +971,7 @@ class MainActivity : ComponentActivity() {
             val smartId = uriString.removePrefix(MainViewModel.SMART_PREFIX)
             SMART_PLAYLIST_PREFIX + Uri.encode(smartId)
         } else {
-            PLAYLIST_URI_PREFIX + Uri.encode(uriString)
+            PLAYLIST_SHORT_PREFIX + playlistShortId(uriString)
         }
         return ACTION_SHUFFLE_PREFIX + listKey
     }

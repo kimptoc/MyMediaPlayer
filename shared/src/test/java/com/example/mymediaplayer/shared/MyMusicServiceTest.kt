@@ -6,6 +6,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -371,10 +372,16 @@ class MyMusicServiceTest {
     }
 
     @Test
-    fun playlistShortId_isDeterministicAndShort() {
-        val uri = "content://com.android.externalstorage.documents/tree/primary%3AMusic/document/primary%3AMusic%2Fplaylist.m3u"
-        val shortId = uri.hashCode().toUInt().toString(36)
-        assertTrue("Short ID '$shortId' should be under 10 chars", shortId.length < 10)
-        assertEquals(shortId, uri.hashCode().toUInt().toString(36))
+    fun playlistShortId_isShortAndDistinct() {
+        val uri1 = "content://com.android.externalstorage.documents/tree/primary%3AMusic/document/primary%3AMusic%2Fplaylist.m3u"
+        val uri2 = "content://com.android.externalstorage.documents/tree/primary%3AMusic/document/primary%3AMusic%2Fother.m3u"
+        val id1 = playlistShortId(uri1)
+        val id2 = playlistShortId(uri2)
+        assertTrue("Short ID '$id1' should be under 10 chars", id1.length < 10)
+        assertTrue("Short ID '$id2' should be under 10 chars", id2.length < 10)
+        // Determinism: same URI always produces same short ID
+        assertEquals("Short ID must be deterministic", id1, playlistShortId(uri1))
+        // Distinctness: different URIs must not collide
+        assertNotEquals("Different URIs should produce different short IDs", id1, id2)
     }
 }
