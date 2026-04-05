@@ -298,100 +298,100 @@ class MainActivity : ComponentActivity() {
                         onBack = { showSettings.value = false }
                     )
                 } else {
-                MainScreen(
-                    uiState = uiState.value,
-                    onSelectFolderWithLimit = { limit, deepScan ->
-                        pendingScanLimit = limit
-                        pendingDeepScan = deepScan
-                        openDocumentTree.launch(null)
-                    },
-                    onChoosePlaylistSaveFolder = {
-                        openPlaylistDocumentTree.launch(null)
-                    },
-                    onScanWholeDriveWithLimit = ::handleScanWholeDriveWithLimit,
-                    onFileClick = { file -> playFile(file, uiState.value.scan.scannedFiles) },
-                    onPlayPause = { togglePlayPause(uiState.value.playback.isPlaying) },
-                    onStop = { stopPlayback() },
-                    onNext = { skipToNext() },
-                    onPrev = { skipToPrevious() },
-                    onToggleRepeat = { toggleRepeatMode(uiState.value.playback.repeatMode) },
-                    onQueueItemSelected = { queueId -> skipToQueueItem(queueId) },
-                    onSeekTo = { positionMs -> seekTo(positionMs) },
-                    onCreatePlaylist = { count -> viewModel.createRandomPlaylist(count) },
-                    onPlaylistMessageDismissed = { viewModel.clearPlaylistMessage() },
-                    onFolderMessageDismissed = { viewModel.clearFolderMessage() },
-                    onScanMessageDismissed = { viewModel.clearScanMessage() },
-                    onTabSelected = { viewModel.selectTab(it) },
-                    onAlbumSelected = { viewModel.selectAlbum(it) },
-                    onAlbumSortModeChanged = { viewModel.setAlbumSortMode(it) },
-                    onGenreSelected = { viewModel.selectGenre(it) },
-                    onArtistSelected = { viewModel.selectArtist(it) },
-                    onSearchQueryChanged = { viewModel.updateSearchQuery(it) },
-                    onClearSearch = { viewModel.clearSearch() },
-                    onClearCategorySelection = { viewModel.clearCategorySelection() },
-                    onPlaylistSelected = { viewModel.selectPlaylist(it) },
-                    onClearPlaylistSelection = { viewModel.clearSelectedPlaylist() },
-                    onDeletePlaylist = { playlist -> viewModel.deletePlaylist(playlist) },
-                    onRenamePlaylist = { playlist, newName ->
-                        viewModel.renamePlaylist(playlist, newName)
-                    },
-                    onSavePlaylistEdits = { playlist, songs ->
-                        viewModel.savePlaylistEdits(playlist, songs)
-                    },
-                    onPlaySongs = { songs ->
-                        playUiList(
-                            songs = songs,
-                            shuffle = false,
-                            queueTitle = queueTitleForCurrentUiList(uiState.value)
-                        )
-                    },
-                    onShuffleSongs = { songs ->
-                        playUiList(
-                            songs = songs,
-                            shuffle = true,
-                            queueTitle = queueTitleForCurrentUiList(uiState.value)
-                        )
-                    },
-                    onPlaySearchResults = { songs ->
-                        playSearchResults(songs, shuffle = false)
-                    },
-                    onShuffleSearchResults = { songs ->
-                        playSearchResults(songs, shuffle = true)
-                    },
-                    onAddToExistingPlaylist = { playlist, files ->
-                        viewModel.addManyToExistingPlaylist(playlist, files)
-                    },
-                    onCreatePlaylistFromSongs = { name, files ->
-                        viewModel.createPlaylistFromSongs(name, files)
-                    },
-                    onToggleFavorite = { file ->
-                        viewModel.toggleFavorite(file.uriString)
-                    },
-                    nowPlayingArt = nowPlayingArt.value,
-                    showPlaylistSaveFolderPrompt = showPlaylistSaveFolderPrompt.value,
-                    onDismissPlaylistSaveFolderPrompt = {
-                        showPlaylistSaveFolderPrompt.value = false
-                    },
-                    onSetPlaylistSaveFolderNow = {
-                        showPlaylistSaveFolderPrompt.value = false
-                        openPlaylistDocumentTree.launch(null)
-                    },
-                    onOpenSettings = { showSettings.value = true },
-                    onPlayPlaylist = { playlist ->
-                        sendFilesToServiceIfNeeded(uiState.value.scan.scannedFiles)
-                        sendPlaylistsToServiceIfNeeded(uiState.value.scan.discoveredPlaylists)
-                        val mediaId = getPlaylistMediaId(playlist.uriString)
-                        mediaController?.transportControls?.playFromMediaId(mediaId, null)
-                    },
-                    onShufflePlaylistSongs = { playlist, songs ->
-                        if (songs.isNotEmpty()) {
+                    MainScreen(
+                        uiState = uiState.value,
+                        onSelectFolderWithLimit = { limit, deepScan ->
+                            pendingScanLimit = limit
+                            pendingDeepScan = deepScan
+                            openDocumentTree.launch(null)
+                        },
+                        onChoosePlaylistSaveFolder = {
+                            openPlaylistDocumentTree.launch(null)
+                        },
+                        onScanWholeDriveWithLimit = ::handleScanWholeDriveWithLimit,
+                        onFileClick = { file -> playFile(file, uiState.value.scan.scannedFiles) },
+                        onPlayPause = { togglePlayPause(uiState.value.playback.isPlaying) },
+                        onStop = { stopPlayback() },
+                        onNext = { skipToNext() },
+                        onPrev = { skipToPrevious() },
+                        onToggleRepeat = { toggleRepeatMode(uiState.value.playback.repeatMode) },
+                        onQueueItemSelected = { queueId -> skipToQueueItem(queueId) },
+                        onSeekTo = { positionMs -> seekTo(positionMs) },
+                        onCreatePlaylist = { count -> viewModel.createRandomPlaylist(count) },
+                        onPlaylistMessageDismissed = { viewModel.clearPlaylistMessage() },
+                        onFolderMessageDismissed = { viewModel.clearFolderMessage() },
+                        onScanMessageDismissed = { viewModel.clearScanMessage() },
+                        onTabSelected = { viewModel.selectTab(it) },
+                        onAlbumSelected = { viewModel.selectAlbum(it) },
+                        onAlbumSortModeChanged = { viewModel.setAlbumSortMode(it) },
+                        onGenreSelected = { viewModel.selectGenre(it) },
+                        onArtistSelected = { viewModel.selectArtist(it) },
+                        onSearchQueryChanged = { viewModel.updateSearchQuery(it) },
+                        onClearSearch = { viewModel.clearSearch() },
+                        onClearCategorySelection = { viewModel.clearCategorySelection() },
+                        onPlaylistSelected = { viewModel.selectPlaylist(it) },
+                        onClearPlaylistSelection = { viewModel.clearSelectedPlaylist() },
+                        onDeletePlaylist = { playlist -> viewModel.deletePlaylist(playlist) },
+                        onRenamePlaylist = { playlist, newName ->
+                            viewModel.renamePlaylist(playlist, newName)
+                        },
+                        onSavePlaylistEdits = { playlist, songs ->
+                            viewModel.savePlaylistEdits(playlist, songs)
+                        },
+                        onPlaySongs = { songs ->
+                            playUiList(
+                                songs = songs,
+                                shuffle = false,
+                                queueTitle = queueTitleForCurrentUiList(uiState.value)
+                            )
+                        },
+                        onShuffleSongs = { songs ->
+                            playUiList(
+                                songs = songs,
+                                shuffle = true,
+                                queueTitle = queueTitleForCurrentUiList(uiState.value)
+                            )
+                        },
+                        onPlaySearchResults = { songs ->
+                            playSearchResults(songs, shuffle = false)
+                        },
+                        onShuffleSearchResults = { songs ->
+                            playSearchResults(songs, shuffle = true)
+                        },
+                        onAddToExistingPlaylist = { playlist, files ->
+                            viewModel.addManyToExistingPlaylist(playlist, files)
+                        },
+                        onCreatePlaylistFromSongs = { name, files ->
+                            viewModel.createPlaylistFromSongs(name, files)
+                        },
+                        onToggleFavorite = { file ->
+                            viewModel.toggleFavorite(file.uriString)
+                        },
+                        nowPlayingArt = nowPlayingArt.value,
+                        showPlaylistSaveFolderPrompt = showPlaylistSaveFolderPrompt.value,
+                        onDismissPlaylistSaveFolderPrompt = {
+                            showPlaylistSaveFolderPrompt.value = false
+                        },
+                        onSetPlaylistSaveFolderNow = {
+                            showPlaylistSaveFolderPrompt.value = false
+                            openPlaylistDocumentTree.launch(null)
+                        },
+                        onOpenSettings = { showSettings.value = true },
+                        onPlayPlaylist = { playlist ->
                             sendFilesToServiceIfNeeded(uiState.value.scan.scannedFiles)
                             sendPlaylistsToServiceIfNeeded(uiState.value.scan.discoveredPlaylists)
-                            val mediaId = getPlaylistShuffleMediaId(playlist.uriString)
+                            val mediaId = getPlaylistMediaId(playlist.uriString)
                             mediaController?.transportControls?.playFromMediaId(mediaId, null)
+                        },
+                        onShufflePlaylistSongs = { playlist, songs ->
+                            if (songs.isNotEmpty()) {
+                                sendFilesToServiceIfNeeded(uiState.value.scan.scannedFiles)
+                                sendPlaylistsToServiceIfNeeded(uiState.value.scan.discoveredPlaylists)
+                                val mediaId = getPlaylistShuffleMediaId(playlist.uriString)
+                                mediaController?.transportControls?.playFromMediaId(mediaId, null)
+                            }
                         }
-                    }
-                )
+                    )
                 }
             }
         }
