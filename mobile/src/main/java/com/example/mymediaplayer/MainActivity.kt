@@ -181,6 +181,20 @@ class MainActivity : ComponentActivity() {
             sendTrackVoiceIntroSettingToService()
             sendTrackVoiceOutroSettingToService()
             dispatchPendingVoiceSearchIfNeeded()
+
+            // Clear dedup state and re-send data to the (possibly recreated)
+            // service instance. Clearing alone isn't enough because StateFlow
+            // won't re-emit if the value hasn't changed.
+            lastSentUris = null
+            lastSentLargeLibraryCount = null
+            lastSentPlaylistUris = null
+            val scanState = viewModel.uiState.value.scan
+            if (scanState.scannedFiles.isNotEmpty()) {
+                sendFilesToServiceIfNeeded(scanState.scannedFiles)
+            }
+            if (scanState.discoveredPlaylists.isNotEmpty()) {
+                sendPlaylistsToServiceIfNeeded(scanState.discoveredPlaylists)
+            }
         }
     }
 

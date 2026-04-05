@@ -458,6 +458,15 @@ class MediaCacheService {
         return PersistedCache(files, playlists, state.scannedAt)
     }
 
+    fun persistPlaylists(context: Context) {
+        val db = MediaCacheDatabase.getInstance(context)
+        val dao = db.cacheDao()
+        val playlists = synchronized(cacheLock) { _discoveredPlaylists.toList() }.map {
+            PlaylistEntity(uriString = it.uriString, displayName = it.displayName)
+        }
+        dao.replacePlaylists(playlists)
+    }
+
     fun persistCache(context: Context, treeUri: Uri, maxFiles: Int) {
         val db = MediaCacheDatabase.getInstance(context)
         val dao = db.cacheDao()
