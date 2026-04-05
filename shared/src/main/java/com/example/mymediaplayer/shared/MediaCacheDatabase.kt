@@ -84,6 +84,12 @@ interface MediaCacheDao {
         if (playlists.isNotEmpty()) insertPlaylists(playlists)
         upsertScanState(state)
     }
+
+    @Transaction
+    fun replacePlaylists(playlists: List<PlaylistEntity>) {
+        clearPlaylists()
+        if (playlists.isNotEmpty()) insertPlaylists(playlists)
+    }
 }
 
 @Database(
