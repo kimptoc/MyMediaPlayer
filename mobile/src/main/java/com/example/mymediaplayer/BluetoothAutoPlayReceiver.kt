@@ -48,11 +48,14 @@ class BluetoothAutoPlayReceiver : BroadcastReceiver() {
             return
         }
 
+        @Suppress("MissingPermission")
         val address = runCatching { device.address }.getOrNull() ?: run {
             record(prefs, "no_address")
             return
         }
         val allowlist = trustedAddresses(prefs)
+
+        @Suppress("MissingPermission")
         val name = runCatching { device.name }.getOrNull()
         if (address !in allowlist) {
             record(prefs, "untrusted_device", address, name)
