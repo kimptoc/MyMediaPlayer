@@ -86,11 +86,11 @@ open class PlaylistService {
         )
     }
 
-    fun listPlaylistsInTree(context: Context, treeUri: Uri): List<PlaylistInfo> {
+    suspend fun listPlaylistsInTree(context: Context, treeUri: Uri): List<PlaylistInfo> {
         val root = DocumentFile.fromTreeUri(context, treeUri) ?: return emptyList()
         val out = java.util.Collections.synchronizedList(mutableListOf<PlaylistInfo>())
 
-        runBlocking {
+        kotlinx.coroutines.coroutineScope {
             suspend fun traverse(node: DocumentFile) {
                 val children = runCatching { node.listFiles().toList() }.getOrNull() ?: return
 
