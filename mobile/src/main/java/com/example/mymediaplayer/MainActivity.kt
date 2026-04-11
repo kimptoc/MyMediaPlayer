@@ -848,10 +848,15 @@ class MainActivity : ComponentActivity() {
         }
         val manager = getSystemService(BLUETOOTH_SERVICE) as? BluetoothManager
         val connected = mutableListOf<BluetoothDevice>()
-        connected += manager?.getConnectedDevices(BluetoothProfile.A2DP).orEmpty()
-        connected += manager?.getConnectedDevices(BluetoothProfile.HEADSET).orEmpty()
+        @android.annotation.SuppressLint("MissingPermission")
+        val a2dpDevices = manager?.getConnectedDevices(BluetoothProfile.A2DP).orEmpty()
+        connected += a2dpDevices
+        @android.annotation.SuppressLint("MissingPermission")
+        val headsetDevices = manager?.getConnectedDevices(BluetoothProfile.HEADSET).orEmpty()
+        connected += headsetDevices
         val additions = connected.mapNotNull { device ->
             val address = runCatching { device.address }.getOrNull() ?: return@mapNotNull null
+            @android.annotation.SuppressLint("MissingPermission")
             val name = runCatching { device.name }.getOrNull()
             address to name
         }.toMap()
