@@ -209,7 +209,7 @@ internal class AnnouncementPreGenerator(
 
         val isAnon = apiKey.isNullOrBlank()
         val authHeader = if (isAnon) "Bearer anonymous" else "Bearer $apiKey"
-        val model = if (isAnon) "kilo/auto-free" else "anthropic/claude-sonnet-4-6"
+        val model = if (isAnon) "kilo/auto-free" else "kilo/auto"
 
         try {
             val conn = URL("$KILO_ENDPOINT/chat/completions")
