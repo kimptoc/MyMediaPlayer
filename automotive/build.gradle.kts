@@ -1,17 +1,18 @@
 plugins {
-    alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
 }
 
 android {
-    namespace = "com.example.mymediaplayer"
-    compileSdk {
-        version = release(36)
+    lint {
+        disable.add("NotificationPermission")
     }
+    namespace = "com.example.mymediaplayer.automotive"
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.example.mymediaplayer"
-        minSdk = 28
+        minSdk = 29
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
@@ -35,13 +36,17 @@ android {
     kotlinOptions {
         jvmTarget = "11"
     }
+    lint {
+        disable.add("NotificationPermission")
+    }
 }
 
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
-    implementation(project(":shared"))
+    implementation(libs.material)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
+    implementation(project(":shared"))
 }
