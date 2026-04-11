@@ -2780,6 +2780,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         )
     }
 
+    @android.annotation.SuppressLint("MissingPermission")
     private fun updateNowPlayingNotification(state: Int) {
         val notification = buildNowPlayingNotification(state)
         runCatching {
@@ -2789,7 +2790,11 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 }
                 PlaybackStateCompat.STATE_PAUSED -> {
                     stopForeground(STOP_FOREGROUND_DETACH)
-                    notificationManager.notify(NOW_PLAYING_NOTIFICATION_ID, notification)
+                    try {
+                        notificationManager.notify(NOW_PLAYING_NOTIFICATION_ID, notification)
+                    } catch (e: SecurityException) {
+                        Log.w("MyMusicService", "Missing POST_NOTIFICATIONS permission", e)
+                    }
                 }
                 else -> {
                     stopForeground(STOP_FOREGROUND_REMOVE)
