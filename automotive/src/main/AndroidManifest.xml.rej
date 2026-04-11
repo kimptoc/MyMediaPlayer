@@ -1,0 +1,10 @@
+--- AndroidManifest.xml
++++ AndroidManifest.xml
+@@ -3,6 +3,7 @@
+
+     <uses-feature
+         android:name="android.hardware.type.automotive"
+         android:required="true" />
++    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+     <application
