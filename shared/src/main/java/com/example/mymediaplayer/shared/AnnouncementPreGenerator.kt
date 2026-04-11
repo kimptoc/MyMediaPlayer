@@ -300,7 +300,7 @@ internal class AnnouncementPreGenerator(
                     return@runCatching null
                 }
 
-                val audioBase64 = JSONObject(conn.inputStream.bufferedReader().readText())
+                val audioBase64 = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
                     .getString("audioContent")
                 val audioBytes = Base64.decode(audioBase64, Base64.DEFAULT)
 
