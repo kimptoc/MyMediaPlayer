@@ -25,6 +25,7 @@ class BluetoothAutoPlayReceiver : BroadcastReceiver() {
         private const val KEY_RESUME_MEDIA_URI = "resume_media_uri"
     }
 
+    @android.annotation.SuppressLint("MissingPermission")
     override fun onReceive(context: Context, intent: Intent?) {
         if (intent?.action != BluetoothDevice.ACTION_ACL_CONNECTED) return
 
