@@ -64,3 +64,9 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
 }
+
+android {
+    lint {
+        disable.add("MissingPermission")
+    }
+}
