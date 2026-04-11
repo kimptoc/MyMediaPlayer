@@ -14,6 +14,7 @@ import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.graphics.Bitmap
 import android.widget.Toast
+import android.annotation.SuppressLint
 import java.util.Locale
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -848,10 +849,13 @@ class MainActivity : ComponentActivity() {
         }
         val manager = getSystemService(BLUETOOTH_SERVICE) as? BluetoothManager
         val connected = mutableListOf<BluetoothDevice>()
+        @SuppressLint("MissingPermission")
         connected += manager?.getConnectedDevices(BluetoothProfile.A2DP).orEmpty()
+        @SuppressLint("MissingPermission")
         connected += manager?.getConnectedDevices(BluetoothProfile.HEADSET).orEmpty()
         val additions = connected.mapNotNull { device ->
             val address = runCatching { device.address }.getOrNull() ?: return@mapNotNull null
+            @SuppressLint("MissingPermission")
             val name = runCatching { device.name }.getOrNull()
             address to name
         }.toMap()
