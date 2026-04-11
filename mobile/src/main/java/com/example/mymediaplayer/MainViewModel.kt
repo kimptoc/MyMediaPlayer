@@ -700,6 +700,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private data class RenameResult(
+        val playlist: PlaylistInfo?,
+        val usedFallback: Boolean,
+        val oldDeleteFailed: Boolean
+    )
+
     fun renamePlaylist(playlist: PlaylistInfo, newName: String) {
         val requestedName = newName.trim()
         if (requestedName.isEmpty()) {
@@ -710,6 +716,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         val current = _uiState.value
+
+        val renameResult = executeRename(playlist, requestedName)
+        val renamed = renameResult.playlist
+
+        if (renamed == null) {
+            _uiState.value = current.copy(
+                playlist = current.playlist.copy(playlistMessage = "Failed to rename playlist")
+            )
+            return
+        }
+
+        updateStateAfterRename(playlist, renamed, renameResult.usedFallback, renameResult.oldDeleteFailed)
+    }
+
+    private fun executeRename(playlist: PlaylistInfo, requestedName: String): RenameResult {
         val renamedDirect = playlistService.renamePlaylist(
             getApplication(),
             Uri.parse(playlist.uriString),
@@ -745,13 +766,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 recreated
             }
         }
-        if (renamed == null) {
-            _uiState.value = current.copy(
-                playlist = current.playlist.copy(playlistMessage = "Failed to rename playlist")
-            )
-            return
-        }
+        return RenameResult(renamed, usedFallback, oldDeleteFailed)
+    }
 
+    private fun updateStateAfterRename(
+        playlist: PlaylistInfo,
+        renamed: PlaylistInfo,
+        usedFallback: Boolean,
+        oldDeleteFailed: Boolean
+    ) {
         val latest = _uiState.value
         var replaced = false
         val updatedPlaylists = latest.scan.discoveredPlaylists.map { existing ->
