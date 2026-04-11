@@ -1078,13 +1078,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         playlistShortIds.clear()
         uriToShortId.clear()
         for (playlist in mediaCacheService.discoveredPlaylists) {
-            var shortId = playlistShortId(playlist.uriString)
-            var attempt = 0
-            while (playlistShortIds.containsKey(shortId) &&
-                   playlistShortIds[shortId] != playlist.uriString) {
-                attempt++
-                shortId = playlistShortId(playlist.uriString + attempt)
-            }
+            val shortId = playlistShortId(playlist.uriString)
             playlistShortIds[shortId] = playlist.uriString
             uriToShortId[playlist.uriString] = shortId
         }

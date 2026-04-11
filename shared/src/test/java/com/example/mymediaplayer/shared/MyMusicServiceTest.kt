@@ -377,8 +377,8 @@ class MyMusicServiceTest {
         val uri2 = "content://com.android.externalstorage.documents/tree/primary%3AMusic/document/primary%3AMusic%2Fother.m3u"
         val id1 = playlistShortId(uri1)
         val id2 = playlistShortId(uri2)
-        assertTrue("Short ID '$id1' should be under 10 chars", id1.length < 10)
-        assertTrue("Short ID '$id2' should be under 10 chars", id2.length < 10)
+        assertTrue("Short ID '$id1' should be exactly 16 chars", id1.length == 16)
+        assertTrue("Short ID '$id2' should be exactly 16 chars", id2.length == 16)
         // Determinism: same URI always produces same short ID
         assertEquals("Short ID must be deterministic", id1, playlistShortId(uri1))
         // Distinctness: different URIs must not collide
