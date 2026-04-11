@@ -243,7 +243,7 @@ internal class AnnouncementPreGenerator(
                 return@withContext null
             }
 
-            val responseText = conn.inputStream.bufferedReader().readText()
+            val responseText = conn.inputStream.bufferedReader().use { it.readText() }
             if (responseText.isBlank()) {
                 Log.w(TAG, "Kilo response empty")
                 return@withContext null
@@ -300,7 +300,7 @@ internal class AnnouncementPreGenerator(
                     return@runCatching null
                 }
 
-                val audioBase64 = JSONObject(conn.inputStream.bufferedReader().readText())
+                val audioBase64 = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
                     .getString("audioContent")
                 val audioBytes = Base64.decode(audioBase64, Base64.DEFAULT)
 
