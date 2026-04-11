@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Build
 import android.os.SystemClock
+import android.annotation.SuppressLint
 import android.Manifest
 import android.app.SearchManager
 import android.bluetooth.BluetoothDevice
@@ -841,6 +842,7 @@ class MainActivity : ComponentActivity() {
         ).show()
     }
 
+    @SuppressLint("MissingPermission")
     private fun addCurrentBluetoothDeviceToAllowlist() {
         if (!hasBluetoothConnectPermission()) {
             requestBluetoothConnectPermission()
