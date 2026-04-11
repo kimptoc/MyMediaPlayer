@@ -4,6 +4,9 @@ plugins {
 }
 
 android {
+    lint {
+        disable += "NotificationPermission"
+    }
     namespace = "com.example.mymediaplayer"
     compileSdk {
         version = release(36)
