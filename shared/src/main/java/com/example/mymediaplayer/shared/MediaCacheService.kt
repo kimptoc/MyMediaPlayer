@@ -275,6 +275,8 @@ class MediaCacheService {
     private val _cachedFilesByUri = mutableMapOf<String, MediaFileInfo>()
     fun getFileIndexByUri(): Map<String, MediaFileInfo> = synchronized(cacheLock) { _cachedFilesByUri.toMap() }
 
+    fun getFileByUri(uri: String): MediaFileInfo? = synchronized(cacheLock) { _cachedFilesByUri[uri] }
+
     private val _discoveredPlaylists = mutableListOf<PlaylistInfo>()
     val discoveredPlaylists: List<PlaylistInfo>
         get() = synchronized(cacheLock) { _discoveredPlaylists.toList() }
