@@ -256,14 +256,26 @@ class MediaCacheService {
         val genresByAudioId = loadWholeDriveGenres(context, audioIdByName.values.toSet())
         if (genresByAudioId.isEmpty()) return
 
-        synchronized(cacheLock) {
-            for (i in _cachedFiles.indices) {
-                val file = _cachedFiles[i]
-                if (!file.genre.isNullOrBlank()) continue // prefer ID3 tag genre
-                val audioId = audioIdByName[file.displayName] ?: continue
-                val genre = genresByAudioId[audioId] ?: continue
-                _cachedFiles[i] = file.copy(genre = normalizeGenre(genre))
-                _cachedFilesByUri[file.uriString] = _cachedFiles[i]
+        val snapshot = synchronized(cacheLock) { _cachedFiles.toList() }
+        val genreUpdatesByUri = mutableMapOf<String, String>()
+
+        for (file in snapshot) {
+            if (!file.genre.isNullOrBlank()) continue // prefer ID3 tag genre
+            val audioId = audioIdByName[file.displayName] ?: continue
+            val genre = genresByAudioId[audioId] ?: continue
+            genreUpdatesByUri[file.uriString] = normalizeGenre(genre)
+        }
+
+        if (genreUpdatesByUri.isNotEmpty()) {
+            synchronized(cacheLock) {
+                for (i in _cachedFiles.indices) {
+                    val file = _cachedFiles[i]
+                    val newGenre = genreUpdatesByUri[file.uriString]
+                    if (newGenre != null) {
+                        _cachedFiles[i] = file.copy(genre = newGenre)
+                        _cachedFilesByUri[file.uriString] = _cachedFiles[i]
+                    }
+                }
             }
         }
     }
