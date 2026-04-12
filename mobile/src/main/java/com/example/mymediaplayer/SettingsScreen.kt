@@ -83,60 +83,22 @@ fun SettingsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            // Voice Announcements section
-            Text(
-                text = "Voice Announcements",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(bottom = 8.dp, top = 8.dp)
-            )
-
-            SettingsToggleRow(
-                label = "Track Voice Intro",
-                checked = trackVoiceIntroEnabled,
-                onCheckedChange = { onToggleTrackVoiceIntro() }
-            )
-
-            SettingsToggleRow(
-                label = "Track Voice Outro",
-                checked = trackVoiceOutroEnabled,
-                onCheckedChange = { onToggleTrackVoiceOutro() }
-            )
-
-            SettingsClickRow(
-                label = "AI Announcement Settings",
-                onClick = { showCloudAnnouncementSettingsDialog = true }
+            VoiceAnnouncementsSection(
+                trackVoiceIntroEnabled = trackVoiceIntroEnabled,
+                trackVoiceOutroEnabled = trackVoiceOutroEnabled,
+                onToggleTrackVoiceIntro = onToggleTrackVoiceIntro,
+                onToggleTrackVoiceOutro = onToggleTrackVoiceOutro,
+                onShowCloudAnnouncementSettingsDialog = { showCloudAnnouncementSettingsDialog = true }
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Bluetooth section
-            Text(
-                text = "Bluetooth",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-
-            SettingsToggleRow(
-                label = "Bluetooth Auto-Play",
-                checked = bluetoothAutoPlayEnabled,
-                onCheckedChange = { onToggleBluetoothAutoPlay() }
-            )
-
-            SettingsClickRow(
-                label = "Trust Connected Bluetooth",
-                onClick = onAddCurrentBluetoothDevice
-            )
-
-            SettingsClickRow(
-                label = "Manage Trusted Bluetooth",
-                onClick = { showManageTrustedBluetoothDialog = true }
-            )
-
-            SettingsClickRow(
-                label = "Bluetooth Diagnostics",
-                onClick = {
+            BluetoothSection(
+                bluetoothAutoPlayEnabled = bluetoothAutoPlayEnabled,
+                onToggleBluetoothAutoPlay = onToggleBluetoothAutoPlay,
+                onAddCurrentBluetoothDevice = onAddCurrentBluetoothDevice,
+                onShowManageTrustedBluetoothDialog = { showManageTrustedBluetoothDialog = true },
+                onShowBluetoothDiagnosticsDialog = {
                     onRefreshBluetoothDiagnostics()
                     showBluetoothDiagnosticsDialog = true
                 }
@@ -144,17 +106,8 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Storage section
-            Text(
-                text = "Storage",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-
-            SettingsClickRow(
-                label = "Select Playlist Save Folder",
-                onClick = onChoosePlaylistSaveFolder
+            StorageSection(
+                onChoosePlaylistSaveFolder = onChoosePlaylistSaveFolder
             )
         }
     }
@@ -186,6 +139,93 @@ fun SettingsScreen(
             onDismissRequest = { showBluetoothDiagnosticsDialog = false }
         )
     }
+}
+
+@Composable
+private fun VoiceAnnouncementsSection(
+    trackVoiceIntroEnabled: Boolean,
+    trackVoiceOutroEnabled: Boolean,
+    onToggleTrackVoiceIntro: () -> Unit,
+    onToggleTrackVoiceOutro: () -> Unit,
+    onShowCloudAnnouncementSettingsDialog: () -> Unit
+) {
+    Text(
+        text = "Voice Announcements",
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(bottom = 8.dp, top = 8.dp)
+    )
+
+    SettingsToggleRow(
+        label = "Track Voice Intro",
+        checked = trackVoiceIntroEnabled,
+        onCheckedChange = { onToggleTrackVoiceIntro() }
+    )
+
+    SettingsToggleRow(
+        label = "Track Voice Outro",
+        checked = trackVoiceOutroEnabled,
+        onCheckedChange = { onToggleTrackVoiceOutro() }
+    )
+
+    SettingsClickRow(
+        label = "AI Announcement Settings",
+        onClick = onShowCloudAnnouncementSettingsDialog
+    )
+}
+
+@Composable
+private fun BluetoothSection(
+    bluetoothAutoPlayEnabled: Boolean,
+    onToggleBluetoothAutoPlay: () -> Unit,
+    onAddCurrentBluetoothDevice: () -> Unit,
+    onShowManageTrustedBluetoothDialog: () -> Unit,
+    onShowBluetoothDiagnosticsDialog: () -> Unit
+) {
+    Text(
+        text = "Bluetooth",
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(bottom = 8.dp)
+    )
+
+    SettingsToggleRow(
+        label = "Bluetooth Auto-Play",
+        checked = bluetoothAutoPlayEnabled,
+        onCheckedChange = { onToggleBluetoothAutoPlay() }
+    )
+
+    SettingsClickRow(
+        label = "Trust Connected Bluetooth",
+        onClick = onAddCurrentBluetoothDevice
+    )
+
+    SettingsClickRow(
+        label = "Manage Trusted Bluetooth",
+        onClick = onShowManageTrustedBluetoothDialog
+    )
+
+    SettingsClickRow(
+        label = "Bluetooth Diagnostics",
+        onClick = onShowBluetoothDiagnosticsDialog
+    )
+}
+
+@Composable
+private fun StorageSection(
+    onChoosePlaylistSaveFolder: () -> Unit
+) {
+    Text(
+        text = "Storage",
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(bottom = 8.dp)
+    )
+
+    SettingsClickRow(
+        label = "Select Playlist Save Folder",
+        onClick = onChoosePlaylistSaveFolder
+    )
 }
 
 @Composable

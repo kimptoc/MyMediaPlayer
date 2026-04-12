@@ -26,11 +26,6 @@ class SmartPlaylistBenchmarkTest {
         }
         prefs.edit().putString("play_counts", playCountsBuilder.toString()).apply()
 
-        // Use reflection to set up cache
-        val mediaCacheServiceField = MyMusicService::class.java.getDeclaredField("mediaCacheService")
-        mediaCacheServiceField.isAccessible = true
-        val mediaCacheService = mediaCacheServiceField.get(service) as MediaCacheService
-
         val files = mutableListOf<MediaFileInfo>()
         for (i in 0 until 50000) {
             files.add(
@@ -43,12 +38,8 @@ class SmartPlaylistBenchmarkTest {
             )
         }
 
-        // Fix for adding files directly to cachedFiles variable since we cannot set cachedFiles (it has a private setter in Kotlin)
-        mediaCacheService.clearFiles()
-
-        for (file in files) {
-             mediaCacheService.addFile(file)
-        }
+        service.mediaCacheService.clearFiles()
+        service.mediaCacheService.addAllFiles(files)
 
         // To access getSharedPreferences in MyMusicService we need a Context.
         // We'll mock the internal behavior of the method resolveSmartPlaylistTracksById which depends on getSharedPreferences,
