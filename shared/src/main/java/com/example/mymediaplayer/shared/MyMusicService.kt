@@ -2786,7 +2786,6 @@ class MyMusicService : MediaBrowserServiceCompat() {
         )
     }
 
-    @android.annotation.SuppressLint("MissingPermission")
     private fun updateNowPlayingNotification(state: Int) {
         val notification = buildNowPlayingNotification(state)
         runCatching {
