@@ -1,5 +1,6 @@
 package com.example.mymediaplayer
 
+import android.annotation.SuppressLint
 import android.content.ComponentName
 import android.content.Intent
 import android.media.AudioManager
@@ -10,7 +11,6 @@ import android.os.SystemClock
 import android.Manifest
 import android.app.SearchManager
 import android.bluetooth.BluetoothDevice
-import android.annotation.SuppressLint
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.graphics.Bitmap
@@ -842,6 +842,7 @@ class MainActivity : ComponentActivity() {
         ).show()
     }
 
+    @android.annotation.SuppressLint("MissingPermission")
     private fun addCurrentBluetoothDeviceToAllowlist() {
         if (!hasBluetoothConnectPermission()) {
             requestBluetoothConnectPermission()
@@ -850,9 +851,11 @@ class MainActivity : ComponentActivity() {
         val manager = getSystemService(BLUETOOTH_SERVICE) as? BluetoothManager
         val connected = mutableListOf<BluetoothDevice>()
         @SuppressLint("MissingPermission")
-        connected += manager?.getConnectedDevices(BluetoothProfile.A2DP).orEmpty()
+        val a2dpDevices = manager?.getConnectedDevices(BluetoothProfile.A2DP).orEmpty()
+        connected += a2dpDevices
         @SuppressLint("MissingPermission")
-        connected += manager?.getConnectedDevices(BluetoothProfile.HEADSET).orEmpty()
+        val headsetDevices = manager?.getConnectedDevices(BluetoothProfile.HEADSET).orEmpty()
+        connected += headsetDevices
         val additions = connected.mapNotNull { device ->
             val address = runCatching { device.address }.getOrNull() ?: return@mapNotNull null
             @SuppressLint("MissingPermission")
