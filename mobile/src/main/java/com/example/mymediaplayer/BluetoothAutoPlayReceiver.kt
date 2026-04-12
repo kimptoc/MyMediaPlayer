@@ -9,6 +9,7 @@ import android.annotation.SuppressLint
 import android.os.Build
 import android.os.SystemClock
 import androidx.core.content.ContextCompat
+import androidx.core.content.edit
 import com.example.mymediaplayer.shared.MyMusicService
 
 class BluetoothAutoPlayReceiver : BroadcastReceiver() {
@@ -74,7 +75,7 @@ class BluetoothAutoPlayReceiver : BroadcastReceiver() {
             record(prefs, "throttled", address, name)
             return
         }
-        prefs.edit().putLong(KEY_BT_LAST_AUTOPLAY_MS, now).apply()
+        prefs.edit { putLong(KEY_BT_LAST_AUTOPLAY_MS, now) }
 
         val serviceIntent = Intent(context, MyMusicService::class.java).apply {
             action = MyMusicService.ACTION_BT_AUTOPLAY
@@ -100,12 +101,12 @@ class BluetoothAutoPlayReceiver : BroadcastReceiver() {
         device: String? = null,
         deviceName: String? = null
     ) {
-        prefs.edit()
-            .putLong(KEY_BT_LAST_EVENT_MS, SystemClock.elapsedRealtime())
-            .putString(KEY_BT_LAST_REASON, reason)
-            .putString(KEY_BT_LAST_DEVICE, device)
-            .putString(KEY_BT_LAST_DEVICE_NAME, deviceName)
-            .apply()
+        prefs.edit {
+            putLong(KEY_BT_LAST_EVENT_MS, SystemClock.elapsedRealtime())
+            putString(KEY_BT_LAST_REASON, reason)
+            putString(KEY_BT_LAST_DEVICE, device)
+            putString(KEY_BT_LAST_DEVICE_NAME, deviceName)
+        }
     }
 
     private fun trustedAddresses(prefs: android.content.SharedPreferences): Set<String> {

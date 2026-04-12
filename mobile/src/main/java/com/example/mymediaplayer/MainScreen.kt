@@ -54,6 +54,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -68,6 +69,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.unit.dp
+import androidx.core.content.edit
 import com.example.mymediaplayer.shared.bucketGenre
 import com.example.mymediaplayer.shared.MediaFileInfo
 import com.example.mymediaplayer.shared.PlaylistInfo
@@ -801,7 +803,7 @@ fun MainScreen(
                     val prefs = context.getSharedPreferences("mymediaplayer_prefs", android.content.Context.MODE_PRIVATE)
                     val current = prefs.getStringSet("flagged_uris", emptySet())?.toMutableSet() ?: mutableSetOf()
                     if (currentMediaId in current) current.remove(currentMediaId) else current.add(currentMediaId)
-                    prefs.edit().putStringSet("flagged_uris", current).apply()
+                    prefs.edit { putStringSet("flagged_uris", current) }
                     flaggedUris.value = current.toSet()
                 }
             },
@@ -1744,7 +1746,7 @@ private fun PlaylistsSection(
     var isEditing by remember(selectedPlaylist?.uriString) { mutableStateOf(false) }
     var editableSongs by remember(selectedPlaylist?.uriString) { mutableStateOf<List<MediaFileInfo>>(emptyList()) }
     var draggingIndex by remember(selectedPlaylist?.uriString) { mutableStateOf<Int?>(null) }
-    var draggingOffsetY by remember(selectedPlaylist?.uriString) { mutableStateOf(0f) }
+    var draggingOffsetY by remember(selectedPlaylist?.uriString) { mutableFloatStateOf(0f) }
     var dedupeOnSave by remember(selectedPlaylist?.uriString) { mutableStateOf(false) }
     var editSearchQuery by remember(selectedPlaylist?.uriString) { mutableStateOf("") }
     var showDiscardChangesDialog by remember(selectedPlaylist?.uriString) { mutableStateOf(false) }
@@ -2261,7 +2263,7 @@ private fun ExpandedNowPlayingDialog(
         durationMs,
         isPlaying
     ) {
-        mutableStateOf(clampedProjectedMs.toFloat())
+        mutableFloatStateOf(clampedProjectedMs.toFloat())
     }
 
     // Continuously update progress while playing and user is not dragging the slider

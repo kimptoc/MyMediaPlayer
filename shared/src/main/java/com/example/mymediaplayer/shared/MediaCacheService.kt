@@ -514,7 +514,7 @@ class MediaCacheService {
         dao.replaceCache(files, playlists, state)
     }
 
-    @VisibleForTesting
+    @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
     fun addFile(fileInfo: MediaFileInfo) {
         synchronized(cacheLock) {
             if (_cachedFiles.size < MAX_CACHE_SIZE) {
@@ -736,7 +736,7 @@ class MediaCacheService {
         return displayName.substring(dot).lowercase(Locale.US)
     }
 
-    @VisibleForTesting
+    @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
     fun clearFiles() {
         synchronized(cacheLock) {
             _cachedFiles.clear()

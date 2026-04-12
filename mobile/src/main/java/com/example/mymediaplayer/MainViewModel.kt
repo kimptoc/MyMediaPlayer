@@ -2,6 +2,8 @@ package com.example.mymediaplayer
 
 import android.app.Application
 import android.net.Uri
+import androidx.core.content.edit
+import androidx.core.net.toUri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.mymediaplayer.shared.MediaCacheService
@@ -733,7 +735,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun executeRename(playlist: PlaylistInfo, requestedName: String): RenameResult {
         val renamedDirect = playlistService.renamePlaylist(
             getApplication(),
-            Uri.parse(playlist.uriString),
+            playlist.uriString.toUri(),
             requestedName
         )
         var usedFallback = false
@@ -746,7 +748,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 null
             } else {
                 usedFallback = true
-                val oldUri = Uri.parse(playlist.uriString)
+                val oldUri = playlist.uriString.toUri()
                 val existingSongs = playlistService.readPlaylist(getApplication(), oldUri)
                 val recreated = playlistService.writePlaylistWithName(
                     getApplication(),
@@ -831,7 +833,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun addSongToExistingPlaylist(playlist: PlaylistInfo, file: MediaFileInfo) {
-        val uri = Uri.parse(playlist.uriString)
+        val uri = playlist.uriString.toUri()
         val success = playlistService.appendToPlaylist(getApplication(), uri, listOf(file))
         val current = _uiState.value
         if (success) {
@@ -855,7 +857,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun addManyToExistingPlaylist(playlist: PlaylistInfo, files: List<MediaFileInfo>) {
         if (files.isEmpty()) return
-        val uri = Uri.parse(playlist.uriString)
+        val uri = playlist.uriString.toUri()
         val success = playlistService.appendToPlaylist(getApplication(), uri, files)
         val current = _uiState.value
         if (success) {
@@ -887,7 +889,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             )
             return
         }
-        val uri = Uri.parse(playlist.uriString)
+        val uri = playlist.uriString.toUri()
         val success = playlistService.overwritePlaylist(getApplication(), uri, songs)
         val current = _uiState.value
         if (success) {
@@ -910,7 +912,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun deletePlaylist(playlist: PlaylistInfo) {
         viewModelScope.launch(Dispatchers.IO) {
-            val uri = Uri.parse(playlist.uriString)
+            val uri = playlist.uriString.toUri()
             val success = playlistService.deletePlaylist(
                 getApplication(),
                 uri,
@@ -975,7 +977,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             )
         )
         viewModelScope.launch(Dispatchers.IO) {
-            val songs = playlistService.readPlaylist(getApplication(), Uri.parse(playlist.uriString))
+            val songs = playlistService.readPlaylist(getApplication(), playlist.uriString.toUri())
             val cur = _uiState.value
             val byUri = cur.scan.scannedFiles.associateBy { it.uriString }
             val enriched = songs.map { song -> byUri[song.uriString] ?: song }
@@ -1071,9 +1073,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = current.copy(favoriteUris = updated)
         getApplication<Application>()
             .getSharedPreferences(PREFS_NAME, Application.MODE_PRIVATE)
-            .edit()
-            .putStringSet(KEY_FAVORITE_URIS, updated)
-            .apply()
+            .edit { putStringSet(KEY_FAVORITE_URIS, updated) }
         refreshSmartPlaylistSelection()
     }
 
@@ -1297,9 +1297,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             .joinToString("\n") { "${it.key}\t${it.value}" }
         getApplication<Application>()
             .getSharedPreferences(PREFS_NAME, Application.MODE_PRIVATE)
-            .edit()
-            .putString(KEY_PLAY_COUNTS, encoded)
-            .apply()
+            .edit { putString(KEY_PLAY_COUNTS, encoded) }
     }
 
     private fun persistLastPlayedAt(lastPlayedAt: Map<String, Long>) {
@@ -1308,9 +1306,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             .joinToString("\n") { "${it.key}\t${it.value}" }
         getApplication<Application>()
             .getSharedPreferences(PREFS_NAME, Application.MODE_PRIVATE)
-            .edit()
-            .putString(KEY_LAST_PLAYED_AT, encoded)
-            .apply()
+            .edit { putString(KEY_LAST_PLAYED_AT, encoded) }
     }
 
     private fun decodePlayCounts(raw: String?): Map<String, Int> {
