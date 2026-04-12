@@ -5,11 +5,10 @@ import android.bluetooth.BluetoothDevice
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.annotation.SuppressLint
+import android.os.Build
 import android.os.SystemClock
 import androidx.core.content.ContextCompat
-import android.annotation.SuppressLint
 import com.example.mymediaplayer.shared.MyMusicService
 
 class BluetoothAutoPlayReceiver : BroadcastReceiver() {
