@@ -207,9 +207,10 @@ internal class AnnouncementPreGenerator(
             "Radio outro for \"$title\" by $artistName. Include both artist and song. Max 8 words total. Examples: \"That was $title by $artistName\", \"Thanks for listening to $title\". Just the text, no quotes."
         }
 
-        val isAnon = apiKey.isNullOrBlank()
-        val authHeader = if (isAnon) "Bearer anonymous" else "Bearer $apiKey"
-        val model = if (isAnon) "kilo/auto-free" else "kilo/auto"
+        val sanitizedKey = apiKey?.replace("\r", "")?.replace("\n", "")?.trim()
+        val isAnon = sanitizedKey.isNullOrBlank()
+        val authHeader = if (isAnon) "Bearer anonymous" else "Bearer $sanitizedKey"
+        val model = if (isAnon) "kilo/auto-free" else "anthropic/claude-sonnet-4-6"
 
         try {
             val conn = URL("$KILO_ENDPOINT/chat/completions")
@@ -243,7 +244,7 @@ internal class AnnouncementPreGenerator(
                 return@withContext null
             }
 
-            val responseText = conn.inputStream.bufferedReader().use { it.readText() }
+            val responseText = conn.inputStream.bufferedReader().readText()
             if (responseText.isBlank()) {
                 Log.w(TAG, "Kilo response empty")
                 return@withContext null
@@ -300,7 +301,7 @@ internal class AnnouncementPreGenerator(
                     return@runCatching null
                 }
 
-                val audioBase64 = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
+                val audioBase64 = JSONObject(conn.inputStream.bufferedReader().readText())
                     .getString("audioContent")
                 val audioBytes = Base64.decode(audioBase64, Base64.DEFAULT)
 
