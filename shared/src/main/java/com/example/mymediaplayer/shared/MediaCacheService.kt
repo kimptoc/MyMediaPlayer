@@ -62,7 +62,7 @@ class MediaCacheService {
         val out = mutableListOf<MediaFileInfo>()
         val outIds = mutableListOf<Long>()
 
-        val projection = arrayOf(
+        val projectionList = mutableListOf(
             MediaStore.Audio.Media._ID,
             MediaStore.Audio.Media.DISPLAY_NAME,
             MediaStore.Audio.Media.SIZE,
@@ -74,6 +74,10 @@ class MediaCacheService {
             MediaStore.Audio.Media.YEAR,
             MediaStore.Audio.Media.DATE_ADDED
         )
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            projectionList.add(MediaStore.Audio.Media.GENRE)
+        }
+        val projection = projectionList.toTypedArray()
         val sortOrder = "${MediaStore.Audio.Media.DATE_ADDED} DESC"
         val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
 
@@ -94,6 +98,11 @@ class MediaCacheService {
             val durationIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
             val yearIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.YEAR)
             val addedIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
+            val genreIndex = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                cursor.getColumnIndex(MediaStore.Audio.Media.GENRE)
+            } else {
+                -1
+            }
             while (cursor.moveToNext() && out.size < maxFileLimit) {
                 val id = cursor.getLong(idIndex)
                 val uri = ContentUris.withAppendedId(
@@ -117,6 +126,9 @@ class MediaCacheService {
                 } else {
                     cursor.getLong(addedIndex) * 1000L
                 }
+                val osGenre = if (genreIndex >= 0 && !cursor.isNull(genreIndex)) {
+                    cursor.getString(genreIndex)
+                } else null
                 out.add(
                     MediaFileInfo(
                         uriString = uri.toString(),
@@ -125,7 +137,7 @@ class MediaCacheService {
                         title = title,
                         artist = artist,
                         album = album,
-                        genre = normalizeGenre(inferGenreFromPath(relativePath)),
+                        genre = normalizeGenre(osGenre ?: inferGenreFromPath(relativePath)),
                         durationMs = durationMs,
                         year = year,
                         addedAtMs = addedAtMs
@@ -140,12 +152,14 @@ class MediaCacheService {
                 }
             }
         }
-        val genresByAudioId = loadWholeDriveGenres(context, outIds.toSet())
-        if (genresByAudioId.isNotEmpty()) {
-            for (index in out.indices) {
-                val audioId = outIds[index]
-                val mappedGenre = genresByAudioId[audioId] ?: continue
-                out[index] = out[index].copy(genre = normalizeGenre(mappedGenre))
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.R) {
+            val genresByAudioId = loadWholeDriveGenres(context, outIds.toSet())
+            if (genresByAudioId.isNotEmpty()) {
+                for (index in out.indices) {
+                    val audioId = outIds[index]
+                    val mappedGenre = genresByAudioId[audioId] ?: continue
+                    out[index] = out[index].copy(genre = normalizeGenre(mappedGenre))
+                }
             }
         }
         synchronized(cacheLock) {
