@@ -2,7 +2,6 @@ package com.example.mymediaplayer
 
 import android.graphics.Bitmap
 import android.os.SystemClock
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -744,67 +743,26 @@ fun MainScreen(
     }
 
     if (showDeletePlaylistDialog) {
-        val target = pendingDeletePlaylist
-        androidx.compose.material3.AlertDialog(
+        DeletePlaylistDialogContent(
+            pendingDeletePlaylist = pendingDeletePlaylist,
             onDismissRequest = { showDeletePlaylistDialog = false },
-            title = { Text("Delete playlist") },
-            text = {
-                Text(
-                    "Delete ${target?.displayName?.removeSuffix(".m3u") ?: "this playlist"}?"
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        if (target != null) onDeletePlaylist(target)
-                        showDeletePlaylistDialog = false
-                    }
-                ) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeletePlaylistDialog = false }) {
-                    Text("Cancel")
-                }
+            onDeletePlaylist = { playlist ->
+                onDeletePlaylist(playlist)
+                showDeletePlaylistDialog = false
             }
         )
     }
 
     if (showRenamePlaylistDialog) {
-        val target = pendingRenamePlaylist
-        val trimmedName = renamePlaylistNameText.trim()
-        androidx.compose.material3.AlertDialog(
+        RenamePlaylistDialogContent(
+            pendingRenamePlaylist = pendingRenamePlaylist,
+            renamePlaylistNameText = renamePlaylistNameText,
+            onRenamePlaylistNameTextChange = { renamePlaylistNameText = it },
             onDismissRequest = { showRenamePlaylistDialog = false },
-            title = { Text("Rename playlist") },
-            text = {
-                Column {
-                    Text("Enter a new name")
-                    Spacer(modifier = Modifier.height(8.dp))
-                    TextField(
-                        value = renamePlaylistNameText,
-                        onValueChange = { renamePlaylistNameText = it },
-                        singleLine = true,
-                        placeholder = { Text("e.g. Road Trip") }
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        if (target != null) onRenamePlaylist(target, trimmedName)
-                        showRenamePlaylistDialog = false
-                        pendingRenamePlaylist = null
-                    },
-                    enabled = target != null && trimmedName.isNotEmpty()
-                ) {
-                    Text("Rename")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showRenamePlaylistDialog = false }) {
-                    Text("Cancel")
-                }
+            onRenamePlaylist = { playlist, newName ->
+                onRenamePlaylist(playlist, newName)
+                showRenamePlaylistDialog = false
+                pendingRenamePlaylist = null
             }
         )
     }
@@ -852,63 +810,168 @@ fun MainScreen(
     }
 
     if (showQueueDialog) {
-        AlertDialog(
+        QueueDialogContent(
+            queueTitle = uiState.playback.queueTitle,
+            queueItems = uiState.playback.queueItems,
+            activeQueueId = uiState.playback.activeQueueId,
             onDismissRequest = { showQueueDialog = false },
-            title = {
-                Text(uiState.playback.queueTitle ?: "Queue")
-            },
-            text = {
-                if (uiState.playback.queueItems.isEmpty()) {
-                    Text("Queue is empty")
-                } else {
-                    LazyColumn {
-                        items(uiState.playback.queueItems) { item ->
-                            val isActive = item.queueId == uiState.playback.activeQueueId
-                            TextButton(
-                                onClick = {
-                                    onQueueItemSelected(item.queueId)
-                                    showQueueDialog = false
-                                },
-                                enabled = !isActive
-                            ) {
-                                Text(
-                                    text = if (isActive) "▶ ${item.title}" else item.title,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {},
-            dismissButton = {
-                TextButton(onClick = { showQueueDialog = false }) {
-                    Text("Close")
-                }
+            onQueueItemSelected = { queueId ->
+                onQueueItemSelected(queueId)
+                showQueueDialog = false
             }
         )
     }
 
     if (showPlaylistSaveFolderPrompt) {
-        AlertDialog(
+        PlaylistSaveFolderPromptDialogContent(
             onDismissRequest = onDismissPlaylistSaveFolderPrompt,
-            title = { Text("Set Playlist Save Folder") },
-            text = {
-                Text("Choose a folder where new playlists (.m3u) will be saved.")
-            },
-            confirmButton = {
-                TextButton(onClick = onSetPlaylistSaveFolderNow) {
-                    Text("Set now")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = onDismissPlaylistSaveFolderPrompt) {
-                    Text("Later")
-                }
-            }
+            onSetPlaylistSaveFolderNow = onSetPlaylistSaveFolderNow
         )
     }
+}
+
+@Composable
+private fun DeletePlaylistDialogContent(
+    pendingDeletePlaylist: PlaylistInfo?,
+    onDismissRequest: () -> Unit,
+    onDeletePlaylist: (PlaylistInfo) -> Unit
+) {
+    val target = pendingDeletePlaylist
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismissRequest,
+        title = { Text("Delete playlist") },
+        text = {
+            Text(
+                "Delete ${target?.displayName?.removeSuffix(".m3u") ?: "this playlist"}?"
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    if (target != null) onDeletePlaylist(target)
+                }
+            ) {
+                Text("Delete", color = MaterialTheme.colorScheme.error)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismissRequest) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+private fun RenamePlaylistDialogContent(
+    pendingRenamePlaylist: PlaylistInfo?,
+    renamePlaylistNameText: String,
+    onRenamePlaylistNameTextChange: (String) -> Unit,
+    onDismissRequest: () -> Unit,
+    onRenamePlaylist: (PlaylistInfo, String) -> Unit
+) {
+    val target = pendingRenamePlaylist
+    val trimmedName = renamePlaylistNameText.trim()
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismissRequest,
+        title = { Text("Rename playlist") },
+        text = {
+            Column {
+                Text("Enter a new name")
+                Spacer(modifier = Modifier.height(8.dp))
+                TextField(
+                    value = renamePlaylistNameText,
+                    onValueChange = onRenamePlaylistNameTextChange,
+                    singleLine = true,
+                    placeholder = { Text("e.g. Road Trip") }
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    if (target != null) onRenamePlaylist(target, trimmedName)
+                },
+                enabled = target != null && trimmedName.isNotEmpty()
+            ) {
+                Text("Rename")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismissRequest) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+private fun QueueDialogContent(
+    queueTitle: String?,
+    queueItems: List<QueueEntry>,
+    activeQueueId: Long,
+    onDismissRequest: () -> Unit,
+    onQueueItemSelected: (Long) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        title = {
+            Text(queueTitle ?: "Queue")
+        },
+        text = {
+            if (queueItems.isEmpty()) {
+                Text("Queue is empty")
+            } else {
+                LazyColumn {
+                    items(queueItems) { item ->
+                        val isActive = item.queueId == activeQueueId
+                        TextButton(
+                            onClick = {
+                                onQueueItemSelected(item.queueId)
+                            },
+                            enabled = !isActive
+                        ) {
+                            Text(
+                                text = if (isActive) "▶ ${item.title}" else item.title,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismissRequest) {
+                Text("Close")
+            }
+        }
+    )
+}
+
+@Composable
+private fun PlaylistSaveFolderPromptDialogContent(
+    onDismissRequest: () -> Unit,
+    onSetPlaylistSaveFolderNow: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        title = { Text("Set Playlist Save Folder") },
+        text = {
+            Text("Choose a folder where new playlists (.m3u) will be saved.")
+        },
+        confirmButton = {
+            TextButton(onClick = onSetPlaylistSaveFolderNow) {
+                Text("Set now")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismissRequest) {
+                Text("Later")
+            }
+        }
+    )
 }
 
 @Composable

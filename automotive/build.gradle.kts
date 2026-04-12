@@ -4,6 +4,9 @@ plugins {
 }
 
 android {
+    lint {
+        baseline = file("lint-baseline.xml")
+    }
     namespace = "com.example.mymediaplayer"
     compileSdk {
         version = release(36)
