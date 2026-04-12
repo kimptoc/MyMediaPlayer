@@ -243,7 +243,7 @@ internal class AnnouncementPreGenerator(
                 return@withContext null
             }
 
-            val responseText = conn.inputStream.bufferedReader().readText()
+            val responseText = conn.inputStream.bufferedReader().use { it.readText() }
             if (responseText.isBlank()) {
                 Log.w(TAG, "Kilo response empty")
                 return@withContext null
