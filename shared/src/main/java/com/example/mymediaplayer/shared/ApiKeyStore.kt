@@ -71,7 +71,7 @@ object ApiKeyStore {
             conn.doOutput = true
 
             val body = JSONObject().apply {
-                put("model", "kilo/auto-free")
+                put("model", "kilo/auto")
                 put("max_tokens", 10)
                 put("messages", JSONArray().put(
                     JSONObject().apply {

@@ -1,6 +1,5 @@
 package com.example.mymediaplayer.shared
 
-import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -2787,7 +2786,6 @@ class MyMusicService : MediaBrowserServiceCompat() {
         )
     }
 
-    @SuppressLint("MissingPermission")
     private fun updateNowPlayingNotification(state: Int) {
         val notification = buildNowPlayingNotification(state)
         runCatching {
