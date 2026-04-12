@@ -46,4 +46,24 @@ class MediaMetadataHelperTest {
         // The exception caught block should return null
         assertNull("Extracting metadata should return null if an exception is thrown", result)
     }
+
+    @Test
+    fun extractMetadata_withEmptyMetadata_logsWarningAndReturnsEmptyInfo() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val uriString = "content://media/empty"
+
+        val result = MediaMetadataHelper.extractMetadata(context, uriString)
+
+        assertNull(result?.title)
+        assertNull(result?.artist)
+        assertNull(result?.album)
+        assertNull(result?.genre)
+        assertNull(result?.year)
+        assertNull(result?.durationMs)
+
+        val logs = org.robolectric.shadows.ShadowLog.getLogsForTag("MediaMetadataHelper")
+        logs.forEach { println("LOG: ${it.type} ${it.msg}") }
+        val warningLog = logs.find { it.type == android.util.Log.WARN && it.msg == "No ID3 tags found for: $uriString" }
+        org.junit.Assert.assertNotNull("Expected warning log for missing ID3 tags was not found", warningLog)
+    }
 }

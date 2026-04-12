@@ -176,7 +176,8 @@ internal class AnnouncementPreGenerator(
         return fetchGoogleTtsAudio(text, ttsKey)
     }
 
-    private fun getStockPhrase(title: String, artist: String?, isIntro: Boolean): String {
+    @androidx.annotation.VisibleForTesting
+    internal fun getStockPhrase(title: String, artist: String?, isIntro: Boolean): String {
         val artistName = artist ?: "Unknown"
         return if (isIntro) {
             listOf(
