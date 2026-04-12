@@ -1,8 +1,5 @@
 package com.example.mymediaplayer
 
-import android.app.UiModeManager
-import android.content.Context
-import android.content.res.Configuration
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
