@@ -9,7 +9,6 @@ import android.os.Build
 import android.os.SystemClock
 import androidx.core.content.ContextCompat
 import com.example.mymediaplayer.shared.MyMusicService
-import android.annotation.SuppressLint
 
 class BluetoothAutoPlayReceiver : BroadcastReceiver() {
 
@@ -54,7 +53,7 @@ class BluetoothAutoPlayReceiver : BroadcastReceiver() {
             return
         }
         val allowlist = trustedAddresses(prefs)
-        @SuppressLint("MissingPermission")
+        @Suppress("MissingPermission")
         val name = runCatching { device.name }.getOrNull()
         if (address !in allowlist) {
             record(prefs, "untrusted_device", address, name)
