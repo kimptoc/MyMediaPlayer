@@ -44,4 +44,5 @@ dependencies {
     testImplementation libs.androidx.test.core
     testImplementation libs.robolectric
     testImplementation libs.kotlinx.coroutines.core
+    testImplementation "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0"
 }
