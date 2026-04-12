@@ -251,13 +251,13 @@ internal class AnnouncementPreGenerator(
 
             val responseJson = JSONObject(responseText)
             if (!responseJson.has("choices") || responseJson.getJSONArray("choices").length() == 0) {
-                Log.w(TAG, "Kilo no choices: $responseText")
+                Log.w(TAG, "Kilo no choices")
                 return@withContext null
             }
             val message = responseJson.getJSONArray("choices").getJSONObject(0).getJSONObject("message")
             val content = message.optString("content")?.takeIf { it != "null" && it.isNotBlank() }
             if (content == null) {
-                Log.w(TAG, "Kilo no content: $responseText")
+                Log.w(TAG, "Kilo no content")
                 return@withContext null
             }
             content.trim()
