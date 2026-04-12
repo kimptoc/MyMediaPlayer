@@ -2,7 +2,6 @@ package com.example.mymediaplayer
 
 import android.graphics.Bitmap
 import android.os.SystemClock
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
