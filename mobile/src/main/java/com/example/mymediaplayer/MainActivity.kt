@@ -5,8 +5,8 @@ import android.content.ComponentName
 import android.content.Intent
 import android.media.AudioManager
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
+import android.os.Build
 import android.os.SystemClock
 import android.Manifest
 import android.app.SearchManager
@@ -842,7 +842,7 @@ class MainActivity : ComponentActivity() {
         ).show()
     }
 
-    @SuppressLint("MissingPermission")
+    @android.annotation.SuppressLint("MissingPermission")
     private fun addCurrentBluetoothDeviceToAllowlist() {
         if (!hasBluetoothConnectPermission()) {
             requestBluetoothConnectPermission()
