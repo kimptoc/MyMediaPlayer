@@ -2945,7 +2945,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         if (!savedMediaUri.isNullOrBlank()) {
             currentMediaId = savedMediaUri
             currentFileInfo = playlistQueue.firstOrNull { it.uriString == savedMediaUri }
-                ?: mediaCacheService.cachedFiles.firstOrNull { it.uriString == savedMediaUri }
+                ?: mediaCacheService.getFileByUri(savedMediaUri)
                 ?: MediaFileInfo(
                     uriString = savedMediaUri,
                     displayName = savedMediaUri,
