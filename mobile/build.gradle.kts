@@ -1,27 +1,23 @@
 plugins {
-    id("com.android.application")
-    id("org.jetbrains.kotlin.android")
-    id("org.jetbrains.kotlin.plugin.compose")
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.compose.compiler)
+    alias(libs.plugins.kotlin.android)
 }
 
 android {
-    lint {
-        disable.add("MissingPermission")
-    }
     namespace = "com.example.mymediaplayer"
-    compileSdk = 36
+    compileSdk {
+        version = release(36)
+    }
 
     defaultConfig {
         applicationId = "com.example.mymediaplayer"
-        minSdk = 29
+        minSdk = 28
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        vectorDrawables {
-            useSupportLibrary = true
-        }
     }
 
     buildTypes {
@@ -40,36 +36,31 @@ android {
     kotlinOptions {
         jvmTarget = "11"
     }
+
     buildFeatures {
         compose = true
-    }
-    packaging {
-        resources {
-            excludes += "/META-INF/{AL2.0,LGPL2.1}"
-        }
-    }
-    lint {
-        disable.add("MissingPermission")
     }
 }
 
 dependencies {
-    implementation(libs.material)
-    implementation(project(":shared"))
-
-    implementation(libs.androidx.core.ktx)
-    implementation(libs.androidx.activity.compose)
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
-    implementation(libs.compose.ui.tooling.preview)
     implementation(libs.compose.material3)
+    implementation(libs.compose.ui.tooling.preview)
+    debugImplementation(libs.compose.ui.tooling)
 
+    implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.appcompat)
+    implementation(libs.material)
     implementation(libs.androidx.media)
-    implementation(libs.kotlinx.coroutines.android)
-
+    implementation(project(":shared"))
+    implementation(libs.androidx.security.crypto)
     testImplementation(libs.junit)
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.robolectric)
-
-    debugImplementation(libs.compose.ui.tooling)
+    androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.androidx.espresso.core)
 }
