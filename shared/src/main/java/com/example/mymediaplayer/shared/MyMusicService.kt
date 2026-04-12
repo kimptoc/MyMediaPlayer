@@ -1160,18 +1160,30 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
     @VisibleForTesting
     internal fun buildSongLetterBuckets(songs: List<MediaFileInfo>): List<String> {
-        val letters = mutableSetOf<String>()
+        val presentLetters = BooleanArray(26)
         var hasOther = false
         for (song in songs) {
-            val first = song.cleanTitle.firstOrNull { !it.isWhitespace() }?.uppercaseChar()
-            if (first != null && first in 'A'..'Z') {
-                letters.add(first.toString())
+            val title = song.cleanTitle
+            var firstChar: Char? = null
+            for (i in title.indices) {
+                val c = title[i]
+                if (!c.isWhitespace()) {
+                    firstChar = c.uppercaseChar()
+                    break
+                }
+            }
+            if (firstChar != null && firstChar in 'A'..'Z') {
+                presentLetters[firstChar - 'A'] = true
             } else {
                 hasOther = true
             }
         }
-        val result = letters.toMutableList()
-        result.sort()
+        val result = mutableListOf<String>()
+        for (i in presentLetters.indices) {
+            if (presentLetters[i]) {
+                result.add((i + 'A'.code).toChar().toString())
+            }
+        }
         if (hasOther) result.add("#")
         return result
     }
@@ -2948,7 +2960,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         if (!savedMediaUri.isNullOrBlank()) {
             currentMediaId = savedMediaUri
             currentFileInfo = playlistQueue.firstOrNull { it.uriString == savedMediaUri }
-                ?: mediaCacheService.cachedFiles.firstOrNull { it.uriString == savedMediaUri }
+                ?: mediaCacheService.getFileByUri(savedMediaUri)
                 ?: MediaFileInfo(
                     uriString = savedMediaUri,
                     displayName = savedMediaUri,

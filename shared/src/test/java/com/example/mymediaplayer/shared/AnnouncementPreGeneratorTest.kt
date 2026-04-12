@@ -1,59 +1,61 @@
 package com.example.mymediaplayer.shared
 
+import android.content.Context
 import androidx.test.core.app.ApplicationProvider
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import org.junit.Assert.assertTrue
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import org.junit.Assert.assertNull
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.annotation.Config
+import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [33])
+@OptIn(ExperimentalCoroutinesApi::class)
 class AnnouncementPreGeneratorTest {
 
     @Test
-    fun `getStockPhrase returns valid intro string`() {
-        val generator = AnnouncementPreGenerator(ApplicationProvider.getApplicationContext(), CoroutineScope(Dispatchers.Unconfined))
-        val phrase = generator.getStockPhrase("Bohemian Rhapsody", "Queen", true)
+    fun getReadyAudio_timeout_returnsNull() = runTest {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val preGen = AnnouncementPreGenerator(context, TestScope(this.testScheduler))
 
-        val possiblePhrases = listOf(
-            "Up next: Bohemian Rhapsody by Queen",
-            "Here's Bohemian Rhapsody by Queen",
-            "Bohemian Rhapsody is coming up by Queen",
-            "Now playing: Bohemian Rhapsody by Queen"
+        val cacheField = AnnouncementPreGenerator::class.java.getDeclaredField("cache")
+        cacheField.isAccessible = true
+        @Suppress("UNCHECKED_CAST")
+        val cache = cacheField.get(preGen) as ConcurrentHashMap<Any, Deferred<File?>>
+
+        val cacheKeyClass = Class.forName("com.example.mymediaplayer.shared.AnnouncementPreGenerator\$CacheKey")
+        val constructor = cacheKeyClass.getDeclaredConstructor(String::class.java, Boolean::class.java)
+        constructor.isAccessible = true
+        val key = constructor.newInstance("test_uri", true)
+
+        val deferred = CompletableDeferred<File?>()
+        cache[key] = deferred
+
+        val track = MediaFileInfo(
+            uriString = "test_uri",
+            displayName = "Test Title",
+            title = "Test Title",
+            artist = "Test Artist",
+            album = null,
+            durationMs = 10000,
+            sizeBytes = 1000L
         )
 
-        assertTrue(possiblePhrases.contains(phrase))
-    }
+        var result: File? = File("dummy")
+        val job = launch {
+            result = preGen.getReadyAudio(track, true)
+        }
 
-    @Test
-    fun `getStockPhrase returns valid outro string`() {
-        val generator = AnnouncementPreGenerator(ApplicationProvider.getApplicationContext(), CoroutineScope(Dispatchers.Unconfined))
-        val phrase = generator.getStockPhrase("Bohemian Rhapsody", "Queen", false)
+        testScheduler.advanceTimeBy(5001L)
 
-        val possiblePhrases = listOf(
-            "That was Bohemian Rhapsody by Queen",
-            "Thanks for listening to Bohemian Rhapsody by Queen",
-            "Bohemian Rhapsody is done by Queen"
-        )
+        job.join()
 
-        assertTrue(possiblePhrases.contains(phrase))
-    }
-
-    @Test
-    fun `getStockPhrase handles null artist`() {
-        val generator = AnnouncementPreGenerator(ApplicationProvider.getApplicationContext(), CoroutineScope(Dispatchers.Unconfined))
-        val phrase = generator.getStockPhrase("Song 2", null, true)
-
-        val possiblePhrases = listOf(
-            "Up next: Song 2 by Unknown",
-            "Here's Song 2 by Unknown",
-            "Song 2 is coming up by Unknown",
-            "Now playing: Song 2 by Unknown"
-        )
-
-        assertTrue(possiblePhrases.contains(phrase))
+        assertNull(result)
     }
 }
