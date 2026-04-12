@@ -842,6 +842,7 @@ class MainActivity : ComponentActivity() {
         ).show()
     }
 
+    @android.annotation.SuppressLint("MissingPermission")
     private fun addCurrentBluetoothDeviceToAllowlist() {
         if (!hasBluetoothConnectPermission()) {
             requestBluetoothConnectPermission()
