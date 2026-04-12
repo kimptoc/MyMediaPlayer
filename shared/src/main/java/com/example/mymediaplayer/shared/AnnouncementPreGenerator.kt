@@ -207,9 +207,8 @@ internal class AnnouncementPreGenerator(
             "Radio outro for \"$title\" by $artistName. Include both artist and song. Max 8 words total. Examples: \"That was $title by $artistName\", \"Thanks for listening to $title\". Just the text, no quotes."
         }
 
-        val sanitizedKey = apiKey?.replace("\r", "")?.replace("\n", "")?.trim()
-        val isAnon = sanitizedKey.isNullOrBlank()
-        val authHeader = if (isAnon) "Bearer anonymous" else "Bearer $sanitizedKey"
+        val isAnon = apiKey.isNullOrBlank()
+        val authHeader = if (isAnon) "Bearer anonymous" else "Bearer $apiKey"
         val model = if (isAnon) "kilo/auto-free" else "anthropic/claude-sonnet-4-6"
 
         try {
@@ -252,13 +251,13 @@ internal class AnnouncementPreGenerator(
 
             val responseJson = JSONObject(responseText)
             if (!responseJson.has("choices") || responseJson.getJSONArray("choices").length() == 0) {
-                Log.w(TAG, "Kilo no choices")
+                Log.w(TAG, "Kilo no choices: $responseText")
                 return@withContext null
             }
             val message = responseJson.getJSONArray("choices").getJSONObject(0).getJSONObject("message")
             val content = message.optString("content")?.takeIf { it != "null" && it.isNotBlank() }
             if (content == null) {
-                Log.w(TAG, "Kilo no content")
+                Log.w(TAG, "Kilo no content: $responseText")
                 return@withContext null
             }
             content.trim()

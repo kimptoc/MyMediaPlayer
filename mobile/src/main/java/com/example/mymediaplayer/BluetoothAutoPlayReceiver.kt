@@ -5,7 +5,6 @@ import android.bluetooth.BluetoothDevice
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.annotation.SuppressLint
 import android.os.Build
 import android.os.SystemClock
 import androidx.core.content.ContextCompat
@@ -26,7 +25,7 @@ class BluetoothAutoPlayReceiver : BroadcastReceiver() {
         private const val KEY_RESUME_MEDIA_URI = "resume_media_uri"
     }
 
-    @SuppressLint("MissingPermission")
+    @android.annotation.SuppressLint("MissingPermission")
     override fun onReceive(context: Context, intent: Intent?) {
         if (intent?.action != BluetoothDevice.ACTION_ACL_CONNECTED) return
 
@@ -55,7 +54,6 @@ class BluetoothAutoPlayReceiver : BroadcastReceiver() {
             return
         }
         val allowlist = trustedAddresses(prefs)
-        @Suppress("MissingPermission")
         val name = runCatching { device.name }.getOrNull()
         if (address !in allowlist) {
             record(prefs, "untrusted_device", address, name)

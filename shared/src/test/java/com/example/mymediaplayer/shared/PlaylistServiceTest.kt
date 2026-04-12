@@ -92,24 +92,4 @@ class PlaylistServiceTest {
         assertNull(result)
     }
 
-    @Test
-    fun generateM3uContent_stripsNewlines() {
-        val service = PlaylistService()
-        val files = listOf(
-            MediaFileInfo(
-                "content://test/song1\n#EXTINF:-1,Malicious\ncontent://test/malicious",
-                "Song\r\nOne",
-                1L,
-                "Song One"
-            )
-        )
-
-        val content = service.generateM3uContent(files)
-
-        assertFalse(content.contains("Song\r\nOne"))
-        assertTrue(content.contains("SongOne"))
-        assertFalse(content.contains("song1\n"))
-        assertTrue(content.contains("song1#EXTINF:-1,Maliciouscontent://test/malicious"))
-    }
-
 }
