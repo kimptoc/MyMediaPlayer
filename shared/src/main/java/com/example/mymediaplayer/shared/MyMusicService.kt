@@ -1190,13 +1190,10 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
     @VisibleForTesting
     internal fun buildSongLetterCounts(songs: List<MediaFileInfo>): Map<String, Int> {
-        val counts = mutableMapOf<String, Int>()
-        for (song in songs) {
+        return songs.groupingBy { song ->
             val first = song.cleanTitle.firstOrNull { !it.isWhitespace() }?.uppercaseChar()
-            val key = if (first != null && first in 'A'..'Z') first.toString() else "#"
-            counts[key] = (counts[key] ?: 0) + 1
-        }
-        return counts
+            if (first != null && first in 'A'..'Z') first.toString() else "#"
+        }.eachCount()
     }
 
     private fun buildPlayAllShuffleItems(listKey: String): MutableList<MediaItem> {
