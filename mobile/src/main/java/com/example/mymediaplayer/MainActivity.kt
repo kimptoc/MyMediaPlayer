@@ -6,6 +6,8 @@ import android.content.Intent
 import android.media.AudioManager
 import android.net.Uri
 import android.os.Bundle
+import androidx.core.content.edit
+import androidx.core.net.toUri
 import android.os.Build
 import android.os.SystemClock
 import android.Manifest
@@ -207,13 +209,12 @@ class MainActivity : ComponentActivity() {
                     it,
                     Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
                 )
-                getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-                    .edit()
-                    .putString(KEY_TREE_URI, it.toString())
-                    .putInt(KEY_SCAN_LIMIT, pendingScanLimit)
-                    .putBoolean(KEY_SCAN_DEEP, pendingDeepScan)
-                    .putBoolean(KEY_SCAN_WHOLE_DRIVE, false)
-                    .apply()
+                getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit {
+                    putString(KEY_TREE_URI, it.toString())
+                    putInt(KEY_SCAN_LIMIT, pendingScanLimit)
+                    putBoolean(KEY_SCAN_DEEP, pendingDeepScan)
+                    putBoolean(KEY_SCAN_WHOLE_DRIVE, false)
+                }
                 viewModel.setTreeUri(it)
                 viewModel.onDirectorySelected(it, pendingScanLimit, deepScan = pendingDeepScan, forceRescan = true)
             }
@@ -226,10 +227,9 @@ class MainActivity : ComponentActivity() {
                     it,
                     Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
                 )
-                getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-                    .edit()
-                    .putString(KEY_PLAYLIST_TREE_URI, it.toString())
-                    .commit()
+                getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit(commit = true) {
+                    putString(KEY_PLAYLIST_TREE_URI, it.toString())
+                }
                 viewModel.setPlaylistTreeUri(it)
                 showPlaylistSaveFolderPrompt.value = false
                 Toast.makeText(this, "Playlist save folder updated", Toast.LENGTH_SHORT).show()
@@ -238,14 +238,13 @@ class MainActivity : ComponentActivity() {
 
     private val requestPostNotifications =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-                .edit()
-                .putBoolean(KEY_NOTIF_PROMPTED, true)
-                .putInt(
+            getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit(commit = true) {
+                putBoolean(KEY_NOTIF_PROMPTED, true)
+                putInt(
                     KEY_NOTIF_PROMPT_STATE,
                     if (granted) NOTIF_PROMPT_GRANTED else NOTIF_PROMPT_DENIED
                 )
-                .commit()
+            }
         }
 
     private val requestMediaReadPermission =
@@ -253,11 +252,10 @@ class MainActivity : ComponentActivity() {
             val limit = pendingWholeDriveScanLimit
             pendingWholeDriveScanLimit = null
             if (granted && limit != null) {
-                getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-                    .edit()
-                    .putInt(KEY_SCAN_LIMIT, limit)
-                    .putBoolean(KEY_SCAN_WHOLE_DRIVE, true)
-                    .apply()
+                getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit {
+                    putInt(KEY_SCAN_LIMIT, limit)
+                    putBoolean(KEY_SCAN_WHOLE_DRIVE, true)
+                }
                 viewModel.scanWholeDevice(limit, forceRescan = true)
             } else if (!granted) {
                 Toast.makeText(this, "Media permission denied", Toast.LENGTH_SHORT).show()
@@ -295,10 +293,9 @@ class MainActivity : ComponentActivity() {
                         debugCloudAnnouncements = debugCloudAnnouncements.value,
                         onSetDebugCloudAnnouncements = { enabled ->
                             debugCloudAnnouncements.value = enabled
-                            getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-                                .edit()
-                                .putBoolean(KEY_DEBUG_CLOUD_ANNOUNCEMENTS, enabled)
-                                .apply()
+                            getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit {
+                                putBoolean(KEY_DEBUG_CLOUD_ANNOUNCEMENTS, enabled)
+                            }
                             sendDebugCloudSettingToService(enabled)
                         },
                         onSaveCloudAnnouncementKeys = ::saveCloudAnnouncementKeys,
@@ -504,9 +501,9 @@ class MainActivity : ComponentActivity() {
             prefs.getInt(KEY_NOTIF_PROMPT_STATE, NOTIF_PROMPT_UNKNOWN) == NOTIF_PROMPT_UNKNOWN
         ) {
             // Migrate legacy "already prompted" flag to the new explicit prompt state.
-            prefs.edit()
-                .putInt(KEY_NOTIF_PROMPT_STATE, NOTIF_PROMPT_REQUESTED)
-                .commit()
+            prefs.edit(commit = true) {
+                putInt(KEY_NOTIF_PROMPT_STATE, NOTIF_PROMPT_REQUESTED)
+            }
         }
         val granted = ContextCompat.checkSelfPermission(
             this,
@@ -514,18 +511,18 @@ class MainActivity : ComponentActivity() {
         ) == android.content.pm.PackageManager.PERMISSION_GRANTED
         val enabled = NotificationManagerCompat.from(this).areNotificationsEnabled()
         if (granted || enabled) {
-            prefs.edit()
-                .putBoolean(KEY_NOTIF_PROMPTED, true)
-                .putInt(KEY_NOTIF_PROMPT_STATE, NOTIF_PROMPT_GRANTED)
-                .commit()
+            prefs.edit(commit = true) {
+                putBoolean(KEY_NOTIF_PROMPTED, true)
+                putInt(KEY_NOTIF_PROMPT_STATE, NOTIF_PROMPT_GRANTED)
+            }
             return
         }
         val promptState = prefs.getInt(KEY_NOTIF_PROMPT_STATE, NOTIF_PROMPT_UNKNOWN)
         if (promptState != NOTIF_PROMPT_UNKNOWN) return
-        prefs.edit()
-            .putBoolean(KEY_NOTIF_PROMPTED, true)
-            .putInt(KEY_NOTIF_PROMPT_STATE, NOTIF_PROMPT_REQUESTED)
-            .commit()
+        prefs.edit(commit = true) {
+            putBoolean(KEY_NOTIF_PROMPTED, true)
+            putInt(KEY_NOTIF_PROMPT_STATE, NOTIF_PROMPT_REQUESTED)
+        }
         requestPostNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 
@@ -596,14 +593,14 @@ class MainActivity : ComponentActivity() {
         val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         val playlistUriString = prefs.getString(KEY_PLAYLIST_TREE_URI, null)
         if (playlistUriString != null) {
-            val playlistUri = Uri.parse(playlistUriString)
+            val playlistUri = playlistUriString.toUri()
             val hasPlaylistPermission = contentResolver.persistedUriPermissions.any {
                 it.uri == playlistUri && it.isReadPermission
             }
             if (hasPlaylistPermission) {
                 viewModel.setPlaylistTreeUri(playlistUri, showMessage = false)
             } else {
-                prefs.edit().remove(KEY_PLAYLIST_TREE_URI).apply()
+                prefs.edit { remove(KEY_PLAYLIST_TREE_URI) }
             }
         }
         val limit = prefs.getInt(KEY_SCAN_LIMIT, pendingScanLimit)
@@ -617,13 +614,13 @@ class MainActivity : ComponentActivity() {
             return
         }
         val uriString = prefs.getString(KEY_TREE_URI, null) ?: return
-        val uri = Uri.parse(uriString)
+        val uri = uriString.toUri()
         val deepScan = prefs.getBoolean(KEY_SCAN_DEEP, false)
         val hasPermission = contentResolver.persistedUriPermissions.any {
             it.uri == uri && it.isReadPermission
         }
         if (!hasPermission) {
-            prefs.edit().remove(KEY_TREE_URI).apply()
+            prefs.edit { remove(KEY_TREE_URI) }
             viewModel.setFolderMessage("Folder access expired. Please select a folder again.")
             return
         }
@@ -784,11 +781,10 @@ class MainActivity : ComponentActivity() {
 
     private fun handleScanWholeDriveWithLimit(limit: Int) {
         if (hasMediaReadPermission()) {
-            getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-                .edit()
-                .putInt(KEY_SCAN_LIMIT, limit)
-                .putBoolean(KEY_SCAN_WHOLE_DRIVE, true)
-                .apply()
+            getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit {
+                putInt(KEY_SCAN_LIMIT, limit)
+                putBoolean(KEY_SCAN_WHOLE_DRIVE, true)
+            }
             viewModel.scanWholeDevice(limit, forceRescan = true)
         } else {
             pendingWholeDriveScanLimit = limit
@@ -802,10 +798,9 @@ class MainActivity : ComponentActivity() {
             return
         }
         bluetoothAutoPlayEnabled.value = !bluetoothAutoPlayEnabled.value
-        getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-            .edit()
-            .putBoolean(KEY_BT_AUTOPLAY_ENABLED, bluetoothAutoPlayEnabled.value)
-            .apply()
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit {
+            putBoolean(KEY_BT_AUTOPLAY_ENABLED, bluetoothAutoPlayEnabled.value)
+        }
         refreshBluetoothState()
         Toast.makeText(
             this,
@@ -816,10 +811,9 @@ class MainActivity : ComponentActivity() {
 
     private fun toggleTrackVoiceIntro() {
         trackVoiceIntroEnabled.value = !trackVoiceIntroEnabled.value
-        getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-            .edit()
-            .putBoolean(KEY_TRACK_VOICE_INTRO_ENABLED, trackVoiceIntroEnabled.value)
-            .apply()
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit {
+            putBoolean(KEY_TRACK_VOICE_INTRO_ENABLED, trackVoiceIntroEnabled.value)
+        }
         sendTrackVoiceIntroSettingToService()
         Toast.makeText(
             this,
@@ -830,10 +824,9 @@ class MainActivity : ComponentActivity() {
 
     private fun toggleTrackVoiceOutro() {
         trackVoiceOutroEnabled.value = !trackVoiceOutroEnabled.value
-        getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-            .edit()
-            .putBoolean(KEY_TRACK_VOICE_OUTRO_ENABLED, trackVoiceOutroEnabled.value)
-            .apply()
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit {
+            putBoolean(KEY_TRACK_VOICE_OUTRO_ENABLED, trackVoiceOutroEnabled.value)
+        }
         sendTrackVoiceOutroSettingToService()
         Toast.makeText(
             this,
@@ -922,7 +915,7 @@ class MainActivity : ComponentActivity() {
     private fun hasValidPlaylistSaveFolder(): Boolean {
         val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         val uriString = prefs.getString(KEY_PLAYLIST_TREE_URI, null) ?: return false
-        val uri = Uri.parse(uriString)
+        val uri = uriString.toUri()
         return contentResolver.persistedUriPermissions.any { perm ->
             perm.uri == uri && perm.isReadPermission
         }
@@ -1018,11 +1011,10 @@ class MainActivity : ComponentActivity() {
     private fun saveCloudAnnouncementKeys(kilo: String, tts: String, onValidated: () -> Unit) {
         cloudAnnouncementKiloKey.value = kilo
         cloudAnnouncementTtsKey.value = tts
-        ApiKeyStore.getPrefs(this)
-            ?.edit()
-            ?.putString(ApiKeyStore.KEY_KILO, kilo)
-            ?.putString(ApiKeyStore.KEY_CLOUD_TTS, tts)
-            ?.apply()
+        ApiKeyStore.getPrefs(this)?.edit {
+            putString(ApiKeyStore.KEY_KILO, kilo)
+            putString(ApiKeyStore.KEY_CLOUD_TTS, tts)
+        }
         lifecycleScope.launch {
             val (kiloResult, ttsResult) = ApiKeyStore.validateKeys(this@MainActivity)
             val kiloMsg = when (kiloResult) {
@@ -1049,10 +1041,10 @@ class MainActivity : ComponentActivity() {
             val safeName = entry.value?.replace('\n', ' ')?.replace('\t', ' ') ?: ""
             "${entry.key}\t$safeName"
         }
-        prefs.edit()
-            .putString(KEY_BT_AUTOPLAY_DEVICES, encoded)
-            .putStringSet(KEY_BT_AUTOPLAY_ADDRESSES, clean.keys)
-            .apply()
+        prefs.edit {
+            putString(KEY_BT_AUTOPLAY_DEVICES, encoded)
+            putStringSet(KEY_BT_AUTOPLAY_ADDRESSES, clean.keys)
+        }
     }
 
 }

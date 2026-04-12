@@ -139,7 +139,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     }
                 }
                 try {
+                    @Suppress("ApplySharedPref")
                     editor.putBoolean("migration_completed", true).commit()
+                    @Suppress("ApplySharedPref")
                     standardPrefs.edit().clear().commit()
                     standardPrefsFile.delete()
                 } catch (e: Exception) {
@@ -2680,7 +2682,6 @@ class MyMusicService : MediaBrowserServiceCompat() {
     }
 
     private fun ensureNotificationChannel() {
-        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.O) return
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val existing = manager.getNotificationChannel(NOW_PLAYING_CHANNEL_ID)
         if (existing != null) return

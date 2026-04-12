@@ -45,6 +45,7 @@ class BluetoothAutoPlayReceiverTest {
     }
 
     private fun createConnectedIntent(): Intent {
+        @Suppress("DEPRECATION")
         val adapter = BluetoothAdapter.getDefaultAdapter()
         val bluetoothDevice = adapter.getRemoteDevice(testAddress)
 
