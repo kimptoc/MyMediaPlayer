@@ -174,6 +174,27 @@ class NetworkQualityCheckerTest {
         assertEquals(NetworkQualityChecker.Quality.POOR, checker.check())
     }
 
+    @Test
+    fun invalidate_forcesReevaluation() = runBlocking {
+        setupNetworkForPing()
+        mockLatencyMs = 50L
+
+        // Initial check populates cache
+        assertEquals(NetworkQualityChecker.Quality.GOOD, checker.check())
+
+        // Change the network condition
+        mockLatencyMs = 250L
+
+        // Without invalidate, it should return the cached value (GOOD)
+        assertEquals(NetworkQualityChecker.Quality.GOOD, checker.check())
+
+        // Now invalidate the cache
+        checker.invalidate()
+
+        // After invalidate, it should re-evaluate and return the new value (POOR)
+        assertEquals(NetworkQualityChecker.Quality.POOR, checker.check())
+    }
+
     private fun setupNetworkForPing() {
         shadowConnectivityManager.setDefaultNetworkActive(true)
         val network = connectivityManager.activeNetwork!!
