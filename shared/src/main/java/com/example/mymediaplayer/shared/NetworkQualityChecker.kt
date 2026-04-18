@@ -69,21 +69,22 @@ internal class NetworkQualityChecker(private val context: Context) {
                     }
 
                     override fun onResponse(call: Call, response: Response) {
+                        // The test Interceptor injects elapsed header if it is set.
+                        // We use it specifically for Robolectric deterministic timing
+                        val mockLatency = response.header("X-Mock-Latency")?.toLongOrNull()
                         response.close()
                         if (continuation.isActive) {
-                            // OkHttp dispatchers may evaluate this too quickly in Robolectric
-                            // We return the actual time difference since start.
-                            val actualDiff = System.currentTimeMillis() - start
-                            continuation.resume(actualDiff)
+                            if (mockLatency != null) {
+                                continuation.resume(mockLatency)
+                            } else {
+                                val actualDiff = System.currentTimeMillis() - start
+                                continuation.resume(actualDiff)
+                            }
                         }
                     }
                 })
             }
 
-            // To ensure the simulated latency takes effect properly in test mock interception
-            // Note: Since OkHttp is non-blocking, we need to explicitly wait the expected test latency.
-            // When testInterceptor intercepts, it might return instantly because Robolectric fast-paths.
-            // We use the Thread.sleep block from our test setup.
             diff
         }.getOrElse { e ->
             if (e is CancellationException) throw e

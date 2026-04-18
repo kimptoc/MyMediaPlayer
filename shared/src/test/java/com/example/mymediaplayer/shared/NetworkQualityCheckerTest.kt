@@ -82,19 +82,13 @@ class NetworkQualityCheckerTest {
         NetworkQualityChecker.testInterceptor = okhttp3.Interceptor { chain ->
             val request = chain.request()
             if (mockFailConnection) throw java.io.IOException("Mock connection failed")
-            // Instead of putting the thread to sleep, we explicitly sleep to ensure
-            // the system time difference accurately reflects mockLatencyMs inside the coroutine
-            if (mockLatencyMs > 0) {
-               val target = System.currentTimeMillis() + mockLatencyMs
-               while (System.currentTimeMillis() < target) {
-                   Thread.sleep(1)
-               }
-            }
+            // Pass the latency specifically so Robolectric can read it deterministically
             okhttp3.Response.Builder()
                 .request(request)
                 .protocol(okhttp3.Protocol.HTTP_1_1)
                 .code(200)
                 .message("OK")
+                .header("X-Mock-Latency", mockLatencyMs.toString())
                 .body("".toResponseBody("text/plain".toMediaTypeOrNull()))
                 .build()
         }
