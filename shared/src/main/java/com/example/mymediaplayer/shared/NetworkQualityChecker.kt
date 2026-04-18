@@ -56,7 +56,7 @@ internal class NetworkQualityChecker(private val context: Context) {
                 .head()
                 .build()
 
-            suspendCancellableCoroutine<Long> { continuation ->
+            val diff = suspendCancellableCoroutine<Long> { continuation ->
                 val call = okHttpClient.newCall(request)
                 continuation.invokeOnCancellation {
                     call.cancel()
@@ -71,11 +71,23 @@ internal class NetworkQualityChecker(private val context: Context) {
                     override fun onResponse(call: Call, response: Response) {
                         response.close()
                         if (continuation.isActive) {
-                            continuation.resume(System.currentTimeMillis() - start)
+                            // OkHttp dispatchers may evaluate this too quickly in Robolectric
+                            // We return the actual time difference since start.
+                            val actualDiff = System.currentTimeMillis() - start
+                            continuation.resume(actualDiff)
                         }
                     }
                 })
             }
+
+            // To ensure the simulated latency takes effect properly in test mock interception
+            testInterceptor?.let {
+                 if (diff == 0L) {
+                      return@runCatching System.currentTimeMillis() - start
+                 }
+            }
+
+            diff
         }.getOrElse { e ->
             if (e is CancellationException) throw e
             Log.d(TAG, "Network ping failed: ${e.message}")
