@@ -169,6 +169,7 @@ class MediaCacheService {
             _cachedFilesByUri.putAll(out.associateBy { it.uriString })
             _discoveredPlaylists.clear()
             albumArtistIndexed = false
+            cachedAlbumsByLatestAddedDesc = null
         }
         onProgress?.invoke(out.size, 0)
         val durationMs = android.os.SystemClock.elapsedRealtime() - startTime
@@ -301,6 +302,7 @@ class MediaCacheService {
     private val genreIndex = mutableMapOf<String, MutableList<MediaFileInfo>>()
     private val artistIndex = mutableMapOf<String, MutableList<MediaFileInfo>>()
     private val decadeIndex = mutableMapOf<String, MutableList<MediaFileInfo>>()
+    private var cachedAlbumsByLatestAddedDesc: List<String>? = null
     private var albumArtistIndexed: Boolean = false
     private var maxFileLimit: Int = MAX_CACHE_SIZE
     private var foldersScanned: Int = 0
@@ -381,6 +383,7 @@ class MediaCacheService {
                 _cachedFiles.addAll(accepted)
                 _cachedFilesByUri.putAll(accepted.associateBy { it.uriString })
                 albumArtistIndexed = false
+                cachedAlbumsByLatestAddedDesc = null
             }
             for (result in accepted) {
                 processed += 1
@@ -470,6 +473,7 @@ class MediaCacheService {
             _discoveredPlaylists.clear()
             _discoveredPlaylists.addAll(playlists)
             albumArtistIndexed = false
+            cachedAlbumsByLatestAddedDesc = null
         }
         return PersistedCache(files, playlists, state.scannedAt)
     }
@@ -521,6 +525,7 @@ class MediaCacheService {
                 _cachedFiles.add(fileInfo)
                 _cachedFilesByUri[fileInfo.uriString] = fileInfo
                 albumArtistIndexed = false
+                cachedAlbumsByLatestAddedDesc = null
             }
         }
     }
@@ -534,6 +539,7 @@ class MediaCacheService {
             _cachedFiles.addAll(toAdd)
             _cachedFilesByUri.putAll(toAdd.associateBy { it.uriString })
             albumArtistIndexed = false
+            cachedAlbumsByLatestAddedDesc = null
         }
     }
 
@@ -781,7 +787,8 @@ class MediaCacheService {
     fun albums(): List<String> = albumIndex.keys.sorted()
 
     fun albumsByLatestAddedDesc(): List<String> {
-        return albumIndex.entries
+        cachedAlbumsByLatestAddedDesc?.let { return it }
+        val result = albumIndex.entries
             .sortedWith(
                 compareByDescending<Map.Entry<String, MutableList<MediaFileInfo>>> { entry ->
                     val latestAddedMs = entry.value.maxOfOrNull { file ->
@@ -799,6 +806,8 @@ class MediaCacheService {
                 }.thenBy { it.key.lowercase(Locale.US) }
             )
             .map { it.key }
+        cachedAlbumsByLatestAddedDesc = result
+        return result
     }
 
     fun genres(): List<String> = genreIndex.keys.sorted()
@@ -847,6 +856,7 @@ class MediaCacheService {
         genreIndex.clear()
         artistIndex.clear()
         decadeIndex.clear()
+        cachedAlbumsByLatestAddedDesc = null
         albumArtistIndexed = false
     }
 
