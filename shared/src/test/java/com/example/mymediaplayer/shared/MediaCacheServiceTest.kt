@@ -6,7 +6,9 @@ import android.provider.DocumentsContract
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -108,5 +110,31 @@ class MediaCacheServiceTest {
         assertTrue(service.isSupportedPlaylistFile("playlist.m3u", null))
         assertTrue(service.isSupportedPlaylistFile("playlist.txt", "audio/x-mpegurl"))
         assertFalse(service.isSupportedAudioFile("playlist.m3u", "audio/x-mpegurl"))
+    }
+
+    @Test
+    fun persistPlaylists_savesToDatabase() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val service = MediaCacheService()
+
+        service.addPlaylist(PlaylistInfo("content://playlist1", "My Playlist"))
+        service.addPlaylist(PlaylistInfo("content://playlist2", "Rock"))
+
+        withContext(Dispatchers.IO) {
+            service.persistPlaylists(context)
+        }
+
+        val db = MediaCacheDatabase.getInstance(context)
+        val dao = db.cacheDao()
+        val saved = withContext(Dispatchers.IO) {
+            dao.getAllPlaylists()
+        }
+
+        assertEquals(2, saved.size)
+        val sortedSaved = saved.sortedBy { it.displayName }
+        assertEquals("content://playlist1", sortedSaved[0].uriString)
+        assertEquals("My Playlist", sortedSaved[0].displayName)
+        assertEquals("content://playlist2", sortedSaved[1].uriString)
+        assertEquals("Rock", sortedSaved[1].displayName)
     }
 }
