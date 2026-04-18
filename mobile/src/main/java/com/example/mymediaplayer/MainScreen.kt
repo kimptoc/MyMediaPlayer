@@ -210,108 +210,35 @@ fun MainScreen(
 
     Scaffold(
         topBar = {
-            Surface(
-                color = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                modifier = run {
-                    val lineColor = MaterialTheme.colorScheme.tertiary
-                    Modifier.drawBehind {
-                        drawLine(
-                            color = lineColor,
-                            start = androidx.compose.ui.geometry.Offset(0f, size.height),
-                            end = androidx.compose.ui.geometry.Offset(size.width, size.height),
-                            strokeWidth = 3.dp.toPx()
-                        )
-                    }
-                }
-            ) {
-                Column {
-                    TopAppBar(
-                        title = {
-                            if (isSearchExpanded) {
-                                TextField(
-                                    value = uiState.search.searchQuery,
-                                    onValueChange = onSearchQueryChanged,
-                                    placeholder = { Text("Search title, artist, album, genre", color = MaterialTheme.colorScheme.onSurfaceVariant) },
-                                    singleLine = true,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    colors = TextFieldDefaults.colors(
-                                        focusedIndicatorColor = MaterialTheme.colorScheme.primary,
-                                        unfocusedIndicatorColor = MaterialTheme.colorScheme.outline,
-                                        cursorColor = MaterialTheme.colorScheme.primary,
-                                        focusedContainerColor = MaterialTheme.colorScheme.surface,
-                                        unfocusedContainerColor = MaterialTheme.colorScheme.surface
-                                    )
-                                )
-                            } else {
-                                Text("MyMediaPlayer")
-                            }
-                        },
-                        navigationIcon = {
-                            if (isSearchExpanded) {
-                                TextButton(onClick = {
-                                    isSearchExpanded = false
-                                    onClearSearch()
-                                }) { Text("Back") }
-                            }
-                        },
-                        actions = {
-                            if (!isSearchExpanded) {
-                                TextButton(onClick = { isSearchExpanded = true }) { Text("Search") }
-                                TextButton(onClick = { menuExpanded = true }) {
-                                    Text("Menu")
-                                }
-                                DropdownMenu(
-                                    expanded = menuExpanded,
-                                    onDismissRequest = { menuExpanded = false }
-                                ) {
-                                    DropdownMenuItem(
-                                        text = { Text("Select Folder") },
-                                        onClick = {
-                                            menuExpanded = false
-                                            scanCountText = uiState.scan.lastScanLimit.toString()
-                                            scanDeepMode = uiState.scan.deepScanEnabled
-                                            showScanDialog = true
-                                        }
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("Create Random Playlist") },
-                                        onClick = {
-                                            menuExpanded = false
-                                            playlistCountText = uiState.playlist.lastPlaylistCount.toString()
-                                            showPlaylistDialog = true
-                                        },
-                                        enabled = uiState.scan.scannedFiles.isNotEmpty()
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("Settings") },
-                                        onClick = {
-                                            menuExpanded = false
-                                            onOpenSettings()
-                                        }
-                                    )
-                                }
-                            } else if (uiState.search.searchQuery.isNotEmpty()) {
-                                TextButton(onClick = onClearSearch) { Text("Clear") }
-                            }
-                        }
-                    )
-                    Box(
-                        modifier = run {
-                            val boxColor = MaterialTheme.colorScheme.primary
-                            Modifier
-                                .fillMaxWidth()
-                                .height(2.dp)
-                                .drawBehind {
-                                    drawRoundRect(
-                                        color = boxColor,
-                                        cornerRadius = CornerRadius(2.dp.toPx())
-                                    )
-                                }
-                        }
-                    )
-                }
-            }
+            MainTopBar(
+                isSearchExpanded = isSearchExpanded,
+                searchQuery = uiState.search.searchQuery,
+                onSearchQueryChanged = onSearchQueryChanged,
+                onClearSearch = onClearSearch,
+                onBackFromSearch = {
+                    isSearchExpanded = false
+                    onClearSearch()
+                },
+                onExpandSearch = { isSearchExpanded = true },
+                menuExpanded = menuExpanded,
+                onMenuExpandedChange = { menuExpanded = it },
+                onSelectFolderClick = {
+                    menuExpanded = false
+                    scanCountText = uiState.scan.lastScanLimit.toString()
+                    scanDeepMode = uiState.scan.deepScanEnabled
+                    showScanDialog = true
+                },
+                onCreateRandomPlaylistClick = {
+                    menuExpanded = false
+                    playlistCountText = uiState.playlist.lastPlaylistCount.toString()
+                    showPlaylistDialog = true
+                },
+                onOpenSettingsClick = {
+                    menuExpanded = false
+                    onOpenSettings()
+                },
+                hasScannedFiles = uiState.scan.scannedFiles.isNotEmpty()
+            )
         },
         bottomBar = {
             if (uiState.playback.currentTrackName != null) {
@@ -2591,4 +2518,109 @@ private fun SongsTabContent(
         onToggleFavorite = onToggleFavorite,
         currentMediaId = currentMediaId
     )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MainTopBar(
+    isSearchExpanded: Boolean,
+    searchQuery: String,
+    onSearchQueryChanged: (String) -> Unit,
+    onClearSearch: () -> Unit,
+    onBackFromSearch: () -> Unit,
+    onExpandSearch: () -> Unit,
+    menuExpanded: Boolean,
+    onMenuExpandedChange: (Boolean) -> Unit,
+    onSelectFolderClick: () -> Unit,
+    onCreateRandomPlaylistClick: () -> Unit,
+    onOpenSettingsClick: () -> Unit,
+    hasScannedFiles: Boolean
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.primary,
+        contentColor = MaterialTheme.colorScheme.onPrimary,
+        modifier = run {
+            val lineColor = MaterialTheme.colorScheme.tertiary
+            Modifier.drawBehind {
+                drawLine(
+                    color = lineColor,
+                    start = androidx.compose.ui.geometry.Offset(0f, size.height),
+                    end = androidx.compose.ui.geometry.Offset(size.width, size.height),
+                    strokeWidth = 3.dp.toPx()
+                )
+            }
+        }
+    ) {
+        Column {
+            TopAppBar(
+                title = {
+                    if (isSearchExpanded) {
+                        TextField(
+                            value = searchQuery,
+                            onValueChange = onSearchQueryChanged,
+                            placeholder = { Text("Search title, artist, album, genre", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = TextFieldDefaults.colors(
+                                focusedIndicatorColor = MaterialTheme.colorScheme.primary,
+                                unfocusedIndicatorColor = MaterialTheme.colorScheme.outline,
+                                cursorColor = MaterialTheme.colorScheme.primary,
+                                focusedContainerColor = MaterialTheme.colorScheme.surface,
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                            )
+                        )
+                    } else {
+                        Text("MyMediaPlayer")
+                    }
+                },
+                navigationIcon = {
+                    if (isSearchExpanded) {
+                        TextButton(onClick = onBackFromSearch) { Text("Back") }
+                    }
+                },
+                actions = {
+                    if (!isSearchExpanded) {
+                        TextButton(onClick = onExpandSearch) { Text("Search") }
+                        TextButton(onClick = { onMenuExpandedChange(true) }) {
+                            Text("Menu")
+                        }
+                        DropdownMenu(
+                            expanded = menuExpanded,
+                            onDismissRequest = { onMenuExpandedChange(false) }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Select Folder") },
+                                onClick = onSelectFolderClick
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Create Random Playlist") },
+                                onClick = onCreateRandomPlaylistClick,
+                                enabled = hasScannedFiles
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Settings") },
+                                onClick = onOpenSettingsClick
+                            )
+                        }
+                    } else if (searchQuery.isNotEmpty()) {
+                        TextButton(onClick = onClearSearch) { Text("Clear") }
+                    }
+                }
+            )
+            Box(
+                modifier = run {
+                    val boxColor = MaterialTheme.colorScheme.primary
+                    Modifier
+                        .fillMaxWidth()
+                        .height(2.dp)
+                        .drawBehind {
+                            drawRoundRect(
+                                color = boxColor,
+                                cornerRadius = CornerRadius(2.dp.toPx())
+                            )
+                        }
+                }
+            )
+        }
+    }
 }
