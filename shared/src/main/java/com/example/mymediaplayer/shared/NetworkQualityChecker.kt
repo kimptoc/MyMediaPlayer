@@ -81,12 +81,9 @@ internal class NetworkQualityChecker(private val context: Context) {
             }
 
             // To ensure the simulated latency takes effect properly in test mock interception
-            testInterceptor?.let {
-                 if (diff == 0L) {
-                      return@runCatching System.currentTimeMillis() - start
-                 }
-            }
-
+            // Note: Since OkHttp is non-blocking, we need to explicitly wait the expected test latency.
+            // When testInterceptor intercepts, it might return instantly because Robolectric fast-paths.
+            // We use the Thread.sleep block from our test setup.
             diff
         }.getOrElse { e ->
             if (e is CancellationException) throw e

@@ -82,10 +82,13 @@ class NetworkQualityCheckerTest {
         NetworkQualityChecker.testInterceptor = okhttp3.Interceptor { chain ->
             val request = chain.request()
             if (mockFailConnection) throw java.io.IOException("Mock connection failed")
-            // Instead of putting the thread to sleep, we just artificially inject
-            // a delay in the mock response if the test relies on System.currentTimeMillis() difference.
+            // Instead of putting the thread to sleep, we explicitly sleep to ensure
+            // the system time difference accurately reflects mockLatencyMs inside the coroutine
             if (mockLatencyMs > 0) {
-               Thread.sleep(mockLatencyMs)
+               val target = System.currentTimeMillis() + mockLatencyMs
+               while (System.currentTimeMillis() < target) {
+                   Thread.sleep(1)
+               }
             }
             okhttp3.Response.Builder()
                 .request(request)
