@@ -109,4 +109,19 @@ class MediaCacheServiceTest {
         assertTrue(service.isSupportedPlaylistFile("playlist.txt", "audio/x-mpegurl"))
         assertFalse(service.isSupportedAudioFile("playlist.m3u", "audio/x-mpegurl"))
     }
+
+    @Test
+    fun getFileIndexByUri_returnsPopulatedMap() {
+        val service = MediaCacheService()
+        val file1 = MediaFileInfo(uriString = "uri1", displayName = "file1", sizeBytes = 100L)
+        val file2 = MediaFileInfo(uriString = "uri2", displayName = "file2", sizeBytes = 200L)
+
+        service.addFile(file1)
+        service.addFile(file2)
+
+        val index = service.getFileIndexByUri()
+        assertEquals(2, index.size)
+        assertEquals(file1, index["uri1"])
+        assertEquals(file2, index["uri2"])
+    }
 }
