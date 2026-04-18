@@ -487,6 +487,7 @@ fun MainScreen(
                         isPlayingPlaylist = uiState.playback.isPlayingPlaylist,
                         hasNext = uiState.playback.hasNext,
                         hasPrev = uiState.playback.hasPrev,
+
                         onPlaySongs = onPlaySongs,
                         onShuffleSongs = onShuffleSongs,
                         onStop = onStop,
@@ -551,7 +552,6 @@ fun MainScreen(
                         onSavePlaylistEdits = onSavePlaylistEdits,
                         onPlayPlaylist = onPlayPlaylist,
                         onShufflePlaylistSongs = onShufflePlaylistSongs,
-                        onPlaySongs = onPlaySongs,
                         onStop = onStop,
                         onNext = onNext,
                         onPrev = onPrev,
@@ -1716,9 +1716,35 @@ private fun SongsListSection(
 }
 
 @Composable
-private fun PlaylistsSection(
+private fun PlaylistListSection(
     playlists: List<PlaylistInfo>,
-    selectedPlaylist: PlaylistInfo?,
+    onRequestRenamePlaylist: (PlaylistInfo) -> Unit,
+    onRequestDeletePlaylist: (PlaylistInfo) -> Unit,
+    onPlaylistSelected: (PlaylistInfo) -> Unit
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        LazyColumn(modifier = Modifier.padding(8.dp)) {
+            items(playlists) { playlist ->
+                val isSmart = playlist.uriString.startsWith(MainViewModel.SMART_PREFIX)
+                PlaylistCard(
+                    playlist = playlist,
+                    isCompact = false,
+                    isSmart = isSmart,
+                    onRename = { if (!isSmart) onRequestRenamePlaylist(playlist) },
+                    onDelete = { if (!isSmart) onRequestDeletePlaylist(playlist) },
+                    onClick = { onPlaylistSelected(playlist) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SelectedPlaylistDetailsSection(
+    selectedPlaylist: PlaylistInfo,
     playlistSongs: List<MediaFileInfo>,
     isLoading: Boolean,
     isPlaying: Boolean,
@@ -1726,14 +1752,10 @@ private fun PlaylistsSection(
     queueTitle: String?,
     hasNext: Boolean,
     hasPrev: Boolean,
-    onPlaylistSelected: (PlaylistInfo) -> Unit,
     onClearPlaylistSelection: () -> Unit,
-    onRequestDeletePlaylist: (PlaylistInfo) -> Unit,
-    onRequestRenamePlaylist: (PlaylistInfo) -> Unit,
     onSavePlaylistEdits: (PlaylistInfo, List<MediaFileInfo>) -> Unit,
     onPlayPlaylist: (PlaylistInfo) -> Unit,
     onShufflePlaylistSongs: (PlaylistInfo, List<MediaFileInfo>) -> Unit,
-    onPlaySongs: (List<MediaFileInfo>) -> Unit,
     onStop: () -> Unit,
     onNext: () -> Unit,
     onPrev: () -> Unit,
@@ -1743,16 +1765,17 @@ private fun PlaylistsSection(
     onToggleFavorite: (MediaFileInfo) -> Unit,
     currentMediaId: String?
 ) {
-    var isEditing by remember(selectedPlaylist?.uriString) { mutableStateOf(false) }
-    var editableSongs by remember(selectedPlaylist?.uriString) { mutableStateOf<List<MediaFileInfo>>(emptyList()) }
-    var draggingIndex by remember(selectedPlaylist?.uriString) { mutableStateOf<Int?>(null) }
-    var draggingOffsetY by remember(selectedPlaylist?.uriString) { mutableFloatStateOf(0f) }
-    var dedupeOnSave by remember(selectedPlaylist?.uriString) { mutableStateOf(false) }
-    var editSearchQuery by remember(selectedPlaylist?.uriString) { mutableStateOf("") }
-    var showDiscardChangesDialog by remember(selectedPlaylist?.uriString) { mutableStateOf(false) }
-    var pendingClearSelection by remember(selectedPlaylist?.uriString) { mutableStateOf(false) }
+    var isEditing by remember(selectedPlaylist.uriString) { mutableStateOf(false) }
+    var editableSongs by remember(selectedPlaylist.uriString) { mutableStateOf<List<MediaFileInfo>>(emptyList()) }
+    var draggingIndex by remember(selectedPlaylist.uriString) { mutableStateOf<Int?>(null) }
+    var draggingOffsetY by remember(selectedPlaylist.uriString) { mutableFloatStateOf(0f) }
+    var dedupeOnSave by remember(selectedPlaylist.uriString) { mutableStateOf(false) }
+    var editSearchQuery by remember(selectedPlaylist.uriString) { mutableStateOf("") }
+    var showDiscardChangesDialog by remember(selectedPlaylist.uriString) { mutableStateOf(false) }
+    var pendingClearSelection by remember(selectedPlaylist.uriString) { mutableStateOf(false) }
     val dragSwapThresholdPx = with(androidx.compose.ui.platform.LocalDensity.current) { 56.dp.toPx() }
-    LaunchedEffect(selectedPlaylist?.uriString, playlistSongs, isEditing) {
+
+    LaunchedEffect(selectedPlaylist.uriString, playlistSongs, isEditing) {
         if (!isEditing) {
             editableSongs = playlistSongs
             dedupeOnSave = false
@@ -1761,37 +1784,12 @@ private fun PlaylistsSection(
     }
     val hasUnsavedChanges = isEditing && (editableSongs != playlistSongs || dedupeOnSave)
 
-    if (playlists.isEmpty()) {
-        Text("No playlists found")
-        return
-    }
-
-    if (selectedPlaylist == null) {
-        Surface(
-            color = MaterialTheme.colorScheme.secondaryContainer,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            LazyColumn(modifier = Modifier.padding(8.dp)) {
-                items(playlists) { playlist ->
-                    val isSmart = playlist.uriString.startsWith(MainViewModel.SMART_PREFIX)
-                    PlaylistCard(
-                        playlist = playlist,
-                        isCompact = false,
-                        isSmart = isSmart,
-                        onRename = { if (!isSmart) onRequestRenamePlaylist(playlist) },
-                        onDelete = { if (!isSmart) onRequestDeletePlaylist(playlist) },
-                        onClick = { onPlaylistSelected(playlist) }
-                    )
-                }
-            }
-        }
-    } else {
-        Surface(
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.padding(12.dp)) {
-                TextButton(
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            TextButton(
                 onClick = {
                     if (hasUnsavedChanges) {
                         pendingClearSelection = true
@@ -2024,7 +2022,6 @@ private fun PlaylistsSection(
                 }
             }
         }
-        }
     }
 
     if (showDiscardChangesDialog) {
@@ -2058,6 +2055,71 @@ private fun PlaylistsSection(
                     Text("Keep editing")
                 }
             }
+        )
+    }
+}
+
+@Composable
+private fun PlaylistsSection(
+    playlists: List<PlaylistInfo>,
+    selectedPlaylist: PlaylistInfo?,
+    playlistSongs: List<MediaFileInfo>,
+    isLoading: Boolean,
+    isPlaying: Boolean,
+    isPlayingPlaylist: Boolean,
+    queueTitle: String?,
+    hasNext: Boolean,
+    hasPrev: Boolean,
+    onPlaylistSelected: (PlaylistInfo) -> Unit,
+    onClearPlaylistSelection: () -> Unit,
+    onRequestDeletePlaylist: (PlaylistInfo) -> Unit,
+    onRequestRenamePlaylist: (PlaylistInfo) -> Unit,
+    onSavePlaylistEdits: (PlaylistInfo, List<MediaFileInfo>) -> Unit,
+    onPlayPlaylist: (PlaylistInfo) -> Unit,
+    onShufflePlaylistSongs: (PlaylistInfo, List<MediaFileInfo>) -> Unit,
+    onStop: () -> Unit,
+    onNext: () -> Unit,
+    onPrev: () -> Unit,
+    onFileClick: (MediaFileInfo) -> Unit,
+    onAddToPlaylist: (MediaFileInfo) -> Unit,
+    favoriteUris: Set<String>,
+    onToggleFavorite: (MediaFileInfo) -> Unit,
+    currentMediaId: String?
+) {
+    if (playlists.isEmpty()) {
+        Text("No playlists found")
+        return
+    }
+
+    if (selectedPlaylist == null) {
+        PlaylistListSection(
+            playlists = playlists,
+            onRequestRenamePlaylist = onRequestRenamePlaylist,
+            onRequestDeletePlaylist = onRequestDeletePlaylist,
+            onPlaylistSelected = onPlaylistSelected
+        )
+    } else {
+        SelectedPlaylistDetailsSection(
+            selectedPlaylist = selectedPlaylist,
+            playlistSongs = playlistSongs,
+            isLoading = isLoading,
+            isPlaying = isPlaying,
+            isPlayingPlaylist = isPlayingPlaylist,
+            queueTitle = queueTitle,
+            hasNext = hasNext,
+            hasPrev = hasPrev,
+            onClearPlaylistSelection = onClearPlaylistSelection,
+            onSavePlaylistEdits = onSavePlaylistEdits,
+            onPlayPlaylist = onPlayPlaylist,
+            onShufflePlaylistSongs = onShufflePlaylistSongs,
+            onStop = onStop,
+            onNext = onNext,
+            onPrev = onPrev,
+            onFileClick = onFileClick,
+            onAddToPlaylist = onAddToPlaylist,
+            favoriteUris = favoriteUris,
+            onToggleFavorite = onToggleFavorite,
+            currentMediaId = currentMediaId
         )
     }
 }
