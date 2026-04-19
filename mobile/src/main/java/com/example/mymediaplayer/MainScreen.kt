@@ -2288,74 +2288,16 @@ private fun ExpandedNowPlayingDialog(
         containerColor = MaterialTheme.colorScheme.surfaceVariant,
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (artwork != null) {
-                    Image(
-                        bitmap = artwork.asImageBitmap(),
-                        contentDescription = "Album art",
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(220.dp)
-                    )
-                }
-                Text(trackName, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                if (!artistName.isNullOrBlank()) {
-                    Text(artistName, style = MaterialTheme.typography.bodySmall)
-                }
-                val details = listOfNotNull(
-                    album?.takeIf { it.isNotBlank() },
-                    genre?.takeIf { it.isNotBlank() },
-                    if (year > 0L) year.toString() else null
-                ).joinToString(" • ")
-                if (details.isNotEmpty()) {
-                    Text(details, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                if (durationSafe > 0L) {
-                    Slider(
-                        value = seekValueMs.coerceIn(0f, durationSafe.toFloat()),
-                        onValueChange = {
-                            isSeeking = true
-                            seekValueMs = it
-                        },
-                        valueRange = 0f..durationSafe.toFloat(),
-                        onValueChangeFinished = {
-                            isSeeking = false
-                            onSeekTo(seekValueMs.toLong())
-                        },
-                        colors = SliderDefaults.colors(
-                            thumbColor = MaterialTheme.colorScheme.primary,
-                            activeTrackColor = MaterialTheme.colorScheme.primary,
-                            inactiveTrackColor = MaterialTheme.colorScheme.outline
-                        )
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            formatPlaybackDuration(seekValueMs.toLong()),
-                            style = MaterialTheme.typography.labelSmall
-                        )
-                        Text(
-                            formatPlaybackDuration(durationSafe),
-                            style = MaterialTheme.typography.labelSmall
-                        )
-                    }
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (isPlayingPlaylist) {
-                        TextButton(onClick = onPrev, enabled = hasPrev) { Text("Prev") }
-                    }
-                    TextButton(onClick = onPlayPause) { Text(if (isPlaying) "Pause" else "Play") }
-                    if (isPlayingPlaylist) {
-                        TextButton(onClick = onNext, enabled = hasNext) { Text("Next") }
-                    }
-                    TextButton(onClick = onToggleFlag) {
-                        Text(
-                            if (isFlagged) "Unflag" else "Flag",
-                            color = if (isFlagged) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
+                NowPlayingArtwork(artwork)
+                NowPlayingTrackInfo(trackName, artistName, album, genre, year)
+                NowPlayingSlider(
+                    durationSafe = durationSafe,
+                    seekValueMs = seekValueMs,
+                    onSeekValueChange = { seekValueMs = it },
+                    onIsSeekingChange = { isSeeking = it },
+                    onSeekTo = onSeekTo
+                )
+                NowPlayingControls(isPlaying, hasPrev, hasNext, isPlayingPlaylist, isFlagged, onPlayPause, onPrev, onNext, onToggleFlag)
             }
         },
         confirmButton = {
@@ -2364,6 +2306,111 @@ private fun ExpandedNowPlayingDialog(
     )
 }
 
+@Composable
+private fun NowPlayingArtwork(artwork: android.graphics.Bitmap?) {
+    if (artwork != null) {
+        Image(
+            bitmap = artwork.asImageBitmap(),
+            contentDescription = "Album art",
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(220.dp)
+        )
+    }
+}
+
+@Composable
+private fun NowPlayingTrackInfo(
+    trackName: String,
+    artistName: String?,
+    album: String?,
+    genre: String?,
+    year: Long
+) {
+    Text(trackName, maxLines = 2, overflow = TextOverflow.Ellipsis)
+    if (!artistName.isNullOrBlank()) {
+        Text(artistName, style = MaterialTheme.typography.bodySmall)
+    }
+    val details = listOfNotNull(
+        album?.takeIf { it.isNotBlank() },
+        genre?.takeIf { it.isNotBlank() },
+        if (year > 0L) year.toString() else null
+    ).joinToString(" • ")
+    if (details.isNotEmpty()) {
+        Text(details, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun NowPlayingSlider(
+    durationSafe: Long,
+    seekValueMs: Float,
+    onSeekValueChange: (Float) -> Unit,
+    onIsSeekingChange: (Boolean) -> Unit,
+    onSeekTo: (Long) -> Unit
+) {
+    if (durationSafe > 0L) {
+        Slider(
+            value = seekValueMs.coerceIn(0f, durationSafe.toFloat()),
+            onValueChange = {
+                onIsSeekingChange(true)
+                onSeekValueChange(it)
+            },
+            valueRange = 0f..durationSafe.toFloat(),
+            onValueChangeFinished = {
+                onIsSeekingChange(false)
+                onSeekTo(seekValueMs.toLong())
+            },
+            colors = SliderDefaults.colors(
+                thumbColor = MaterialTheme.colorScheme.primary,
+                activeTrackColor = MaterialTheme.colorScheme.primary,
+                inactiveTrackColor = MaterialTheme.colorScheme.outline
+            )
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                formatPlaybackDuration(seekValueMs.toLong()),
+                style = MaterialTheme.typography.labelSmall
+            )
+            Text(
+                formatPlaybackDuration(durationSafe),
+                style = MaterialTheme.typography.labelSmall
+            )
+        }
+    }
+}
+
+@Composable
+private fun NowPlayingControls(
+    isPlaying: Boolean,
+    hasPrev: Boolean,
+    hasNext: Boolean,
+    isPlayingPlaylist: Boolean,
+    isFlagged: Boolean,
+    onPlayPause: () -> Unit,
+    onPrev: () -> Unit,
+    onNext: () -> Unit,
+    onToggleFlag: () -> Unit
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (isPlayingPlaylist) {
+            TextButton(onClick = onPrev, enabled = hasPrev) { Text("Prev") }
+        }
+        TextButton(onClick = onPlayPause) { Text(if (isPlaying) "Pause" else "Play") }
+        if (isPlayingPlaylist) {
+            TextButton(onClick = onNext, enabled = hasNext) { Text("Next") }
+        }
+        TextButton(onClick = onToggleFlag) {
+            Text(
+                if (isFlagged) "Unflag" else "Flag",
+                color = if (isFlagged) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+            )
+        }
+    }
+}
 private fun formatPlaybackDuration(durationMs: Long): String {
     val totalSeconds = (durationMs / 1000L).coerceAtLeast(0L)
     val minutes = totalSeconds / 60L
