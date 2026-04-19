@@ -58,4 +58,56 @@ class AnnouncementPreGeneratorTest {
 
         assertNull(result)
     }
+
+    @Test
+    fun cancelAll_cancelsIncompleteDeferreds() = runTest {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val preGen = AnnouncementPreGenerator(context, TestScope(this.testScheduler))
+
+        val cacheField = AnnouncementPreGenerator::class.java.getDeclaredField("cache")
+        cacheField.isAccessible = true
+        @Suppress("UNCHECKED_CAST")
+        val cache = cacheField.get(preGen) as ConcurrentHashMap<Any, Deferred<File?>>
+
+        val cacheKeyClass = Class.forName("com.example.mymediaplayer.shared.AnnouncementPreGenerator\$CacheKey")
+        val constructor = cacheKeyClass.getDeclaredConstructor(String::class.java, Boolean::class.java)
+        constructor.isAccessible = true
+        val key = constructor.newInstance("test_uri", true)
+
+        val deferred = CompletableDeferred<File?>()
+        cache[key] = deferred
+
+        preGen.cancelAll()
+
+        org.junit.Assert.assertTrue(cache.isEmpty())
+        org.junit.Assert.assertTrue(deferred.isCancelled)
+    }
+
+    @Test
+    fun cancelAll_deletesCompletedFiles() = runTest {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val preGen = AnnouncementPreGenerator(context, TestScope(this.testScheduler))
+
+        val cacheField = AnnouncementPreGenerator::class.java.getDeclaredField("cache")
+        cacheField.isAccessible = true
+        @Suppress("UNCHECKED_CAST")
+        val cache = cacheField.get(preGen) as ConcurrentHashMap<Any, Deferred<File?>>
+
+        val cacheKeyClass = Class.forName("com.example.mymediaplayer.shared.AnnouncementPreGenerator\$CacheKey")
+        val constructor = cacheKeyClass.getDeclaredConstructor(String::class.java, Boolean::class.java)
+        constructor.isAccessible = true
+        val key = constructor.newInstance("test_uri2", true)
+
+        val file = File.createTempFile("test", ".mp3").apply { setReadable(false, false); setWritable(false, false); setExecutable(false, false); setReadable(true, true); setWritable(true, true); }
+        org.junit.Assert.assertTrue(file.exists())
+
+        val deferred = CompletableDeferred<File?>()
+        deferred.complete(file)
+        cache[key] = deferred
+
+        preGen.cancelAll()
+
+        org.junit.Assert.assertTrue(cache.isEmpty())
+        org.junit.Assert.assertFalse(file.exists())
+    }
 }
