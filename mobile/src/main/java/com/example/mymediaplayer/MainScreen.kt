@@ -210,108 +210,35 @@ fun MainScreen(
 
     Scaffold(
         topBar = {
-            Surface(
-                color = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                modifier = run {
-                    val lineColor = MaterialTheme.colorScheme.tertiary
-                    Modifier.drawBehind {
-                        drawLine(
-                            color = lineColor,
-                            start = androidx.compose.ui.geometry.Offset(0f, size.height),
-                            end = androidx.compose.ui.geometry.Offset(size.width, size.height),
-                            strokeWidth = 3.dp.toPx()
-                        )
-                    }
-                }
-            ) {
-                Column {
-                    TopAppBar(
-                        title = {
-                            if (isSearchExpanded) {
-                                TextField(
-                                    value = uiState.search.searchQuery,
-                                    onValueChange = onSearchQueryChanged,
-                                    placeholder = { Text("Search title, artist, album, genre", color = MaterialTheme.colorScheme.onSurfaceVariant) },
-                                    singleLine = true,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    colors = TextFieldDefaults.colors(
-                                        focusedIndicatorColor = MaterialTheme.colorScheme.primary,
-                                        unfocusedIndicatorColor = MaterialTheme.colorScheme.outline,
-                                        cursorColor = MaterialTheme.colorScheme.primary,
-                                        focusedContainerColor = MaterialTheme.colorScheme.surface,
-                                        unfocusedContainerColor = MaterialTheme.colorScheme.surface
-                                    )
-                                )
-                            } else {
-                                Text("MyMediaPlayer")
-                            }
-                        },
-                        navigationIcon = {
-                            if (isSearchExpanded) {
-                                TextButton(onClick = {
-                                    isSearchExpanded = false
-                                    onClearSearch()
-                                }) { Text("Back") }
-                            }
-                        },
-                        actions = {
-                            if (!isSearchExpanded) {
-                                TextButton(onClick = { isSearchExpanded = true }) { Text("Search") }
-                                TextButton(onClick = { menuExpanded = true }) {
-                                    Text("Menu")
-                                }
-                                DropdownMenu(
-                                    expanded = menuExpanded,
-                                    onDismissRequest = { menuExpanded = false }
-                                ) {
-                                    DropdownMenuItem(
-                                        text = { Text("Select Folder") },
-                                        onClick = {
-                                            menuExpanded = false
-                                            scanCountText = uiState.scan.lastScanLimit.toString()
-                                            scanDeepMode = uiState.scan.deepScanEnabled
-                                            showScanDialog = true
-                                        }
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("Create Random Playlist") },
-                                        onClick = {
-                                            menuExpanded = false
-                                            playlistCountText = uiState.playlist.lastPlaylistCount.toString()
-                                            showPlaylistDialog = true
-                                        },
-                                        enabled = uiState.scan.scannedFiles.isNotEmpty()
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("Settings") },
-                                        onClick = {
-                                            menuExpanded = false
-                                            onOpenSettings()
-                                        }
-                                    )
-                                }
-                            } else if (uiState.search.searchQuery.isNotEmpty()) {
-                                TextButton(onClick = onClearSearch) { Text("Clear") }
-                            }
-                        }
-                    )
-                    Box(
-                        modifier = run {
-                            val boxColor = MaterialTheme.colorScheme.primary
-                            Modifier
-                                .fillMaxWidth()
-                                .height(2.dp)
-                                .drawBehind {
-                                    drawRoundRect(
-                                        color = boxColor,
-                                        cornerRadius = CornerRadius(2.dp.toPx())
-                                    )
-                                }
-                        }
-                    )
-                }
-            }
+            MainTopBar(
+                isSearchExpanded = isSearchExpanded,
+                searchQuery = uiState.search.searchQuery,
+                onSearchQueryChanged = onSearchQueryChanged,
+                onClearSearch = onClearSearch,
+                onBackFromSearch = {
+                    isSearchExpanded = false
+                    onClearSearch()
+                },
+                onExpandSearch = { isSearchExpanded = true },
+                menuExpanded = menuExpanded,
+                onMenuExpandedChange = { menuExpanded = it },
+                onSelectFolderClick = {
+                    menuExpanded = false
+                    scanCountText = uiState.scan.lastScanLimit.toString()
+                    scanDeepMode = uiState.scan.deepScanEnabled
+                    showScanDialog = true
+                },
+                onCreateRandomPlaylistClick = {
+                    menuExpanded = false
+                    playlistCountText = uiState.playlist.lastPlaylistCount.toString()
+                    showPlaylistDialog = true
+                },
+                onOpenSettingsClick = {
+                    menuExpanded = false
+                    onOpenSettings()
+                },
+                hasScannedFiles = uiState.scan.scannedFiles.isNotEmpty()
+            )
         },
         bottomBar = {
             if (uiState.playback.currentTrackName != null) {
@@ -487,6 +414,7 @@ fun MainScreen(
                         isPlayingPlaylist = uiState.playback.isPlayingPlaylist,
                         hasNext = uiState.playback.hasNext,
                         hasPrev = uiState.playback.hasPrev,
+
                         onPlaySongs = onPlaySongs,
                         onShuffleSongs = onShuffleSongs,
                         onStop = onStop,
@@ -551,7 +479,6 @@ fun MainScreen(
                         onSavePlaylistEdits = onSavePlaylistEdits,
                         onPlayPlaylist = onPlayPlaylist,
                         onShufflePlaylistSongs = onShufflePlaylistSongs,
-                        onPlaySongs = onPlaySongs,
                         onStop = onStop,
                         onNext = onNext,
                         onPrev = onPrev,
@@ -1716,9 +1643,35 @@ private fun SongsListSection(
 }
 
 @Composable
-private fun PlaylistsSection(
+private fun PlaylistListSection(
     playlists: List<PlaylistInfo>,
-    selectedPlaylist: PlaylistInfo?,
+    onRequestRenamePlaylist: (PlaylistInfo) -> Unit,
+    onRequestDeletePlaylist: (PlaylistInfo) -> Unit,
+    onPlaylistSelected: (PlaylistInfo) -> Unit
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        LazyColumn(modifier = Modifier.padding(8.dp)) {
+            items(playlists) { playlist ->
+                val isSmart = playlist.uriString.startsWith(MainViewModel.SMART_PREFIX)
+                PlaylistCard(
+                    playlist = playlist,
+                    isCompact = false,
+                    isSmart = isSmart,
+                    onRename = { if (!isSmart) onRequestRenamePlaylist(playlist) },
+                    onDelete = { if (!isSmart) onRequestDeletePlaylist(playlist) },
+                    onClick = { onPlaylistSelected(playlist) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SelectedPlaylistDetailsSection(
+    selectedPlaylist: PlaylistInfo,
     playlistSongs: List<MediaFileInfo>,
     isLoading: Boolean,
     isPlaying: Boolean,
@@ -1726,14 +1679,10 @@ private fun PlaylistsSection(
     queueTitle: String?,
     hasNext: Boolean,
     hasPrev: Boolean,
-    onPlaylistSelected: (PlaylistInfo) -> Unit,
     onClearPlaylistSelection: () -> Unit,
-    onRequestDeletePlaylist: (PlaylistInfo) -> Unit,
-    onRequestRenamePlaylist: (PlaylistInfo) -> Unit,
     onSavePlaylistEdits: (PlaylistInfo, List<MediaFileInfo>) -> Unit,
     onPlayPlaylist: (PlaylistInfo) -> Unit,
     onShufflePlaylistSongs: (PlaylistInfo, List<MediaFileInfo>) -> Unit,
-    onPlaySongs: (List<MediaFileInfo>) -> Unit,
     onStop: () -> Unit,
     onNext: () -> Unit,
     onPrev: () -> Unit,
@@ -1743,16 +1692,17 @@ private fun PlaylistsSection(
     onToggleFavorite: (MediaFileInfo) -> Unit,
     currentMediaId: String?
 ) {
-    var isEditing by remember(selectedPlaylist?.uriString) { mutableStateOf(false) }
-    var editableSongs by remember(selectedPlaylist?.uriString) { mutableStateOf<List<MediaFileInfo>>(emptyList()) }
-    var draggingIndex by remember(selectedPlaylist?.uriString) { mutableStateOf<Int?>(null) }
-    var draggingOffsetY by remember(selectedPlaylist?.uriString) { mutableFloatStateOf(0f) }
-    var dedupeOnSave by remember(selectedPlaylist?.uriString) { mutableStateOf(false) }
-    var editSearchQuery by remember(selectedPlaylist?.uriString) { mutableStateOf("") }
-    var showDiscardChangesDialog by remember(selectedPlaylist?.uriString) { mutableStateOf(false) }
-    var pendingClearSelection by remember(selectedPlaylist?.uriString) { mutableStateOf(false) }
+    var isEditing by remember(selectedPlaylist.uriString) { mutableStateOf(false) }
+    var editableSongs by remember(selectedPlaylist.uriString) { mutableStateOf<List<MediaFileInfo>>(emptyList()) }
+    var draggingIndex by remember(selectedPlaylist.uriString) { mutableStateOf<Int?>(null) }
+    var draggingOffsetY by remember(selectedPlaylist.uriString) { mutableFloatStateOf(0f) }
+    var dedupeOnSave by remember(selectedPlaylist.uriString) { mutableStateOf(false) }
+    var editSearchQuery by remember(selectedPlaylist.uriString) { mutableStateOf("") }
+    var showDiscardChangesDialog by remember(selectedPlaylist.uriString) { mutableStateOf(false) }
+    var pendingClearSelection by remember(selectedPlaylist.uriString) { mutableStateOf(false) }
     val dragSwapThresholdPx = with(androidx.compose.ui.platform.LocalDensity.current) { 56.dp.toPx() }
-    LaunchedEffect(selectedPlaylist?.uriString, playlistSongs, isEditing) {
+
+    LaunchedEffect(selectedPlaylist.uriString, playlistSongs, isEditing) {
         if (!isEditing) {
             editableSongs = playlistSongs
             dedupeOnSave = false
@@ -1761,37 +1711,12 @@ private fun PlaylistsSection(
     }
     val hasUnsavedChanges = isEditing && (editableSongs != playlistSongs || dedupeOnSave)
 
-    if (playlists.isEmpty()) {
-        Text("No playlists found")
-        return
-    }
-
-    if (selectedPlaylist == null) {
-        Surface(
-            color = MaterialTheme.colorScheme.secondaryContainer,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            LazyColumn(modifier = Modifier.padding(8.dp)) {
-                items(playlists) { playlist ->
-                    val isSmart = playlist.uriString.startsWith(MainViewModel.SMART_PREFIX)
-                    PlaylistCard(
-                        playlist = playlist,
-                        isCompact = false,
-                        isSmart = isSmart,
-                        onRename = { if (!isSmart) onRequestRenamePlaylist(playlist) },
-                        onDelete = { if (!isSmart) onRequestDeletePlaylist(playlist) },
-                        onClick = { onPlaylistSelected(playlist) }
-                    )
-                }
-            }
-        }
-    } else {
-        Surface(
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.padding(12.dp)) {
-                TextButton(
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            TextButton(
                 onClick = {
                     if (hasUnsavedChanges) {
                         pendingClearSelection = true
@@ -2024,7 +1949,6 @@ private fun PlaylistsSection(
                 }
             }
         }
-        }
     }
 
     if (showDiscardChangesDialog) {
@@ -2058,6 +1982,71 @@ private fun PlaylistsSection(
                     Text("Keep editing")
                 }
             }
+        )
+    }
+}
+
+@Composable
+private fun PlaylistsSection(
+    playlists: List<PlaylistInfo>,
+    selectedPlaylist: PlaylistInfo?,
+    playlistSongs: List<MediaFileInfo>,
+    isLoading: Boolean,
+    isPlaying: Boolean,
+    isPlayingPlaylist: Boolean,
+    queueTitle: String?,
+    hasNext: Boolean,
+    hasPrev: Boolean,
+    onPlaylistSelected: (PlaylistInfo) -> Unit,
+    onClearPlaylistSelection: () -> Unit,
+    onRequestDeletePlaylist: (PlaylistInfo) -> Unit,
+    onRequestRenamePlaylist: (PlaylistInfo) -> Unit,
+    onSavePlaylistEdits: (PlaylistInfo, List<MediaFileInfo>) -> Unit,
+    onPlayPlaylist: (PlaylistInfo) -> Unit,
+    onShufflePlaylistSongs: (PlaylistInfo, List<MediaFileInfo>) -> Unit,
+    onStop: () -> Unit,
+    onNext: () -> Unit,
+    onPrev: () -> Unit,
+    onFileClick: (MediaFileInfo) -> Unit,
+    onAddToPlaylist: (MediaFileInfo) -> Unit,
+    favoriteUris: Set<String>,
+    onToggleFavorite: (MediaFileInfo) -> Unit,
+    currentMediaId: String?
+) {
+    if (playlists.isEmpty()) {
+        Text("No playlists found")
+        return
+    }
+
+    if (selectedPlaylist == null) {
+        PlaylistListSection(
+            playlists = playlists,
+            onRequestRenamePlaylist = onRequestRenamePlaylist,
+            onRequestDeletePlaylist = onRequestDeletePlaylist,
+            onPlaylistSelected = onPlaylistSelected
+        )
+    } else {
+        SelectedPlaylistDetailsSection(
+            selectedPlaylist = selectedPlaylist,
+            playlistSongs = playlistSongs,
+            isLoading = isLoading,
+            isPlaying = isPlaying,
+            isPlayingPlaylist = isPlayingPlaylist,
+            queueTitle = queueTitle,
+            hasNext = hasNext,
+            hasPrev = hasPrev,
+            onClearPlaylistSelection = onClearPlaylistSelection,
+            onSavePlaylistEdits = onSavePlaylistEdits,
+            onPlayPlaylist = onPlayPlaylist,
+            onShufflePlaylistSongs = onShufflePlaylistSongs,
+            onStop = onStop,
+            onNext = onNext,
+            onPrev = onPrev,
+            onFileClick = onFileClick,
+            onAddToPlaylist = onAddToPlaylist,
+            favoriteUris = favoriteUris,
+            onToggleFavorite = onToggleFavorite,
+            currentMediaId = currentMediaId
         )
     }
 }
@@ -2288,74 +2277,16 @@ private fun ExpandedNowPlayingDialog(
         containerColor = MaterialTheme.colorScheme.surfaceVariant,
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (artwork != null) {
-                    Image(
-                        bitmap = artwork.asImageBitmap(),
-                        contentDescription = "Album art",
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(220.dp)
-                    )
-                }
-                Text(trackName, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                if (!artistName.isNullOrBlank()) {
-                    Text(artistName, style = MaterialTheme.typography.bodySmall)
-                }
-                val details = listOfNotNull(
-                    album?.takeIf { it.isNotBlank() },
-                    genre?.takeIf { it.isNotBlank() },
-                    if (year > 0L) year.toString() else null
-                ).joinToString(" • ")
-                if (details.isNotEmpty()) {
-                    Text(details, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                if (durationSafe > 0L) {
-                    Slider(
-                        value = seekValueMs.coerceIn(0f, durationSafe.toFloat()),
-                        onValueChange = {
-                            isSeeking = true
-                            seekValueMs = it
-                        },
-                        valueRange = 0f..durationSafe.toFloat(),
-                        onValueChangeFinished = {
-                            isSeeking = false
-                            onSeekTo(seekValueMs.toLong())
-                        },
-                        colors = SliderDefaults.colors(
-                            thumbColor = MaterialTheme.colorScheme.primary,
-                            activeTrackColor = MaterialTheme.colorScheme.primary,
-                            inactiveTrackColor = MaterialTheme.colorScheme.outline
-                        )
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            formatPlaybackDuration(seekValueMs.toLong()),
-                            style = MaterialTheme.typography.labelSmall
-                        )
-                        Text(
-                            formatPlaybackDuration(durationSafe),
-                            style = MaterialTheme.typography.labelSmall
-                        )
-                    }
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (isPlayingPlaylist) {
-                        TextButton(onClick = onPrev, enabled = hasPrev) { Text("Prev") }
-                    }
-                    TextButton(onClick = onPlayPause) { Text(if (isPlaying) "Pause" else "Play") }
-                    if (isPlayingPlaylist) {
-                        TextButton(onClick = onNext, enabled = hasNext) { Text("Next") }
-                    }
-                    TextButton(onClick = onToggleFlag) {
-                        Text(
-                            if (isFlagged) "Unflag" else "Flag",
-                            color = if (isFlagged) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
+                NowPlayingArtwork(artwork)
+                NowPlayingTrackInfo(trackName, artistName, album, genre, year)
+                NowPlayingSlider(
+                    durationSafe = durationSafe,
+                    seekValueMs = seekValueMs,
+                    onSeekValueChange = { seekValueMs = it },
+                    onIsSeekingChange = { isSeeking = it },
+                    onSeekTo = onSeekTo
+                )
+                NowPlayingControls(isPlaying, hasPrev, hasNext, isPlayingPlaylist, isFlagged, onPlayPause, onPrev, onNext, onToggleFlag)
             }
         },
         confirmButton = {
@@ -2364,6 +2295,111 @@ private fun ExpandedNowPlayingDialog(
     )
 }
 
+@Composable
+private fun NowPlayingArtwork(artwork: android.graphics.Bitmap?) {
+    if (artwork != null) {
+        Image(
+            bitmap = artwork.asImageBitmap(),
+            contentDescription = "Album art",
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(220.dp)
+        )
+    }
+}
+
+@Composable
+private fun NowPlayingTrackInfo(
+    trackName: String,
+    artistName: String?,
+    album: String?,
+    genre: String?,
+    year: Long
+) {
+    Text(trackName, maxLines = 2, overflow = TextOverflow.Ellipsis)
+    if (!artistName.isNullOrBlank()) {
+        Text(artistName, style = MaterialTheme.typography.bodySmall)
+    }
+    val details = listOfNotNull(
+        album?.takeIf { it.isNotBlank() },
+        genre?.takeIf { it.isNotBlank() },
+        if (year > 0L) year.toString() else null
+    ).joinToString(" • ")
+    if (details.isNotEmpty()) {
+        Text(details, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun NowPlayingSlider(
+    durationSafe: Long,
+    seekValueMs: Float,
+    onSeekValueChange: (Float) -> Unit,
+    onIsSeekingChange: (Boolean) -> Unit,
+    onSeekTo: (Long) -> Unit
+) {
+    if (durationSafe > 0L) {
+        Slider(
+            value = seekValueMs.coerceIn(0f, durationSafe.toFloat()),
+            onValueChange = {
+                onIsSeekingChange(true)
+                onSeekValueChange(it)
+            },
+            valueRange = 0f..durationSafe.toFloat(),
+            onValueChangeFinished = {
+                onIsSeekingChange(false)
+                onSeekTo(seekValueMs.toLong())
+            },
+            colors = SliderDefaults.colors(
+                thumbColor = MaterialTheme.colorScheme.primary,
+                activeTrackColor = MaterialTheme.colorScheme.primary,
+                inactiveTrackColor = MaterialTheme.colorScheme.outline
+            )
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                formatPlaybackDuration(seekValueMs.toLong()),
+                style = MaterialTheme.typography.labelSmall
+            )
+            Text(
+                formatPlaybackDuration(durationSafe),
+                style = MaterialTheme.typography.labelSmall
+            )
+        }
+    }
+}
+
+@Composable
+private fun NowPlayingControls(
+    isPlaying: Boolean,
+    hasPrev: Boolean,
+    hasNext: Boolean,
+    isPlayingPlaylist: Boolean,
+    isFlagged: Boolean,
+    onPlayPause: () -> Unit,
+    onPrev: () -> Unit,
+    onNext: () -> Unit,
+    onToggleFlag: () -> Unit
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (isPlayingPlaylist) {
+            TextButton(onClick = onPrev, enabled = hasPrev) { Text("Prev") }
+        }
+        TextButton(onClick = onPlayPause) { Text(if (isPlaying) "Pause" else "Play") }
+        if (isPlayingPlaylist) {
+            TextButton(onClick = onNext, enabled = hasNext) { Text("Next") }
+        }
+        TextButton(onClick = onToggleFlag) {
+            Text(
+                if (isFlagged) "Unflag" else "Flag",
+                color = if (isFlagged) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+            )
+        }
+    }
+}
 private fun formatPlaybackDuration(durationMs: Long): String {
     val totalSeconds = (durationMs / 1000L).coerceAtLeast(0L)
     val minutes = totalSeconds / 60L
@@ -2591,4 +2627,109 @@ private fun SongsTabContent(
         onToggleFavorite = onToggleFavorite,
         currentMediaId = currentMediaId
     )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MainTopBar(
+    isSearchExpanded: Boolean,
+    searchQuery: String,
+    onSearchQueryChanged: (String) -> Unit,
+    onClearSearch: () -> Unit,
+    onBackFromSearch: () -> Unit,
+    onExpandSearch: () -> Unit,
+    menuExpanded: Boolean,
+    onMenuExpandedChange: (Boolean) -> Unit,
+    onSelectFolderClick: () -> Unit,
+    onCreateRandomPlaylistClick: () -> Unit,
+    onOpenSettingsClick: () -> Unit,
+    hasScannedFiles: Boolean
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.primary,
+        contentColor = MaterialTheme.colorScheme.onPrimary,
+        modifier = run {
+            val lineColor = MaterialTheme.colorScheme.tertiary
+            Modifier.drawBehind {
+                drawLine(
+                    color = lineColor,
+                    start = androidx.compose.ui.geometry.Offset(0f, size.height),
+                    end = androidx.compose.ui.geometry.Offset(size.width, size.height),
+                    strokeWidth = 3.dp.toPx()
+                )
+            }
+        }
+    ) {
+        Column {
+            TopAppBar(
+                title = {
+                    if (isSearchExpanded) {
+                        TextField(
+                            value = searchQuery,
+                            onValueChange = onSearchQueryChanged,
+                            placeholder = { Text("Search title, artist, album, genre", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = TextFieldDefaults.colors(
+                                focusedIndicatorColor = MaterialTheme.colorScheme.primary,
+                                unfocusedIndicatorColor = MaterialTheme.colorScheme.outline,
+                                cursorColor = MaterialTheme.colorScheme.primary,
+                                focusedContainerColor = MaterialTheme.colorScheme.surface,
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                            )
+                        )
+                    } else {
+                        Text("MyMediaPlayer")
+                    }
+                },
+                navigationIcon = {
+                    if (isSearchExpanded) {
+                        TextButton(onClick = onBackFromSearch) { Text("Back") }
+                    }
+                },
+                actions = {
+                    if (!isSearchExpanded) {
+                        TextButton(onClick = onExpandSearch) { Text("Search") }
+                        TextButton(onClick = { onMenuExpandedChange(true) }) {
+                            Text("Menu")
+                        }
+                        DropdownMenu(
+                            expanded = menuExpanded,
+                            onDismissRequest = { onMenuExpandedChange(false) }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Select Folder") },
+                                onClick = onSelectFolderClick
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Create Random Playlist") },
+                                onClick = onCreateRandomPlaylistClick,
+                                enabled = hasScannedFiles
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Settings") },
+                                onClick = onOpenSettingsClick
+                            )
+                        }
+                    } else if (searchQuery.isNotEmpty()) {
+                        TextButton(onClick = onClearSearch) { Text("Clear") }
+                    }
+                }
+            )
+            Box(
+                modifier = run {
+                    val boxColor = MaterialTheme.colorScheme.primary
+                    Modifier
+                        .fillMaxWidth()
+                        .height(2.dp)
+                        .drawBehind {
+                            drawRoundRect(
+                                color = boxColor,
+                                cornerRadius = CornerRadius(2.dp.toPx())
+                            )
+                        }
+                }
+            )
+        }
+    }
 }
