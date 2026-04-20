@@ -873,159 +873,177 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
     private fun buildMediaItemsForId(parentId: String): MutableList<MediaItem> {
         return when (parentId) {
-            ROOT_ID -> {
-                val items = mutableListOf<MediaItem>()
-                items.add(
-                    MediaItem(
-                        MediaDescriptionCompat.Builder()
-                            .setMediaId(HOME_ID)
-                            .setTitle("Home")
-                            .setExtras(
-                                bundleOfContentStyle(
-                                    MediaConstants.DESCRIPTION_EXTRAS_KEY_CONTENT_STYLE_BROWSABLE,
-                                    MediaConstants.DESCRIPTION_EXTRAS_VALUE_CONTENT_STYLE_CATEGORY_GRID_ITEM
-                                )
-                            )
-                            .build(),
-                        MediaItem.FLAG_BROWSABLE
-                    )
-                )
-                items.add(
-                    MediaItem(
-                        MediaDescriptionCompat.Builder()
-                            .setMediaId(SEARCH_ID)
-                            .setTitle("Search")
-                            .build(),
-                        MediaItem.FLAG_BROWSABLE
-                    )
-                )
-                items
-            }
+            ROOT_ID -> buildRootItems()
             HOME_ID -> buildHomeItems()
-            SONGS_ID -> {
-                val items = mutableListOf<MediaItem>()
-                if (mediaCacheService.cachedFiles.isNotEmpty()) {
-                    items.add(
-                        MediaItem(
-                            MediaDescriptionCompat.Builder()
-                                .setMediaId(ACTION_PLAY_ALL_PREFIX + SONGS_ID)
-                                .setTitle("[Play All]")
-                                .build(),
-                            MediaItem.FLAG_PLAYABLE
-                        )
-                    )
-                    items.add(
-                        MediaItem(
-                            MediaDescriptionCompat.Builder()
-                                .setMediaId(ACTION_SHUFFLE_PREFIX + SONGS_ID)
-                                .setTitle("[Shuffle]")
-                                .build(),
-                            MediaItem.FLAG_PLAYABLE
-                        )
-                    )
-                    items.add(
-                        MediaItem(
-                            MediaDescriptionCompat.Builder()
-                                .setMediaId(SONGS_ALL_ID)
-                                .setTitle("Browse All Songs")
-                                .setIconUri(resourceIconUri(R.drawable.ic_auto_song))
-                                .build(),
-                            MediaItem.FLAG_BROWSABLE
-                        )
-                    )
-                }
-                items
-            }
-            SONGS_ALL_ID -> {
-                val titles = mediaCacheService.cachedFiles.map { it.cleanTitle }
-                buildCategoryListItems(
-                    buildLetterBuckets(titles),
-                    SONG_LETTER_PREFIX,
-                    iconUri = resourceIconUri(R.drawable.ic_auto_song)
-                )
-            }
-            PLAYLISTS_ID -> {
-                val items = mutableListOf<MediaItem>()
-                if (mediaCacheService.discoveredPlaylists.isNotEmpty() ||
-                    mediaCacheService.cachedFiles.isNotEmpty()
-                ) {
-                    items.add(
-                        MediaItem(
-                            MediaDescriptionCompat.Builder()
-                                .setMediaId(ACTION_PLAY_ALL_PREFIX + PLAYLISTS_ID)
-                                .setTitle("[Play All]")
-                                .build(),
-                            MediaItem.FLAG_PLAYABLE
-                        )
-                    )
-                    items.add(
-                        MediaItem(
-                            MediaDescriptionCompat.Builder()
-                                .setMediaId(ACTION_SHUFFLE_PREFIX + PLAYLISTS_ID)
-                                .setTitle("[Shuffle]")
-                                .build(),
-                            MediaItem.FLAG_PLAYABLE
-                        )
-                    )
-                }
-                items += playlistEntriesForBrowse(mediaCacheService.discoveredPlaylists).map { entry ->
-                    val description = MediaDescriptionCompat.Builder()
-                        .setMediaId(entry.mediaId)
-                        .setTitle(entry.title)
-                        .setIconUri(resourceIconUri(R.drawable.ic_auto_playlists))
-                        .build()
-                    MediaItem(description, MediaItem.FLAG_BROWSABLE)
-                }
-                items
-            }
-            ALBUMS_ID -> {
-                ensureMetadataIndexes()
-                buildCategoryListItems(
-                    mediaCacheService.albums(),
-                    ALBUM_PREFIX,
-                    buildAlbumCounts(mediaCacheService.cachedFiles),
-                    resourceIconUri(R.drawable.ic_auto_albums)
-                )
-            }
-            GENRES_ID -> {
-                ensureMetadataIndexes()
-                buildCategoryListItems(
-                    mediaCacheService.genres(),
-                    GENRE_PREFIX,
-                    buildGenreCounts(mediaCacheService.cachedFiles),
-                    resourceIconUri(R.drawable.ic_auto_genres)
-                )
-            }
-            ARTISTS_ID -> {
-                ensureMetadataIndexes()
-                buildCategoryListItems(
-                    buildLetterBuckets(mediaCacheService.artists()),
-                    ARTIST_LETTER_PREFIX,
-                    iconUri = resourceIconUri(R.drawable.ic_auto_artists)
-                )
-            }
-            DECADES_ID -> {
-                ensureMetadataIndexes()
-                buildCategoryListItems(
-                    mediaCacheService.decades(),
-                    DECADE_PREFIX,
-                    buildDecadeCounts(mediaCacheService.cachedFiles),
-                    resourceIconUri(R.drawable.ic_auto_decades)
-                )
-            }
-            SEARCH_ID -> {
-                mutableListOf(
-                    MediaItem(
-                        MediaDescriptionCompat.Builder()
-                            .setMediaId("search_hint")
-                            .setTitle("Use the search icon to search")
-                            .build(),
-                        MediaItem.FLAG_BROWSABLE
-                    )
-                )
-            }
+            SONGS_ID -> buildSongsItems()
+            SONGS_ALL_ID -> buildSongsAllItems()
+            PLAYLISTS_ID -> buildPlaylistsItems()
+            ALBUMS_ID -> buildAlbumsItems()
+            GENRES_ID -> buildGenresItems()
+            ARTISTS_ID -> buildArtistsItems()
+            DECADES_ID -> buildDecadesItems()
+            SEARCH_ID -> buildSearchItems()
             else -> mutableListOf()
         }
+    }
+
+    private fun buildRootItems(): MutableList<MediaItem> {
+        val items = mutableListOf<MediaItem>()
+        items.add(
+            MediaItem(
+                MediaDescriptionCompat.Builder()
+                    .setMediaId(HOME_ID)
+                    .setTitle("Home")
+                    .setExtras(
+                        bundleOfContentStyle(
+                            MediaConstants.DESCRIPTION_EXTRAS_KEY_CONTENT_STYLE_BROWSABLE,
+                            MediaConstants.DESCRIPTION_EXTRAS_VALUE_CONTENT_STYLE_CATEGORY_GRID_ITEM
+                        )
+                    )
+                    .build(),
+                MediaItem.FLAG_BROWSABLE
+            )
+        )
+        items.add(
+            MediaItem(
+                MediaDescriptionCompat.Builder()
+                    .setMediaId(SEARCH_ID)
+                    .setTitle("Search")
+                    .build(),
+                MediaItem.FLAG_BROWSABLE
+            )
+        )
+        return items
+    }
+
+    private fun buildSongsItems(): MutableList<MediaItem> {
+        val items = mutableListOf<MediaItem>()
+        if (mediaCacheService.cachedFiles.isNotEmpty()) {
+            items.add(
+                MediaItem(
+                    MediaDescriptionCompat.Builder()
+                        .setMediaId(ACTION_PLAY_ALL_PREFIX + SONGS_ID)
+                        .setTitle("[Play All]")
+                        .build(),
+                    MediaItem.FLAG_PLAYABLE
+                )
+            )
+            items.add(
+                MediaItem(
+                    MediaDescriptionCompat.Builder()
+                        .setMediaId(ACTION_SHUFFLE_PREFIX + SONGS_ID)
+                        .setTitle("[Shuffle]")
+                        .build(),
+                    MediaItem.FLAG_PLAYABLE
+                )
+            )
+            items.add(
+                MediaItem(
+                    MediaDescriptionCompat.Builder()
+                        .setMediaId(SONGS_ALL_ID)
+                        .setTitle("Browse All Songs")
+                        .setIconUri(resourceIconUri(R.drawable.ic_auto_song))
+                        .build(),
+                    MediaItem.FLAG_BROWSABLE
+                )
+            )
+        }
+        return items
+    }
+
+    private fun buildSongsAllItems(): MutableList<MediaItem> {
+        val titles = mediaCacheService.cachedFiles.map { it.cleanTitle }
+        return buildCategoryListItems(
+            buildLetterBuckets(titles),
+            SONG_LETTER_PREFIX,
+            iconUri = resourceIconUri(R.drawable.ic_auto_song)
+        )
+    }
+
+    private fun buildPlaylistsItems(): MutableList<MediaItem> {
+        val items = mutableListOf<MediaItem>()
+        if (mediaCacheService.discoveredPlaylists.isNotEmpty() ||
+            mediaCacheService.cachedFiles.isNotEmpty()
+        ) {
+            items.add(
+                MediaItem(
+                    MediaDescriptionCompat.Builder()
+                        .setMediaId(ACTION_PLAY_ALL_PREFIX + PLAYLISTS_ID)
+                        .setTitle("[Play All]")
+                        .build(),
+                    MediaItem.FLAG_PLAYABLE
+                )
+            )
+            items.add(
+                MediaItem(
+                    MediaDescriptionCompat.Builder()
+                        .setMediaId(ACTION_SHUFFLE_PREFIX + PLAYLISTS_ID)
+                        .setTitle("[Shuffle]")
+                        .build(),
+                    MediaItem.FLAG_PLAYABLE
+                )
+            )
+        }
+        items += playlistEntriesForBrowse(mediaCacheService.discoveredPlaylists).map { entry ->
+            val description = MediaDescriptionCompat.Builder()
+                .setMediaId(entry.mediaId)
+                .setTitle(entry.title)
+                .setIconUri(resourceIconUri(R.drawable.ic_auto_playlists))
+                .build()
+            MediaItem(description, MediaItem.FLAG_BROWSABLE)
+        }
+        return items
+    }
+
+    private fun buildAlbumsItems(): MutableList<MediaItem> {
+        ensureMetadataIndexes()
+        return buildCategoryListItems(
+            mediaCacheService.albums(),
+            ALBUM_PREFIX,
+            buildAlbumCounts(mediaCacheService.cachedFiles),
+            resourceIconUri(R.drawable.ic_auto_albums)
+        )
+    }
+
+    private fun buildGenresItems(): MutableList<MediaItem> {
+        ensureMetadataIndexes()
+        return buildCategoryListItems(
+            mediaCacheService.genres(),
+            GENRE_PREFIX,
+            buildGenreCounts(mediaCacheService.cachedFiles),
+            resourceIconUri(R.drawable.ic_auto_genres)
+        )
+    }
+
+    private fun buildArtistsItems(): MutableList<MediaItem> {
+        ensureMetadataIndexes()
+        return buildCategoryListItems(
+            buildLetterBuckets(mediaCacheService.artists()),
+            ARTIST_LETTER_PREFIX,
+            iconUri = resourceIconUri(R.drawable.ic_auto_artists)
+        )
+    }
+
+    private fun buildDecadesItems(): MutableList<MediaItem> {
+        ensureMetadataIndexes()
+        return buildCategoryListItems(
+            mediaCacheService.decades(),
+            DECADE_PREFIX,
+            buildDecadeCounts(mediaCacheService.cachedFiles),
+            resourceIconUri(R.drawable.ic_auto_decades)
+        )
+    }
+
+    private fun buildSearchItems(): MutableList<MediaItem> {
+        return mutableListOf(
+            MediaItem(
+                MediaDescriptionCompat.Builder()
+                    .setMediaId("search_hint")
+                    .setTitle("Use the search icon to search")
+                    .build(),
+                MediaItem.FLAG_BROWSABLE
+            )
+        )
     }
 
     internal fun buildMediaItems(parentId: String): MutableList<MediaItem> {
