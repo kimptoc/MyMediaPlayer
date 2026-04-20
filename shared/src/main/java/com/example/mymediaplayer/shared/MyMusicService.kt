@@ -122,34 +122,44 @@ class MyMusicService : MediaBrowserServiceCompat() {
             val masterKey = androidx.security.crypto.MasterKey.Builder(context).setKeyScheme(androidx.security.crypto.MasterKey.KeyScheme.AES256_GCM).build()
             val encryptedPrefs = androidx.security.crypto.EncryptedSharedPreferences.create(context, "${PREFS_NAME}_encrypted", masterKey, androidx.security.crypto.EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV, androidx.security.crypto.EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM)
             val standardPrefsFile = File(context.applicationInfo.dataDir, "shared_prefs/${PREFS_NAME}.xml")
+
             if (standardPrefsFile.exists() && !encryptedPrefs.getBoolean("migration_completed", false)) {
-                val standardPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                val editor = encryptedPrefs.edit()
-                for ((key, value) in standardPrefs.all) {
-                    when (value) {
-                        is String -> editor.putString(key, value)
-                        is Int -> editor.putInt(key, value)
-                        is Boolean -> editor.putBoolean(key, value)
-                        is Long -> editor.putLong(key, value)
-                        is Float -> editor.putFloat(key, value)
-                        is Set<*> -> {
-                            @Suppress("UNCHECKED_CAST")
-                            editor.putStringSet(key, value as Set<String>)
-                        }
-                    }
-                }
-                try {
-                    @Suppress("ApplySharedPref")
-                    editor.putBoolean("migration_completed", true).commit()
-                    @Suppress("ApplySharedPref")
-                    standardPrefs.edit().clear().commit()
-                    standardPrefsFile.delete()
-                } catch (e: Exception) {
-                    // Log error - migration will retry on next app launch
-                }
+                migratePreferences(context, encryptedPrefs, standardPrefsFile)
             }
+
             prefsInstance = encryptedPrefs
             return encryptedPrefs
+        }
+
+        private fun migratePreferences(
+            context: Context,
+            encryptedPrefs: android.content.SharedPreferences,
+            standardPrefsFile: File
+        ) {
+            val standardPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val editor = encryptedPrefs.edit()
+            for ((key, value) in standardPrefs.all) {
+                when (value) {
+                    is String -> editor.putString(key, value)
+                    is Int -> editor.putInt(key, value)
+                    is Boolean -> editor.putBoolean(key, value)
+                    is Long -> editor.putLong(key, value)
+                    is Float -> editor.putFloat(key, value)
+                    is Set<*> -> {
+                        @Suppress("UNCHECKED_CAST")
+                        editor.putStringSet(key, value as Set<String>)
+                    }
+                }
+            }
+            try {
+                @Suppress("ApplySharedPref")
+                editor.putBoolean("migration_completed", true).commit()
+                @Suppress("ApplySharedPref")
+                standardPrefs.edit().clear().commit()
+                standardPrefsFile.delete()
+            } catch (e: Exception) {
+                // Log error - migration will retry on next app launch
+            }
         }
         private const val ACTION_MEDIA_PLAY_FROM_SEARCH = "android.media.action.MEDIA_PLAY_FROM_SEARCH"
 
@@ -2110,8 +2120,45 @@ class MyMusicService : MediaBrowserServiceCompat() {
             title = Uri.parse(resolvedMediaId).lastPathSegment
         )
 
+
         val parentId = lastBrowseParentId
-        val listFromParent = when {
+        val listFromParent = getListFromParentId(parentId)
+
+        val searchList = if (lastSearchResults.any { it.uriString == resolvedMediaId }) {
+            lastSearchResults
+        } else {
+            emptyList()
+        }
+        val parentList = when {
+            listFromParent.isNotEmpty() -> listFromParent
+            searchList.isNotEmpty() -> searchList
+            mediaCacheService.cachedFiles.isNotEmpty() -> mediaCacheService.cachedFiles
+            else -> emptyList()
+        }
+
+        if (parentList.isNotEmpty()) {
+            playlistQueue = parentList
+            currentQueueIndex = parentList.indexOfFirst { it.uriString == resolvedMediaId }
+            if (currentQueueIndex < 0) {
+                playlistQueue = emptyList()
+                currentQueueIndex = -1
+                currentPlaylistName = null
+            } else {
+                currentPlaylistName = getPlaylistNameFromParentId(parentId, searchList.isNotEmpty(), listFromParent.isEmpty())
+            }
+        } else {
+            playlistQueue = emptyList()
+            currentQueueIndex = -1
+            currentPlaylistName = null
+        }
+
+        updateSessionQueue()
+        playTrack(fileInfo)
+        savePlaybackSnapshot()
+    }
+
+    private fun getListFromParentId(parentId: String?): List<MediaFileInfo> {
+        return when {
             parentId == SONGS_ID -> mediaCacheService.cachedFiles
             parentId == SONGS_ALL_ID -> mediaCacheService.cachedFiles
             parentId != null && parentId.startsWith(ALBUM_PREFIX) -> {
@@ -2154,63 +2201,35 @@ class MyMusicService : MediaBrowserServiceCompat() {
             }
             else -> emptyList()
         }
+    }
 
-        val searchList = if (lastSearchResults.any { it.uriString == resolvedMediaId }) {
-            lastSearchResults
-        } else {
-            emptyList()
-        }
-        val parentList = when {
-            listFromParent.isNotEmpty() -> listFromParent
-            searchList.isNotEmpty() -> searchList
-            mediaCacheService.cachedFiles.isNotEmpty() -> mediaCacheService.cachedFiles
-            else -> emptyList()
-        }
-
-        if (parentList.isNotEmpty()) {
-            playlistQueue = parentList
-            currentQueueIndex = parentList.indexOfFirst { it.uriString == resolvedMediaId }
-            if (currentQueueIndex < 0) {
-                playlistQueue = emptyList()
-                currentQueueIndex = -1
-                currentPlaylistName = null
-            } else {
-                currentPlaylistName = when {
-                    searchList.isNotEmpty() -> {
-                        val query = lastSearchQuery?.trim().orEmpty()
-                        if (query.isNotEmpty()) "Search: $query" else "Search Results"
-                    }
-                    parentId == SONGS_ID || parentId == SONGS_ALL_ID || listFromParent.isEmpty() -> "All Songs"
-                    parentId?.startsWith(ALBUM_PREFIX) == true ->
-                        Uri.decode(parentId.removePrefix(ALBUM_PREFIX))
-                    parentId?.startsWith(GENRE_PREFIX) == true ->
-                        Uri.decode(parentId.removePrefix(GENRE_PREFIX))
-                    parentId?.startsWith(ARTIST_PREFIX) == true ->
-                        Uri.decode(parentId.removePrefix(ARTIST_PREFIX))
-                    parentId?.startsWith(DECADE_PREFIX) == true ->
-                        Uri.decode(parentId.removePrefix(DECADE_PREFIX))
-                    parentId?.startsWith(SONG_LETTER_PREFIX) == true -> {
-                        val letter = Uri.decode(parentId.removePrefix(SONG_LETTER_PREFIX))
-                        "Songs $letter"
-                    }
-                    parentId?.startsWith(GENRE_SONG_LETTER_PREFIX) == true -> {
-                        formatBucketTitle(parentId, GENRE_SONG_LETTER_PREFIX)
-                    }
-                    parentId?.startsWith(DECADE_SONG_LETTER_PREFIX) == true -> {
-                        formatBucketTitle(parentId, DECADE_SONG_LETTER_PREFIX)
-                    }
-                    else -> null
-                }
+    private fun getPlaylistNameFromParentId(parentId: String?, isSearch: Boolean, isListFromParentEmpty: Boolean): String? {
+        return when {
+            isSearch -> {
+                val query = lastSearchQuery?.trim().orEmpty()
+                if (query.isNotEmpty()) "Search: $query" else "Search Results"
             }
-        } else {
-            playlistQueue = emptyList()
-            currentQueueIndex = -1
-            currentPlaylistName = null
+            parentId == SONGS_ID || parentId == SONGS_ALL_ID || isListFromParentEmpty -> "All Songs"
+            parentId?.startsWith(ALBUM_PREFIX) == true ->
+                Uri.decode(parentId.removePrefix(ALBUM_PREFIX))
+            parentId?.startsWith(GENRE_PREFIX) == true ->
+                Uri.decode(parentId.removePrefix(GENRE_PREFIX))
+            parentId?.startsWith(ARTIST_PREFIX) == true ->
+                Uri.decode(parentId.removePrefix(ARTIST_PREFIX))
+            parentId?.startsWith(DECADE_PREFIX) == true ->
+                Uri.decode(parentId.removePrefix(DECADE_PREFIX))
+            parentId?.startsWith(SONG_LETTER_PREFIX) == true -> {
+                val letter = Uri.decode(parentId.removePrefix(SONG_LETTER_PREFIX))
+                "Songs $letter"
+            }
+            parentId?.startsWith(GENRE_SONG_LETTER_PREFIX) == true -> {
+                formatBucketTitle(parentId, GENRE_SONG_LETTER_PREFIX)
+            }
+            parentId?.startsWith(DECADE_SONG_LETTER_PREFIX) == true -> {
+                formatBucketTitle(parentId, DECADE_SONG_LETTER_PREFIX)
+            }
+            else -> null
         }
-
-        updateSessionQueue()
-        playTrack(fileInfo)
-        savePlaybackSnapshot()
     }
 
     private suspend fun handlePlayFromSearch(query: String?, extras: Bundle?) {
@@ -2855,15 +2874,12 @@ class MyMusicService : MediaBrowserServiceCompat() {
             else
                 "Smart Playlists"
             items.add(
-                MediaItem(
-                    MediaDescriptionCompat.Builder()
-                        .setMediaId(PLAYLISTS_ID)
-                        .setTitle("Playlists")
-                        .setSubtitle(playlistSubtitle)
-                        .setIconUri(resourceIconUri(R.drawable.ic_auto_playlists))
-                        .setExtras(childListExtras)
-                        .build(),
-                    MediaItem.FLAG_BROWSABLE
+                createBrowsableMediaItem(
+                    PLAYLISTS_ID,
+                    "Playlists",
+                    playlistSubtitle,
+                    R.drawable.ic_auto_playlists,
+                    childListExtras
                 )
             )
         }
@@ -2876,67 +2892,71 @@ class MyMusicService : MediaBrowserServiceCompat() {
             val artistCount = mediaCacheService.artists().size
 
             items.add(
-                MediaItem(
-                    MediaDescriptionCompat.Builder()
-                        .setMediaId(GENRES_ID)
-                        .setTitle("Genres")
-                        .setSubtitle("$genreCount genre${if (genreCount != 1) "s" else ""}")
-                        .setIconUri(resourceIconUri(R.drawable.ic_auto_genres))
-                        .setExtras(childListExtras)
-                        .build(),
-                    MediaItem.FLAG_BROWSABLE
+                createBrowsableMediaItem(
+                    GENRES_ID,
+                    "Genres",
+                    "$genreCount genre${if (genreCount != 1) "s" else ""}",
+                    R.drawable.ic_auto_genres,
+                    childListExtras
                 )
             )
             items.add(
-                MediaItem(
-                    MediaDescriptionCompat.Builder()
-                        .setMediaId(DECADES_ID)
-                        .setTitle("Decades")
-                        .setSubtitle("$decadeCount decade${if (decadeCount != 1) "s" else ""}")
-                        .setIconUri(resourceIconUri(R.drawable.ic_auto_decades))
-                        .setExtras(childListExtras)
-                        .build(),
-                    MediaItem.FLAG_BROWSABLE
+                createBrowsableMediaItem(
+                    DECADES_ID,
+                    "Decades",
+                    "$decadeCount decade${if (decadeCount != 1) "s" else ""}",
+                    R.drawable.ic_auto_decades,
+                    childListExtras
                 )
             )
             items.add(
-                MediaItem(
-                    MediaDescriptionCompat.Builder()
-                        .setMediaId(ALBUMS_ID)
-                        .setTitle("Albums")
-                        .setSubtitle("$albumCount album${if (albumCount != 1) "s" else ""}")
-                        .setIconUri(resourceIconUri(R.drawable.ic_auto_albums))
-                        .setExtras(childListExtras)
-                        .build(),
-                    MediaItem.FLAG_BROWSABLE
+                createBrowsableMediaItem(
+                    ALBUMS_ID,
+                    "Albums",
+                    "$albumCount album${if (albumCount != 1) "s" else ""}",
+                    R.drawable.ic_auto_albums,
+                    childListExtras
                 )
             )
             items.add(
-                MediaItem(
-                    MediaDescriptionCompat.Builder()
-                        .setMediaId(ARTISTS_ID)
-                        .setTitle("Artists")
-                        .setSubtitle("$artistCount artist${if (artistCount != 1) "s" else ""}")
-                        .setIconUri(resourceIconUri(R.drawable.ic_auto_artists))
-                        .setExtras(childListExtras)
-                        .build(),
-                    MediaItem.FLAG_BROWSABLE
+                createBrowsableMediaItem(
+                    ARTISTS_ID,
+                    "Artists",
+                    "$artistCount artist${if (artistCount != 1) "s" else ""}",
+                    R.drawable.ic_auto_artists,
+                    childListExtras
                 )
             )
             items.add(
-                MediaItem(
-                    MediaDescriptionCompat.Builder()
-                        .setMediaId(SONGS_ID)
-                        .setTitle("Songs")
-                        .setSubtitle("$songCount song${if (songCount != 1) "s" else ""}")
-                        .setIconUri(resourceIconUri(R.drawable.ic_auto_song))
-                        .setExtras(childListExtras)
-                        .build(),
-                    MediaItem.FLAG_BROWSABLE
+                createBrowsableMediaItem(
+                    SONGS_ID,
+                    "Songs",
+                    "$songCount song${if (songCount != 1) "s" else ""}",
+                    R.drawable.ic_auto_song,
+                    childListExtras
                 )
             )
         }
         return items
+    }
+
+    private fun createBrowsableMediaItem(
+        mediaId: String,
+        title: String,
+        subtitle: String,
+        iconResId: Int,
+        extras: Bundle
+    ): MediaItem {
+        return MediaItem(
+            MediaDescriptionCompat.Builder()
+                .setMediaId(mediaId)
+                .setTitle(title)
+                .setSubtitle(subtitle)
+                .setIconUri(resourceIconUri(iconResId))
+                .setExtras(extras)
+                .build(),
+            MediaItem.FLAG_BROWSABLE
+        )
     }
 
     private fun restorePlaybackSnapshot() {
