@@ -1,7 +1,7 @@
 package com.example.mymediaplayer
 
 import android.app.Application
-import android.support.v4.media.session.PlaybackStateCompat
+import android.media.session.PlaybackState
 import androidx.test.core.app.ApplicationProvider
 import com.example.mymediaplayer.shared.MediaFileInfo
 import com.example.mymediaplayer.shared.PlaylistInfo
@@ -146,7 +146,7 @@ class MainViewModelTest {
         val viewModel = MainViewModel(app)
 
         viewModel.updatePlaybackState(
-            state = PlaybackStateCompat.STATE_PLAYING,
+            state = PlaybackState.STATE_PLAYING,
             mediaId = "content://test/song1",
             trackName = "Song One",
             artistName = "Artist One",
