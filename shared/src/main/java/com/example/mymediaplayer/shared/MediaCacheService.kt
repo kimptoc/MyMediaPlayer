@@ -62,6 +62,30 @@ class MediaCacheService {
         val out = mutableListOf<MediaFileInfo>()
         val outIds = mutableListOf<Long>()
 
+        queryMediaStore(context, out, outIds, extensionCounts, onProgress)
+        enrichGenresForOlderSdks(context, out, outIds)
+        updateCacheFromScan(out)
+
+        onProgress?.invoke(out.size, 0)
+        val durationMs = android.os.SystemClock.elapsedRealtime() - startTime
+        ScanStats(
+            durationMs = durationMs,
+            foldersScanned = 0,
+            songsFound = out.size,
+            extensionCounts = extensionCounts.toMap(),
+            skippedReasons = emptyMap(),
+            deepScan = false,
+            probedCandidates = 0
+        )
+    }
+
+    private fun queryMediaStore(
+        context: Context,
+        out: MutableList<MediaFileInfo>,
+        outIds: MutableList<Long>,
+        extensionCounts: MutableMap<String, Int>,
+        onProgress: ((songsFound: Int, foldersScanned: Int) -> Unit)?
+    ) {
         val projectionList = mutableListOf(
             MediaStore.Audio.Media._ID,
             MediaStore.Audio.Media.DISPLAY_NAME,
@@ -152,6 +176,13 @@ class MediaCacheService {
                 }
             }
         }
+    }
+
+    private fun enrichGenresForOlderSdks(
+        context: Context,
+        out: MutableList<MediaFileInfo>,
+        outIds: MutableList<Long>
+    ) {
         if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.R) {
             val genresByAudioId = loadWholeDriveGenres(context, outIds.toSet())
             if (genresByAudioId.isNotEmpty()) {
@@ -162,6 +193,9 @@ class MediaCacheService {
                 }
             }
         }
+    }
+
+    private fun updateCacheFromScan(out: List<MediaFileInfo>) {
         synchronized(cacheLock) {
             _cachedFiles.clear()
             _cachedFiles.addAll(out)
@@ -171,19 +205,7 @@ class MediaCacheService {
             albumArtistIndexed = false
             cachedAlbumsByLatestAddedDesc = null
         }
-        onProgress?.invoke(out.size, 0)
-        val durationMs = android.os.SystemClock.elapsedRealtime() - startTime
-        ScanStats(
-            durationMs = durationMs,
-            foldersScanned = 0,
-            songsFound = out.size,
-            extensionCounts = extensionCounts.toMap(),
-            skippedReasons = emptyMap(),
-            deepScan = false,
-            probedCandidates = 0
-        )
     }
-
     private fun loadWholeDriveGenres(context: Context, audioIds: Set<Long>): Map<Long, String> {
         if (audioIds.isEmpty()) return emptyMap()
         val resolver = context.contentResolver
