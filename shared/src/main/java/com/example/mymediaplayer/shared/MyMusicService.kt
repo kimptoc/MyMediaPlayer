@@ -1945,81 +1945,13 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }
     }
 
+
     private suspend fun handlePlayAllOrShuffle(resolvedMediaId: String) {
         val isShuffle = resolvedMediaId.startsWith(ACTION_SHUFFLE_PREFIX)
         val listKey = resolvedMediaId.removePrefix(
             if (isShuffle) ACTION_SHUFFLE_PREFIX else ACTION_PLAY_ALL_PREFIX
         )
-        val tracks = when {
-            listKey == SONGS_ID -> mediaCacheService.cachedFiles
-            listKey == PLAYLISTS_ID -> {
-                val all = kotlinx.coroutines.coroutineScope {
-                    mediaCacheService.discoveredPlaylists.map { playlist ->
-                        async(Dispatchers.IO) {
-                            playlistService.readPlaylist(
-                                this@MyMusicService,
-                                Uri.parse(playlist.uriString)
-                            )
-                        }
-                    }.awaitAll().flatten()
-                }
-                enrichFromCache(all)
-            }
-            listKey.startsWith(PLAYLIST_SHORT_PREFIX) -> {
-                val shortId = listKey.removePrefix(PLAYLIST_SHORT_PREFIX)
-                val playlistUri = playlistShortIds[shortId] ?: ""
-                if (playlistUri.isEmpty()) emptyList()
-                else enrichFromCache(
-                    playlistService.readPlaylist(
-                        this,
-                        Uri.parse(playlistUri)
-                    )
-                )
-            }
-            listKey.startsWith(SMART_PLAYLIST_PREFIX) -> {
-                val smartId = Uri.decode(listKey.removePrefix(SMART_PLAYLIST_PREFIX))
-                resolveSmartPlaylistTracksById(smartId) ?: emptyList()
-            }
-            listKey.startsWith(ALBUM_PREFIX) -> {
-                ensureMetadataIndexes()
-                val album = Uri.decode(listKey.removePrefix(ALBUM_PREFIX))
-                mediaCacheService.songsForAlbum(album)
-            }
-            listKey.startsWith(GENRE_PREFIX) -> {
-                ensureMetadataIndexes()
-                val genre = Uri.decode(listKey.removePrefix(GENRE_PREFIX))
-                mediaCacheService.songsForGenre(genre)
-            }
-            listKey.startsWith(ARTIST_PREFIX) -> {
-                ensureMetadataIndexes()
-                val artist = Uri.decode(listKey.removePrefix(ARTIST_PREFIX))
-                mediaCacheService.songsForArtist(artist)
-            }
-            listKey.startsWith(DECADE_PREFIX) -> {
-                ensureMetadataIndexes()
-                val decade = Uri.decode(listKey.removePrefix(DECADE_PREFIX))
-                mediaCacheService.songsForDecade(decade)
-            }
-            listKey.startsWith(SONG_LETTER_PREFIX) -> {
-                val letter = Uri.decode(listKey.removePrefix(SONG_LETTER_PREFIX))
-                filterSongsByLetter(mediaCacheService.cachedFiles, letter)
-            }
-            listKey.startsWith(GENRE_SONG_LETTER_PREFIX) -> {
-                ensureMetadataIndexes()
-                val parts = parseBucketParts(listKey, GENRE_SONG_LETTER_PREFIX)
-                if (parts == null) emptyList() else {
-                    filterSongsByLetter(mediaCacheService.songsForGenre(parts.first), parts.second)
-                }
-            }
-            listKey.startsWith(DECADE_SONG_LETTER_PREFIX) -> {
-                ensureMetadataIndexes()
-                val parts = parseBucketParts(listKey, DECADE_SONG_LETTER_PREFIX)
-                if (parts == null) emptyList() else {
-                    filterSongsByLetter(mediaCacheService.songsForDecade(parts.first), parts.second)
-                }
-            }
-            else -> emptyList()
-        }
+        val tracks = resolveTracksForListKey(listKey)
 
         if (tracks.isEmpty()) {
             updatePlaybackState(PlaybackStateCompat.STATE_ERROR)
@@ -2029,7 +1961,86 @@ class MyMusicService : MediaBrowserServiceCompat() {
         val ordered = if (isShuffle) tracks.shuffled() else tracks
         playlistQueue = ordered
         currentQueueIndex = 0
-        currentPlaylistName = when {
+        currentPlaylistName = resolvePlaylistNameForListKey(listKey)
+
+        updateSessionQueue()
+        playTrack(playlistQueue[currentQueueIndex])
+        savePlaybackSnapshot()
+    }
+
+    private suspend fun resolveTracksForListKey(listKey: String) = when {
+        listKey == SONGS_ID -> mediaCacheService.cachedFiles
+        listKey == PLAYLISTS_ID -> {
+            val all = kotlinx.coroutines.coroutineScope {
+                mediaCacheService.discoveredPlaylists.map { playlist ->
+                    async(Dispatchers.IO) {
+                        playlistService.readPlaylist(
+                            this@MyMusicService,
+                            Uri.parse(playlist.uriString)
+                        )
+                    }
+                }.awaitAll().flatten()
+            }
+            enrichFromCache(all)
+        }
+        listKey.startsWith(PLAYLIST_SHORT_PREFIX) -> {
+            val shortId = listKey.removePrefix(PLAYLIST_SHORT_PREFIX)
+            val playlistUri = playlistShortIds[shortId] ?: ""
+            if (playlistUri.isEmpty()) emptyList()
+            else enrichFromCache(
+                playlistService.readPlaylist(
+                    this,
+                    Uri.parse(playlistUri)
+                )
+            )
+        }
+        listKey.startsWith(SMART_PLAYLIST_PREFIX) -> {
+            val smartId = Uri.decode(listKey.removePrefix(SMART_PLAYLIST_PREFIX))
+            resolveSmartPlaylistTracksById(smartId) ?: emptyList()
+        }
+        listKey.startsWith(ALBUM_PREFIX) -> {
+            ensureMetadataIndexes()
+            val album = Uri.decode(listKey.removePrefix(ALBUM_PREFIX))
+            mediaCacheService.songsForAlbum(album)
+        }
+        listKey.startsWith(GENRE_PREFIX) -> {
+            ensureMetadataIndexes()
+            val genre = Uri.decode(listKey.removePrefix(GENRE_PREFIX))
+            mediaCacheService.songsForGenre(genre)
+        }
+        listKey.startsWith(ARTIST_PREFIX) -> {
+            ensureMetadataIndexes()
+            val artist = Uri.decode(listKey.removePrefix(ARTIST_PREFIX))
+            mediaCacheService.songsForArtist(artist)
+        }
+        listKey.startsWith(DECADE_PREFIX) -> {
+            ensureMetadataIndexes()
+            val decade = Uri.decode(listKey.removePrefix(DECADE_PREFIX))
+            mediaCacheService.songsForDecade(decade)
+        }
+        listKey.startsWith(SONG_LETTER_PREFIX) -> {
+            val letter = Uri.decode(listKey.removePrefix(SONG_LETTER_PREFIX))
+            filterSongsByLetter(mediaCacheService.cachedFiles, letter)
+        }
+        listKey.startsWith(GENRE_SONG_LETTER_PREFIX) -> {
+            ensureMetadataIndexes()
+            val parts = parseBucketParts(listKey, GENRE_SONG_LETTER_PREFIX)
+            if (parts == null) emptyList() else {
+                filterSongsByLetter(mediaCacheService.songsForGenre(parts.first), parts.second)
+            }
+        }
+        listKey.startsWith(DECADE_SONG_LETTER_PREFIX) -> {
+            ensureMetadataIndexes()
+            val parts = parseBucketParts(listKey, DECADE_SONG_LETTER_PREFIX)
+            if (parts == null) emptyList() else {
+                filterSongsByLetter(mediaCacheService.songsForDecade(parts.first), parts.second)
+            }
+        }
+        else -> emptyList()
+    }
+
+    private fun resolvePlaylistNameForListKey(listKey: String): String {
+        return when {
             listKey == SONGS_ID -> "All Songs"
             listKey == PLAYLISTS_ID -> "All Playlists"
             listKey.startsWith(PLAYLIST_SHORT_PREFIX) -> {
@@ -2063,9 +2074,6 @@ class MyMusicService : MediaBrowserServiceCompat() {
             }
             else -> "Playlist"
         }
-        updateSessionQueue()
-        playTrack(playlistQueue[currentQueueIndex])
-        savePlaybackSnapshot()
     }
 
     private suspend fun handlePlayPlaylist(resolvedMediaId: String) {
