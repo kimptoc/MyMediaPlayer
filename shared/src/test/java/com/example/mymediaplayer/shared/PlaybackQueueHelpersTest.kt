@@ -5,7 +5,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class PlaybackHelpersTest {
+class PlaybackQueueHelpersTest {
 
     @Test
     fun nextQueueIndexForError_returnsNextWhenAvailable() {
@@ -18,9 +18,21 @@ class PlaybackHelpersTest {
     }
 
     @Test
+    fun nextQueueIndexForError_returnsNullWhenQueueSizeZeroOrNegative() {
+        assertEquals(null, nextQueueIndexForError(currentIndex = 0, queueSize = 0))
+        assertEquals(null, nextQueueIndexForError(currentIndex = 0, queueSize = -1))
+    }
+
+    @Test
+    fun nextQueueIndexForError_returnsNullWhenCurrentIndexNegative() {
+        assertEquals(null, nextQueueIndexForError(currentIndex = -1, queueSize = 3))
+    }
+
+    @Test
     fun shouldRetryPlaybackError_respectsLimit() {
         assertTrue(shouldRetryPlaybackError(consecutiveErrors = 0, maxErrors = 3))
         assertTrue(shouldRetryPlaybackError(consecutiveErrors = 2, maxErrors = 3))
         assertFalse(shouldRetryPlaybackError(consecutiveErrors = 3, maxErrors = 3))
+        assertFalse(shouldRetryPlaybackError(consecutiveErrors = 4, maxErrors = 3))
     }
 }
