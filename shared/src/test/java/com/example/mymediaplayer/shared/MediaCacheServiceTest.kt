@@ -116,7 +116,6 @@ class MediaCacheServiceTest {
     }
 
     @Test
-<<<<<<< HEAD
     fun persistPlaylists_savesToDatabase() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val service = MediaCacheService()
@@ -140,7 +139,9 @@ class MediaCacheServiceTest {
         assertEquals("My Playlist", sortedSaved[0].displayName)
         assertEquals("content://playlist2", sortedSaved[1].uriString)
         assertEquals("Rock", sortedSaved[1].displayName)
-=======
+    }
+
+    @Test
     fun getFileIndexByUri_returnsPopulatedMap() {
         val service = MediaCacheService()
         val file1 = MediaFileInfo(uriString = "uri1", displayName = "file1", sizeBytes = 100L)
@@ -267,6 +268,5 @@ class MediaCacheServiceTest {
         service.enrichGenresFromMediaStore(context)
 
         assertEquals(null, service.cachedFiles.first().genre)
->>>>>>> origin/main
     }
 }
