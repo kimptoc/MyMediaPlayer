@@ -47,14 +47,7 @@ class AnnouncementPreGeneratorTest {
             sizeBytes = 1000L
         )
 
-        var result: File? = File("dummy")
-        val job = launch {
-            result = preGen.getReadyAudio(track, true)
-        }
-
-        testScheduler.advanceTimeBy(5001L)
-
-        job.join()
+        val result = preGen.getReadyAudio(track, true)
 
         assertNull(result)
     }
