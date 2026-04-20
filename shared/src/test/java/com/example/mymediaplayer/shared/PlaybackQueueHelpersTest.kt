@@ -18,8 +18,12 @@ class PlaybackQueueHelpersTest {
     }
 
     @Test
-    fun nextQueueIndexForError_returnsNullWhenQueueSizeZeroOrNegative() {
+    fun nextQueueIndexForError_returnsNullWhenQueueEmpty() {
         assertEquals(null, nextQueueIndexForError(currentIndex = 0, queueSize = 0))
+    }
+
+    @Test
+    fun nextQueueIndexForError_returnsNullWhenQueueSizeNegative() {
         assertEquals(null, nextQueueIndexForError(currentIndex = 0, queueSize = -1))
     }
 
@@ -29,10 +33,18 @@ class PlaybackQueueHelpersTest {
     }
 
     @Test
-    fun shouldRetryPlaybackError_respectsLimit() {
+    fun shouldRetryPlaybackError_returnsTrueWhenConsecutiveErrorsLessThanMax() {
         assertTrue(shouldRetryPlaybackError(consecutiveErrors = 0, maxErrors = 3))
         assertTrue(shouldRetryPlaybackError(consecutiveErrors = 2, maxErrors = 3))
+    }
+
+    @Test
+    fun shouldRetryPlaybackError_returnsFalseWhenConsecutiveErrorsEqualsMax() {
         assertFalse(shouldRetryPlaybackError(consecutiveErrors = 3, maxErrors = 3))
+    }
+
+    @Test
+    fun shouldRetryPlaybackError_returnsFalseWhenConsecutiveErrorsGreaterThanMax() {
         assertFalse(shouldRetryPlaybackError(consecutiveErrors = 4, maxErrors = 3))
     }
 }

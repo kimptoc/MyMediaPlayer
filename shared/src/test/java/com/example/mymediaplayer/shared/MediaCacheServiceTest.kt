@@ -114,6 +114,21 @@ class MediaCacheServiceTest {
     }
 
     @Test
+    fun getFileIndexByUri_returnsPopulatedMap() {
+        val service = MediaCacheService()
+        val file1 = MediaFileInfo(uriString = "uri1", displayName = "file1", sizeBytes = 100L)
+        val file2 = MediaFileInfo(uriString = "uri2", displayName = "file2", sizeBytes = 200L)
+
+        service.addFile(file1)
+        service.addFile(file2)
+
+        val index = service.getFileIndexByUri()
+        assertEquals(2, index.size)
+        assertEquals(file1, index["uri1"])
+        assertEquals(file2, index["uri2"])
+    }
+
+    @Test
     fun enrichGenresFromMediaStore_enrichesGenresCorrectly() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val shadowResolver = shadowOf(context.contentResolver)
@@ -140,7 +155,7 @@ class MediaCacheServiceTest {
                 uriString = "content://test/song1",
                 displayName = "song1.mp3",
                 sizeBytes = 100L,
-                genre = null // Missing genre
+                genre = null
             )
         )
 
@@ -176,7 +191,7 @@ class MediaCacheServiceTest {
                 uriString = "content://test/song1",
                 displayName = "song1.mp3",
                 sizeBytes = 100L,
-                genre = "Rock" // Existing genre
+                genre = "Rock"
             )
         )
 
