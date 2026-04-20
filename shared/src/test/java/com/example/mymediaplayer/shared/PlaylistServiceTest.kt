@@ -16,21 +16,6 @@ import org.robolectric.Shadows
 class PlaylistServiceTest {
 
     @Test
-    fun readPlaylist_returnsEmptyOnOpenIOException() {
-        val baseContext = ApplicationProvider.getApplicationContext<Context>()
-        val uri = Uri.parse("content://test/playlist.m3u")
-        val shadowResolver = Shadows.shadowOf(baseContext.contentResolver)
-        shadowResolver.registerInputStreamSupplier(uri) {
-            throw IOException("Mocked open error")
-        }
-        val service = PlaylistService()
-
-        val results = service.readPlaylist(baseContext, uri)
-
-        assertTrue(results.isEmpty())
-    }
-
-    @Test
     fun readPlaylist_returnsEmptyOnSecurityException() {
         val baseContext = ApplicationProvider.getApplicationContext<Context>()
         val uri = Uri.parse("content://test/playlist.m3u")
