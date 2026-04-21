@@ -8,6 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
@@ -62,6 +63,11 @@ class NetworkQualityBenchmarkTest {
                 .body("".toResponseBody("text/plain".toMediaTypeOrNull()))
                 .build()
         }
+    }
+
+    @After
+    fun tearDown() {
+        NetworkQualityChecker.testInterceptor = null
     }
 
     @Test

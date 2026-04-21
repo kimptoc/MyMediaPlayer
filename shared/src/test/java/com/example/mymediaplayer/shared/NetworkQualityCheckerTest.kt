@@ -6,6 +6,7 @@ import android.net.Network
 import android.net.NetworkCapabilities
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.runBlocking
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
@@ -92,6 +93,11 @@ class NetworkQualityCheckerTest {
                 .body("".toResponseBody("text/plain".toMediaTypeOrNull()))
                 .build()
         }
+    }
+
+    @After
+    fun tearDown() {
+        NetworkQualityChecker.testInterceptor = null
     }
 
     @Test
