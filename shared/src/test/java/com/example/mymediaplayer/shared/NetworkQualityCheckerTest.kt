@@ -6,6 +6,13 @@ import android.net.Network
 import android.net.NetworkCapabilities
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.runBlocking
+import okhttp3.Interceptor
+import okhttp3.OkHttpClient
+import okhttp3.Protocol
+import okhttp3.Response
+import okhttp3.ResponseBody.Companion.toResponseBody
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
@@ -15,13 +22,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowConnectivityManager
 import org.robolectric.shadows.ShadowNetworkCapabilities
-import java.net.HttpURLConnection
-import java.net.URL
-import java.net.URLConnection
-import java.net.URLStreamHandler
-import java.net.URLStreamHandlerFactory
-import okhttp3.MediaType.Companion.toMediaTypeOrNull
-import okhttp3.ResponseBody.Companion.toResponseBody
+import java.io.IOException
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -31,67 +32,48 @@ class NetworkQualityCheckerTest {
     private lateinit var checker: NetworkQualityChecker
     private lateinit var connectivityManager: ConnectivityManager
     private lateinit var shadowConnectivityManager: ShadowConnectivityManager
+    private lateinit var testClient: OkHttpClient
 
     companion object {
         var mockLatencyMs: Long = 0
         var mockFailConnection = false
-        var factoryInstalled = false
-
-        fun installMockFactory() {
-            if (!factoryInstalled) {
-                try {
-                    URL.setURLStreamHandlerFactory { protocol ->
-                        if (protocol == "https") {
-                            object : URLStreamHandler() {
-                                override fun openConnection(u: URL): URLConnection {
-                                    return object : HttpURLConnection(u) {
-                                        override fun connect() {
-                                            if (mockFailConnection) throw java.io.IOException("Mock connection failed")
-                                            Thread.sleep(mockLatencyMs) // simulate latency
-                                        }
-                                        override fun disconnect() {}
-                                        override fun usingProxy(): Boolean = false
-                                    }
-                                }
-                            }
-                        } else {
-                            null
-                        }
-                    }
-                    factoryInstalled = true
-                } catch (e: Error) {
-                    // Factory already set
-                }
-            }
-        }
     }
 
     @Before
     fun setup() {
         context = ApplicationProvider.getApplicationContext()
-        checker = NetworkQualityChecker(context)
-
         connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         shadowConnectivityManager = shadowOf(connectivityManager)
 
         mockLatencyMs = 0
         mockFailConnection = false
 
-        installMockFactory()
+        // Build a dedicated test client with a deterministic mock interceptor.
+        // Each test class instance gets its own client, avoiding global state.
+        testClient = OkHttpClient.Builder()
+            .connectTimeout(2000, java.util.concurrent.TimeUnit.MILLISECONDS)
+            .readTimeout(2000, java.util.concurrent.TimeUnit.MILLISECONDS)
+            .followRedirects(false)
+            .addInterceptor(Interceptor { chain ->
+                if (mockFailConnection) throw IOException("Mock connection failed")
+                Response.Builder()
+                    .request(chain.request())
+                    .protocol(Protocol.HTTP_1_1)
+                    .code(200)
+                    .message("OK")
+                    .header("X-Mock-Latency", mockLatencyMs.toString())
+                    .body("".toResponseBody("text/plain".toMediaTypeOrNull()))
+                    .build()
+            })
+            .build()
 
-        NetworkQualityChecker.testInterceptor = okhttp3.Interceptor { chain ->
-            val request = chain.request()
-            if (mockFailConnection) throw java.io.IOException("Mock connection failed")
-            // Pass the latency specifically so Robolectric can read it deterministically
-            okhttp3.Response.Builder()
-                .request(request)
-                .protocol(okhttp3.Protocol.HTTP_1_1)
-                .code(200)
-                .message("OK")
-                .header("X-Mock-Latency", mockLatencyMs.toString())
-                .body("".toResponseBody("text/plain".toMediaTypeOrNull()))
-                .build()
-        }
+        checker = NetworkQualityChecker(context, testClient)
+    }
+
+    @After
+    fun tearDown() {
+        testClient.dispatcher.executorService.shutdown()
+        testClient.connectionPool.evictAll()
     }
 
     @Test

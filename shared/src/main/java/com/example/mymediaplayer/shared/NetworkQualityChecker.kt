@@ -15,8 +15,12 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import kotlin.coroutines.Continuation
 
-internal class NetworkQualityChecker(private val context: Context) {
+internal class NetworkQualityChecker(
+    private val context: Context,
+    private val httpClient: OkHttpClient = defaultClient,
+) {
 
     enum class Quality { GOOD, POOR, NONE }
 
@@ -48,7 +52,8 @@ internal class NetworkQualityChecker(private val context: Context) {
             return Quality.POOR
         }
 
-        // Measure round-trip latency with an asynchronous HEAD request
+        // Measure round-trip latency with an asynchronous HEAD request via OkHttp.
+        // Tests can inject a custom OkHttpClient to deterministically simulate latency.
         val latencyMs = runCatching {
             val start = System.currentTimeMillis()
             val request = Request.Builder()
@@ -56,36 +61,35 @@ internal class NetworkQualityChecker(private val context: Context) {
                 .head()
                 .build()
 
-            val diff = suspendCancellableCoroutine<Long> { continuation ->
-                val call = okHttpClient.newCall(request)
+            suspendCancellableCoroutine<Long> { continuation ->
+                val call = httpClient.newCall(request)
                 continuation.invokeOnCancellation {
                     call.cancel()
                 }
                 call.enqueue(object : Callback {
                     override fun onFailure(call: Call, e: IOException) {
-                        if (continuation.isActive) {
+                        continuation.safeResume {
                             continuation.resumeWithException(e)
                         }
                     }
 
                     override fun onResponse(call: Call, response: Response) {
-                        // The test Interceptor injects elapsed header if it is set.
-                        // We use it specifically for Robolectric deterministic timing
+                        // In tests the request is intercepted and the mock latency is
+                        // injected via the X-Mock-Latency response header for
+                        // deterministic timing under Robolectric.
                         val mockLatency = response.header("X-Mock-Latency")?.toLongOrNull()
                         response.close()
-                        if (continuation.isActive) {
+
+                        continuation.safeResume {
                             if (mockLatency != null) {
                                 continuation.resume(mockLatency)
                             } else {
-                                val actualDiff = System.currentTimeMillis() - start
-                                continuation.resume(actualDiff)
+                                continuation.resume(System.currentTimeMillis() - start)
                             }
                         }
                     }
                 })
             }
-
-            diff
         }.getOrElse { e ->
             if (e is CancellationException) throw e
             Log.d(TAG, "Network ping failed: ${e.message}")
@@ -102,16 +106,29 @@ internal class NetworkQualityChecker(private val context: Context) {
         private const val PING_TIMEOUT_MS = 2_000
         private const val GOOD_LATENCY_THRESHOLD_MS = 200L
 
-        // For testing purposes
-        internal var testInterceptor: okhttp3.Interceptor? = null
-
-        private val okHttpClient by lazy {
+        /**
+         * Shared default client used when no client is injected by the caller.
+         * It is lazily initialized once and reused via connection pooling.
+         */
+        private val defaultClient by lazy {
             OkHttpClient.Builder()
                 .connectTimeout(PING_TIMEOUT_MS.toLong(), TimeUnit.MILLISECONDS)
                 .readTimeout(PING_TIMEOUT_MS.toLong(), TimeUnit.MILLISECONDS)
                 .followRedirects(false)
-                .addInterceptor { chain -> testInterceptor?.intercept(chain) ?: chain.proceed(chain.request()) }
                 .build()
         }
+    }
+}
+
+/**
+ * Safely resume a cancellable continuation, swallowing the expected
+ * `IllegalStateException` that occurs when the continuation is already resumed
+ * (i.e. the coroutine was cancelled between the resume attempt and the dispatch).
+ */
+private inline fun <T> Continuation<T>.safeResume(block: () -> Unit) {
+    try {
+        block()
+    } catch (_: IllegalStateException) {
+        // Continuation was already resumed (likely by cancellation); safe to ignore.
     }
 }
