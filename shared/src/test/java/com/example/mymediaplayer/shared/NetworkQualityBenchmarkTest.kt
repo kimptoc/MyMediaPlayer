@@ -8,14 +8,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
-import okhttp3.Interceptor
-import okhttp3.OkHttpClient
-import okhttp3.Protocol
-import okhttp3.Response
-import okhttp3.ResponseBody
-import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Before
-import org.junit.Ignore
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -23,29 +17,23 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowConnectivityManager
 import org.robolectric.shadows.ShadowNetworkCapabilities
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.ResponseBody.Companion.toResponseBody
 
-/**
- * Smoke benchmark comparing async OkHttp concurrency against the historical
- * `HttpURLConnection` baseline.
- *
- * This test is **ignored in CI** to avoid adding wall-clock time. Run it locally
- * when making network-layer changes.
- *
- * Usage: comment out `@Ignore` and run the test manually.
- */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
-@Ignore("Benchmark — comment out @Ignore to run locally")
 class NetworkQualityBenchmarkTest {
 
     private lateinit var context: Context
+    private lateinit var checker: NetworkQualityChecker
     private lateinit var connectivityManager: ConnectivityManager
     private lateinit var shadowConnectivityManager: ShadowConnectivityManager
-    private lateinit var testClient: OkHttpClient
 
     @Before
     fun setup() {
         context = ApplicationProvider.getApplicationContext()
+        checker = NetworkQualityChecker(context)
+
         connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         shadowConnectivityManager = shadowOf(connectivityManager)
 
@@ -55,28 +43,25 @@ class NetworkQualityBenchmarkTest {
         shadowOf(capabilities).addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
         shadowOf(capabilities).addCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
         shadowOf(connectivityManager).setNetworkCapabilities(network, capabilities)
+        checker.invalidate()
 
-        // Dedicated test client with no latency — we measure pure async overhead.
-        testClient = OkHttpClient.Builder()
-            .connectTimeout(2000, java.util.concurrent.TimeUnit.MILLISECONDS)
-            .readTimeout(2000, java.util.concurrent.TimeUnit.MILLISECONDS)
-            .followRedirects(false)
-            .addInterceptor(Interceptor { chain ->
-                Response.Builder()
-                    .request(chain.request())
-                    .protocol(Protocol.HTTP_1_1)
-                    .code(200)
-                    .message("OK")
-                    .body("".toResponseBody())
-                    .build()
-            })
-            .build()
-    }
+        NetworkQualityCheckerTest.installMockFactory()
+        NetworkQualityCheckerTest.mockLatencyMs = 5L // Use small latency to speed up local tests
+        NetworkQualityCheckerTest.mockFailConnection = false
 
-    @After
-    fun tearDown() {
-        testClient.dispatcher.executorService.shutdown()
-        testClient.connectionPool.evictAll()
+        NetworkQualityChecker.testInterceptor = okhttp3.Interceptor { chain ->
+            val request = chain.request()
+            if (NetworkQualityCheckerTest.mockFailConnection) throw java.io.IOException("Mock connection failed")
+            // No sleep here to benchmark actual async overhead vs blocking overhead
+            okhttp3.Response.Builder()
+                .request(request)
+                .protocol(okhttp3.Protocol.HTTP_1_1)
+                .code(200)
+                .message("OK")
+                .header("X-Mock-Latency", NetworkQualityCheckerTest.mockLatencyMs.toString())
+                .body("".toResponseBody("text/plain".toMediaTypeOrNull()))
+                .build()
+        }
     }
 
     @Test
@@ -84,18 +69,17 @@ class NetworkQualityBenchmarkTest {
         val iterations = 50
         val concurrentRequests = 10
 
-        // Build a shared checker + warm up
-        val warmupChecker = NetworkQualityChecker(context, testClient)
+        // Warm up
         for (i in 0 until 5) {
-            warmupChecker.invalidate()
-            warmupChecker.check()
+            checker.invalidate()
+            checker.check()
         }
 
         val start = System.currentTimeMillis()
         for (i in 0 until iterations) {
             val deferreds = (0 until concurrentRequests).map {
                 async(Dispatchers.Default) {
-                    val localChecker = NetworkQualityChecker(context, testClient)
+                    val localChecker = NetworkQualityChecker(context)
                     localChecker.invalidate()
                     localChecker.check()
                 }

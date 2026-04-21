@@ -1384,26 +1384,46 @@ class MyMusicService : MediaBrowserServiceCompat() {
         return files.map { file -> byUri[file.uriString] ?: file }
     }
 
-    private fun enrichWithMetadata(fileInfo: MediaFileInfo): MediaFileInfo {
+    private fun playTrack(fileInfo: MediaFileInfo) {
+        clearPendingIntro()
+        releaseMediaPlayer()
+        if (!requestAudioFocus()) {
+            updatePlaybackState(
+                PlaybackStateCompat.STATE_ERROR,
+                "Could not acquire audio focus"
+            )
+            return
+        }
+
+        currentFileInfo = fileInfo
+        currentMediaId = fileInfo.uriString
+        savePlaybackSnapshot()
+
+        // Enrich with ID3 tags before pre-generating announcements
         val runtimeMetadata = MediaMetadataHelper.extractMetadata(this, fileInfo.uriString)
-        return if (runtimeMetadata != null) {
+        val enrichedFileInfo = if (runtimeMetadata != null) {
             fileInfo.copy(
                 title = runtimeMetadata.title?.takeIf { it.isNotBlank() } ?: fileInfo.title,
                 artist = runtimeMetadata.artist?.takeIf { it.isNotBlank() } ?: fileInfo.artist,
                 album = runtimeMetadata.album?.takeIf { it.isNotBlank() } ?: fileInfo.album
             )
         } else fileInfo
-    }
 
-    private fun schedulePreGenerationIfNeeded(enrichedFileInfo: MediaFileInfo) {
         if (trackVoiceIntroEnabled || trackVoiceOutroEnabled) {
             val nextTrack = peekNextQueueTrack()
-            val enrichedNext = nextTrack?.let { enrichWithMetadata(it) }
+            val enrichedNext = if (nextTrack != null) {
+                val nextMeta = MediaMetadataHelper.extractMetadata(this, nextTrack.uriString)
+                if (nextMeta != null) {
+                    nextTrack.copy(
+                        title = nextMeta.title?.takeIf { it.isNotBlank() } ?: nextTrack.title,
+                        artist = nextMeta.artist?.takeIf { it.isNotBlank() } ?: nextTrack.artist,
+                        album = nextMeta.album?.takeIf { it.isNotBlank() } ?: nextTrack.album
+                    )
+                } else nextTrack
+            } else null
             announcementPreGenerator?.schedulePreGeneration(enrichedFileInfo, enrichedNext)
         }
-    }
 
-    private fun prepareAndStartMediaPlayer(fileInfo: MediaFileInfo, enrichedFileInfo: MediaFileInfo) {
         val player = MediaPlayer()
         try {
             val uri = Uri.parse(fileInfo.uriString)
@@ -1443,43 +1463,31 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 prepareAsync()
             }
             mediaPlayer = player
+        } catch (e: SecurityException) {
+            Log.e("MyMusicService", "Permission denied for ${fileInfo.displayName}", e)
+            try { player.release() } catch (_: Exception) {}
+            mediaPlayer = null
+            abandonAudioFocus()
+            handlePlaybackError("Permission denied: ${fileInfo.displayName}")
+        } catch (e: java.io.IOException) {
+            Log.e("MyMusicService", "IO error for ${fileInfo.displayName}", e)
+            try { player.release() } catch (_: Exception) {}
+            mediaPlayer = null
+            abandonAudioFocus()
+            handlePlaybackError("Cannot read: ${fileInfo.displayName}")
+        } catch (e: IllegalArgumentException) {
+            Log.e("MyMusicService", "Invalid URI for ${fileInfo.displayName}", e)
+            try { player.release() } catch (_: Exception) {}
+            mediaPlayer = null
+            abandonAudioFocus()
+            handlePlaybackError("Invalid file: ${fileInfo.displayName}")
         } catch (e: Exception) {
-            handleMediaPlayerSetupError(e, player, fileInfo)
+            Log.e("MyMusicService", "Unexpected error for ${fileInfo.displayName}", e)
+            try { player.release() } catch (_: Exception) {}
+            mediaPlayer = null
+            abandonAudioFocus()
+            handlePlaybackError("Cannot play: ${fileInfo.displayName}")
         }
-    }
-
-    private fun handleMediaPlayerSetupError(e: Exception, player: MediaPlayer, fileInfo: MediaFileInfo) {
-        val (errorMsg, logMsg) = when (e) {
-            is SecurityException -> "Permission denied: ${fileInfo.displayName}" to "Permission denied for ${fileInfo.displayName}"
-            is java.io.IOException -> "Cannot read: ${fileInfo.displayName}" to "IO error for ${fileInfo.displayName}"
-            is IllegalArgumentException -> "Invalid file: ${fileInfo.displayName}" to "Invalid URI for ${fileInfo.displayName}"
-            else -> "Cannot play: ${fileInfo.displayName}" to "Unexpected error for ${fileInfo.displayName}"
-        }
-        Log.e("MyMusicService", logMsg, e)
-        try { player.release() } catch (_: Exception) {}
-        mediaPlayer = null
-        abandonAudioFocus()
-        handlePlaybackError(errorMsg)
-    }
-
-    private fun playTrack(fileInfo: MediaFileInfo) {
-        clearPendingIntro()
-        releaseMediaPlayer()
-        if (!requestAudioFocus()) {
-            updatePlaybackState(
-                PlaybackStateCompat.STATE_ERROR,
-                "Could not acquire audio focus"
-            )
-            return
-        }
-
-        currentFileInfo = fileInfo
-        currentMediaId = fileInfo.uriString
-        savePlaybackSnapshot()
-
-        val enrichedFileInfo = enrichWithMetadata(fileInfo)
-        schedulePreGenerationIfNeeded(enrichedFileInfo)
-        prepareAndStartMediaPlayer(fileInfo, enrichedFileInfo)
     }
 
     private fun maybeSpeakTrackIntroThenStart(fileInfo: MediaFileInfo, preparedPlayer: MediaPlayer) {
