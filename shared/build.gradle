@@ -33,6 +33,7 @@ android {
     }
 }
 dependencies {
+    implementation libs.okhttp
     implementation libs.androidx.media
     implementation libs.androidx.documentfile
     implementation libs.androidx.room.runtime
