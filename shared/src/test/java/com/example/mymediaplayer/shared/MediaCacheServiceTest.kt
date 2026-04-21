@@ -115,6 +115,13 @@ class MediaCacheServiceTest {
     @Test
     fun persistPlaylists_savesToDatabase() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
+        val db = MediaCacheDatabase.getInstance(context)
+        val dao = db.cacheDao()
+
+        withContext(Dispatchers.IO) {
+            dao.clearPlaylists()
+        }
+
         val service = MediaCacheService()
 
         service.addPlaylist(PlaylistInfo("content://playlist1", "My Playlist"))
@@ -124,8 +131,6 @@ class MediaCacheServiceTest {
             service.persistPlaylists(context)
         }
 
-        val db = MediaCacheDatabase.getInstance(context)
-        val dao = db.cacheDao()
         val saved = withContext(Dispatchers.IO) {
             dao.getAllPlaylists()
         }
@@ -136,5 +141,9 @@ class MediaCacheServiceTest {
         assertEquals("My Playlist", sortedSaved[0].displayName)
         assertEquals("content://playlist2", sortedSaved[1].uriString)
         assertEquals("Rock", sortedSaved[1].displayName)
+
+        withContext(Dispatchers.IO) {
+            dao.clearPlaylists()
+        }
     }
 }
