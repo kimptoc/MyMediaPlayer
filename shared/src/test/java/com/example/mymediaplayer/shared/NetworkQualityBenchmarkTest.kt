@@ -17,8 +17,6 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowConnectivityManager
 import org.robolectric.shadows.ShadowNetworkCapabilities
-import okhttp3.MediaType.Companion.toMediaTypeOrNull
-import okhttp3.ResponseBody.Companion.toResponseBody
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -58,8 +56,7 @@ class NetworkQualityBenchmarkTest {
                 .protocol(okhttp3.Protocol.HTTP_1_1)
                 .code(200)
                 .message("OK")
-                .header("X-Mock-Latency", NetworkQualityCheckerTest.mockLatencyMs.toString())
-                .body("".toResponseBody("text/plain".toMediaTypeOrNull()))
+                .body(okhttp3.ResponseBody.create(null, ""))
                 .build()
         }
     }

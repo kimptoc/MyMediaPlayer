@@ -106,12 +106,12 @@ internal class NetworkQualityChecker(private val context: Context) {
         internal var testInterceptor: okhttp3.Interceptor? = null
 
         private val okHttpClient by lazy {
-            val builder = OkHttpClient.Builder()
+            OkHttpClient.Builder()
                 .connectTimeout(PING_TIMEOUT_MS.toLong(), TimeUnit.MILLISECONDS)
                 .readTimeout(PING_TIMEOUT_MS.toLong(), TimeUnit.MILLISECONDS)
                 .followRedirects(false)
-            testInterceptor?.let { builder.addInterceptor(it) }
-            builder.build()
+                .addInterceptor { chain -> testInterceptor?.intercept(chain) ?: chain.proceed(chain.request()) }
+                .build()
         }
     }
 }
