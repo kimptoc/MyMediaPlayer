@@ -752,7 +752,23 @@ class MyMusicService : MediaBrowserServiceCompat() {
     }
 
     private fun buildMediaItemsForPrefix(parentId: String): MutableList<MediaItem>? {
-        if (parentId.startsWith(SMART_PLAYLIST_PREFIX)) {
+        return when {
+            parentId.startsWith(SMART_PLAYLIST_PREFIX) -> buildMediaItemsForSmartPlaylist(parentId)
+            parentId.startsWith(PLAYLIST_PREFIX) -> buildMediaItemsForPlaylist(parentId)
+            parentId.startsWith(ALBUM_PREFIX) -> buildMediaItemsForAlbum(parentId)
+            parentId.startsWith(GENRE_PREFIX) -> buildMediaItemsForGenre(parentId)
+            parentId.startsWith(GENRE_SONG_LETTER_PREFIX) -> buildMediaItemsForGenreSongLetter(parentId)
+            parentId.startsWith(ARTIST_PREFIX) -> buildMediaItemsForArtist(parentId)
+            parentId.startsWith(ARTIST_LETTER_PREFIX) -> buildMediaItemsForArtistLetter(parentId)
+            parentId.startsWith(DECADE_PREFIX) -> buildMediaItemsForDecade(parentId)
+            parentId.startsWith(DECADE_SONG_LETTER_PREFIX) -> buildMediaItemsForDecadeSongLetter(parentId)
+            parentId.startsWith(GENRE_LETTER_PREFIX) -> buildMediaItemsForGenreLetter(parentId)
+            parentId.startsWith(SONG_LETTER_PREFIX) -> buildMediaItemsForSongLetter(parentId)
+            else -> null
+        }
+    }
+
+    private fun buildMediaItemsForSmartPlaylist(parentId: String): MutableList<MediaItem> {
             val smartId = Uri.decode(parentId.removePrefix(SMART_PLAYLIST_PREFIX))
             val tracks = resolveSmartPlaylistTracksById(smartId) ?: emptyList()
             return buildSongListItems(
@@ -760,8 +776,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 SMART_PLAYLIST_PREFIX + Uri.encode(smartId),
                 resourceIconUri(R.drawable.ic_album_placeholder)
             )
-        }
-        if (parentId.startsWith(PLAYLIST_PREFIX)) {
+    }
+
+    private fun buildMediaItemsForPlaylist(parentId: String): MutableList<MediaItem> {
             val shortId = parentId.removePrefix(PLAYLIST_PREFIX)
             val playlistUri = playlistShortIds[shortId] ?: return mutableListOf()
             val songs = enrichFromCache(
@@ -769,13 +786,15 @@ class MyMusicService : MediaBrowserServiceCompat() {
             )
             val songIconUri = resourceIconUri(R.drawable.ic_album_placeholder)
             return buildSongListItems(songs, PLAYLIST_SHORT_PREFIX + shortId, songIconUri)
-        }
-        if (parentId.startsWith(ALBUM_PREFIX)) {
+    }
+
+    private fun buildMediaItemsForAlbum(parentId: String): MutableList<MediaItem> {
             ensureMetadataIndexes()
             val album = Uri.decode(parentId.removePrefix(ALBUM_PREFIX))
             return buildSongListItems(mediaCacheService.songsForAlbum(album), ALBUM_PREFIX + Uri.encode(album), resourceIconUri(R.drawable.ic_album_placeholder))
-        }
-        if (parentId.startsWith(GENRE_PREFIX)) {
+    }
+
+    private fun buildMediaItemsForGenre(parentId: String): MutableList<MediaItem> {
             ensureMetadataIndexes()
             val genre = Uri.decode(parentId.removePrefix(GENRE_PREFIX))
             val songs = mediaCacheService.songsForGenre(genre)
@@ -787,8 +806,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 )
             }
             return buildSongListItems(songs, GENRE_PREFIX + Uri.encode(genre), resourceIconUri(R.drawable.ic_album_placeholder))
-        }
-        if (parentId.startsWith(GENRE_SONG_LETTER_PREFIX)) {
+    }
+
+    private fun buildMediaItemsForGenreSongLetter(parentId: String): MutableList<MediaItem> {
             ensureMetadataIndexes()
             val parts = parseBucketParts(parentId, GENRE_SONG_LETTER_PREFIX) ?: return mutableListOf()
             val genre = parts.first
@@ -799,13 +819,15 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 GENRE_SONG_LETTER_PREFIX + Uri.encode(genre) + ":" + Uri.encode(letter),
                 filtered
             )
-        }
-        if (parentId.startsWith(ARTIST_PREFIX)) {
+    }
+
+    private fun buildMediaItemsForArtist(parentId: String): MutableList<MediaItem> {
             ensureMetadataIndexes()
             val artist = Uri.decode(parentId.removePrefix(ARTIST_PREFIX))
             return buildSongListItems(mediaCacheService.songsForArtist(artist), ARTIST_PREFIX + Uri.encode(artist), resourceIconUri(R.drawable.ic_album_placeholder))
-        }
-        if (parentId.startsWith(ARTIST_LETTER_PREFIX)) {
+    }
+
+    private fun buildMediaItemsForArtistLetter(parentId: String): MutableList<MediaItem> {
             ensureMetadataIndexes()
             val letter = Uri.decode(parentId.removePrefix(ARTIST_LETTER_PREFIX))
             return buildCategoryListItems(
@@ -814,8 +836,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 buildArtistCounts(mediaCacheService.cachedFiles),
                 resourceIconUri(R.drawable.ic_auto_artists)
             )
-        }
-        if (parentId.startsWith(DECADE_PREFIX)) {
+    }
+
+    private fun buildMediaItemsForDecade(parentId: String): MutableList<MediaItem> {
             ensureMetadataIndexes()
             val decade = Uri.decode(parentId.removePrefix(DECADE_PREFIX))
             val songs = mediaCacheService.songsForDecade(decade)
@@ -827,8 +850,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 )
             }
             return buildSongListItems(songs, DECADE_PREFIX + Uri.encode(decade), resourceIconUri(R.drawable.ic_album_placeholder))
-        }
-        if (parentId.startsWith(DECADE_SONG_LETTER_PREFIX)) {
+    }
+
+    private fun buildMediaItemsForDecadeSongLetter(parentId: String): MutableList<MediaItem> {
             ensureMetadataIndexes()
             val parts = parseBucketParts(parentId, DECADE_SONG_LETTER_PREFIX) ?: return mutableListOf()
             val decade = parts.first
@@ -839,8 +863,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 DECADE_SONG_LETTER_PREFIX + Uri.encode(decade) + ":" + Uri.encode(letter),
                 filtered
             )
-        }
-        if (parentId.startsWith(GENRE_LETTER_PREFIX)) {
+    }
+
+    private fun buildMediaItemsForGenreLetter(parentId: String): MutableList<MediaItem> {
             ensureMetadataIndexes()
             val letter = Uri.decode(parentId.removePrefix(GENRE_LETTER_PREFIX))
             return buildCategoryListItems(
@@ -848,17 +873,15 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 GENRE_PREFIX,
                 iconUri = resourceIconUri(R.drawable.ic_auto_genres)
             )
-        }
-        if (parentId.startsWith(SONG_LETTER_PREFIX)) {
+    }
+
+    private fun buildMediaItemsForSongLetter(parentId: String): MutableList<MediaItem> {
             val letter = Uri.decode(parentId.removePrefix(SONG_LETTER_PREFIX))
             val filtered = filterSongsByLetter(mediaCacheService.cachedFiles, letter)
             return buildSongLetterItems(
                 SONG_LETTER_PREFIX + Uri.encode(letter),
                 filtered
             )
-        }
-
-        return null
     }
 
     private fun buildMediaItemsForId(parentId: String): MutableList<MediaItem> {
