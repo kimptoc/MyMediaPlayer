@@ -2852,15 +2852,12 @@ class MyMusicService : MediaBrowserServiceCompat() {
             else
                 "Smart Playlists"
             items.add(
-                MediaItem(
-                    MediaDescriptionCompat.Builder()
-                        .setMediaId(PLAYLISTS_ID)
-                        .setTitle("Playlists")
-                        .setSubtitle(playlistSubtitle)
-                        .setIconUri(resourceIconUri(R.drawable.ic_auto_playlists))
-                        .setExtras(childListExtras)
-                        .build(),
-                    MediaItem.FLAG_BROWSABLE
+                createBrowsableMediaItem(
+                    mediaId = PLAYLISTS_ID,
+                    title = "Playlists",
+                    subtitle = playlistSubtitle,
+                    iconResId = R.drawable.ic_auto_playlists,
+                    extras = childListExtras
                 )
             )
         }
@@ -2873,67 +2870,71 @@ class MyMusicService : MediaBrowserServiceCompat() {
             val artistCount = mediaCacheService.artists().size
 
             items.add(
-                MediaItem(
-                    MediaDescriptionCompat.Builder()
-                        .setMediaId(GENRES_ID)
-                        .setTitle("Genres")
-                        .setSubtitle("$genreCount genre${if (genreCount != 1) "s" else ""}")
-                        .setIconUri(resourceIconUri(R.drawable.ic_auto_genres))
-                        .setExtras(childListExtras)
-                        .build(),
-                    MediaItem.FLAG_BROWSABLE
+                createBrowsableMediaItem(
+                    mediaId = GENRES_ID,
+                    title = "Genres",
+                    subtitle = "$genreCount genre${if (genreCount != 1) "s" else ""}",
+                    iconResId = R.drawable.ic_auto_genres,
+                    extras = childListExtras
                 )
             )
             items.add(
-                MediaItem(
-                    MediaDescriptionCompat.Builder()
-                        .setMediaId(DECADES_ID)
-                        .setTitle("Decades")
-                        .setSubtitle("$decadeCount decade${if (decadeCount != 1) "s" else ""}")
-                        .setIconUri(resourceIconUri(R.drawable.ic_auto_decades))
-                        .setExtras(childListExtras)
-                        .build(),
-                    MediaItem.FLAG_BROWSABLE
+                createBrowsableMediaItem(
+                    mediaId = DECADES_ID,
+                    title = "Decades",
+                    subtitle = "$decadeCount decade${if (decadeCount != 1) "s" else ""}",
+                    iconResId = R.drawable.ic_auto_decades,
+                    extras = childListExtras
                 )
             )
             items.add(
-                MediaItem(
-                    MediaDescriptionCompat.Builder()
-                        .setMediaId(ALBUMS_ID)
-                        .setTitle("Albums")
-                        .setSubtitle("$albumCount album${if (albumCount != 1) "s" else ""}")
-                        .setIconUri(resourceIconUri(R.drawable.ic_auto_albums))
-                        .setExtras(childListExtras)
-                        .build(),
-                    MediaItem.FLAG_BROWSABLE
+                createBrowsableMediaItem(
+                    mediaId = ALBUMS_ID,
+                    title = "Albums",
+                    subtitle = "$albumCount album${if (albumCount != 1) "s" else ""}",
+                    iconResId = R.drawable.ic_auto_albums,
+                    extras = childListExtras
                 )
             )
             items.add(
-                MediaItem(
-                    MediaDescriptionCompat.Builder()
-                        .setMediaId(ARTISTS_ID)
-                        .setTitle("Artists")
-                        .setSubtitle("$artistCount artist${if (artistCount != 1) "s" else ""}")
-                        .setIconUri(resourceIconUri(R.drawable.ic_auto_artists))
-                        .setExtras(childListExtras)
-                        .build(),
-                    MediaItem.FLAG_BROWSABLE
+                createBrowsableMediaItem(
+                    mediaId = ARTISTS_ID,
+                    title = "Artists",
+                    subtitle = "$artistCount artist${if (artistCount != 1) "s" else ""}",
+                    iconResId = R.drawable.ic_auto_artists,
+                    extras = childListExtras
                 )
             )
             items.add(
-                MediaItem(
-                    MediaDescriptionCompat.Builder()
-                        .setMediaId(SONGS_ID)
-                        .setTitle("Songs")
-                        .setSubtitle("$songCount song${if (songCount != 1) "s" else ""}")
-                        .setIconUri(resourceIconUri(R.drawable.ic_auto_song))
-                        .setExtras(childListExtras)
-                        .build(),
-                    MediaItem.FLAG_BROWSABLE
+                createBrowsableMediaItem(
+                    mediaId = SONGS_ID,
+                    title = "Songs",
+                    subtitle = "$songCount song${if (songCount != 1) "s" else ""}",
+                    iconResId = R.drawable.ic_auto_song,
+                    extras = childListExtras
                 )
             )
         }
         return items
+    }
+
+    private fun createBrowsableMediaItem(
+        mediaId: String,
+        title: String,
+        subtitle: String,
+        iconResId: Int,
+        extras: Bundle
+    ): MediaItem {
+        return MediaItem(
+            MediaDescriptionCompat.Builder()
+                .setMediaId(mediaId)
+                .setTitle(title)
+                .setSubtitle(subtitle)
+                .setIconUri(resourceIconUri(iconResId))
+                .setExtras(extras)
+                .build(),
+            MediaItem.FLAG_BROWSABLE
+        )
     }
 
     private fun restorePlaybackSnapshot() {
