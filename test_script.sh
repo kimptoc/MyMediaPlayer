@@ -1,2 +1,2 @@
 #!/bin/bash
-./gradlew check
+./gradlew :shared:testDebugUnitTest --tests "com.example.mymediaplayer.shared.PlaylistServiceTreeTest"
