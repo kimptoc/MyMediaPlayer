@@ -659,8 +659,31 @@ class MyMusicService : MediaBrowserServiceCompat() {
             return START_NOT_STICKY
         }
         if (intent?.action == ACTION_MEDIA_PLAY_FROM_SEARCH) {
-            val query = intent.getStringExtra(SearchManager.QUERY)
-            val extras = intent.extras?.let { Bundle(it) }
+            val rawQuery = intent.getStringExtra(SearchManager.QUERY)
+            val query = if (rawQuery != null && rawQuery.length > 500) {
+                rawQuery.substring(0, 500)
+            } else {
+                rawQuery
+            }
+
+            val extras = intent.extras?.let { originalExtras ->
+                Bundle().apply {
+                    val allowedKeys = setOf(
+                        "android.intent.extra.focus",
+                        "android.intent.extra.artist",
+                        "android.intent.extra.album",
+                        "android.intent.extra.genre",
+                        "android.intent.extra.title",
+                        "android.intent.extra.playlist"
+                    )
+                    for (key in allowedKeys) {
+                        val value = originalExtras.getString(key)
+                        if (value != null) {
+                            putString(key, if (value.length > 500) value.substring(0, 500) else value)
+                        }
+                    }
+                }
+            }
             playJob?.cancel()
             playJob = serviceScope.launch {
                 playMutex.withLock {
