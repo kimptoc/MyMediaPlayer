@@ -765,8 +765,34 @@ class MainActivity : ComponentActivity() {
 
     private fun handleIncomingIntent(intent: Intent?) {
         if (intent?.action != ACTION_MEDIA_PLAY_FROM_SEARCH) return
-        pendingVoiceSearchQuery = intent.getStringExtra(SearchManager.QUERY) ?: ""
-        pendingVoiceSearchExtras = intent.extras?.let { Bundle(it) }
+
+        val rawQuery = try {
+            intent.getStringExtra(SearchManager.QUERY) ?: ""
+        } catch (e: Exception) {
+            ""
+        }
+        val safeQuery = if (rawQuery.length > 500) rawQuery.substring(0, 500) else rawQuery
+
+        val safeExtras = Bundle()
+        try {
+            intent.extras?.let { extras ->
+                for (key in extras.keySet()) {
+                    when (val value = extras.get(key)) {
+                        is String -> safeExtras.putString(key, if (value.length > 500) value.substring(0, 500) else value)
+                        is Int -> safeExtras.putInt(key, value)
+                        is Long -> safeExtras.putLong(key, value)
+                        is Boolean -> safeExtras.putBoolean(key, value)
+                        is Float -> safeExtras.putFloat(key, value)
+                        is Double -> safeExtras.putDouble(key, value)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            // Ignore malformed extras that fail to unparcel
+        }
+
+        pendingVoiceSearchQuery = safeQuery
+        pendingVoiceSearchExtras = safeExtras
         dispatchPendingVoiceSearchIfNeeded()
     }
 
