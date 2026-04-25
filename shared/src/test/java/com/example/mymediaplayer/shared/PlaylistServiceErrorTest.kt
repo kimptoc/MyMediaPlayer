@@ -7,6 +7,7 @@ import android.content.pm.ProviderInfo
 import android.database.Cursor
 import android.net.Uri
 import androidx.test.core.app.ApplicationProvider
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -95,6 +96,24 @@ class PlaylistServiceErrorTest {
 
         val result = service.writePlaylistWithName(baseContext, treeUri, files, "test_playlist")
         assertNull(result)
+    }
+
+    @Test
+    fun overwritePlaylist_returnsFalseOnIOException() {
+        val baseContext = ApplicationProvider.getApplicationContext<Context>()
+
+        val playlistUri = Uri.parse("content://myauth_valid/document/existing_file")
+
+        val shadowResolver = Shadows.shadowOf(baseContext.contentResolver)
+        shadowResolver.registerOutputStreamSupplier(playlistUri) {
+            throw IOException("Mocked exception")
+        }
+
+        val service = PlaylistService()
+        val files = listOf(MediaFileInfo("content://test/song1", "Song One", 1L, "Song One"))
+
+        val result = service.overwritePlaylist(baseContext, playlistUri, files)
+        assertFalse(result)
     }
 
 }
