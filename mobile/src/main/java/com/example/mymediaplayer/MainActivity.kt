@@ -10,6 +10,7 @@ import androidx.core.content.edit
 import androidx.core.net.toUri
 import android.os.Build
 import android.os.SystemClock
+import android.util.Log
 import android.Manifest
 import android.app.SearchManager
 import android.bluetooth.BluetoothDevice
@@ -769,6 +770,7 @@ class MainActivity : ComponentActivity() {
         val rawQuery = try {
             intent.getStringExtra(SearchManager.QUERY) ?: ""
         } catch (e: Exception) {
+            Log.w("MainActivity", "Failed to read voice search query extra", e)
             ""
         }
         val safeQuery = if (rawQuery.length > 500) rawQuery.substring(0, 500) else rawQuery
@@ -788,7 +790,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
         } catch (e: Exception) {
-            // Ignore malformed extras that fail to unparcel
+            Log.w("MainActivity", "Failed to unparcel voice search extras", e)
         }
 
         pendingVoiceSearchQuery = safeQuery
