@@ -116,4 +116,20 @@ class PlaylistServiceErrorTest {
         assertFalse(result)
     }
 
+    @Test
+    fun overwritePlaylist_returnsFalseOnSecurityException() {
+        val baseContext = ApplicationProvider.getApplicationContext<Context>()
+        val shadowResolver = Shadows.shadowOf(baseContext.contentResolver)
+        val targetUri = Uri.parse("content://myauth_valid/document/new_file")
+
+        shadowResolver.registerOutputStreamSupplier(targetUri) {
+            throw SecurityException("Mocked exception")
+        }
+
+        val service = PlaylistService()
+        val files = listOf(MediaFileInfo("content://test/song1", "Song One", 1L, "Song One"))
+
+        val result = service.overwritePlaylist(baseContext, targetUri, files)
+        assertFalse(result)
+    }
 }
