@@ -6,6 +6,7 @@ import android.net.Network
 import android.net.NetworkCapabilities
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.runBlocking
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
@@ -20,6 +21,8 @@ import java.net.URL
 import java.net.URLConnection
 import java.net.URLStreamHandler
 import java.net.URLStreamHandlerFactory
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.ResponseBody.Companion.toResponseBody
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -76,6 +79,25 @@ class NetworkQualityCheckerTest {
         mockFailConnection = false
 
         installMockFactory()
+
+        NetworkQualityChecker.testInterceptor = okhttp3.Interceptor { chain ->
+            val request = chain.request()
+            if (mockFailConnection) throw java.io.IOException("Mock connection failed")
+            // Pass the latency specifically so Robolectric can read it deterministically
+            okhttp3.Response.Builder()
+                .request(request)
+                .protocol(okhttp3.Protocol.HTTP_1_1)
+                .code(200)
+                .message("OK")
+                .header("X-Mock-Latency", mockLatencyMs.toString())
+                .body("".toResponseBody("text/plain".toMediaTypeOrNull()))
+                .build()
+        }
+    }
+
+    @After
+    fun tearDown() {
+        NetworkQualityChecker.testInterceptor = null
     }
 
     @Test
