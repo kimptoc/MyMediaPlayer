@@ -277,68 +277,81 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private fun applyCachedScanResult(
+        files: List<com.example.mymediaplayer.shared.MediaFileInfo>,
+        playlists: List<com.example.mymediaplayer.shared.PlaylistInfo>,
+        maxFiles: Int,
+        message: String,
+        deepScan: Boolean = false
+    ) {
+        _uiState.value = resetAfterScan(files, playlists, maxFiles, deepScan = deepScan, scanMessage = message)
+        reimportPlaylistsFromSaveFolderIfNeeded()
+        metadataKey = null
+    }
+
+    private fun loadFromMemoryCache(key: String, maxFiles: Int, message: String, deepScan: Boolean = false): Boolean {
+        val cached = scanCache[key] ?: return false
+        mediaCacheService.clearCache()
+        mediaCacheService.addAllFiles(cached.first)
+        mediaCacheService.addAllPlaylists(cached.second)
+        applyCachedScanResult(cached.first, cached.second, maxFiles, message, deepScan)
+        return true
+    }
+
+    private fun loadFromPersistedCache(key: String, uri: Uri, maxFiles: Int, message: String, deepScan: Boolean = false): Boolean {
+        val persisted = mediaCacheService.loadPersistedCache(getApplication(), uri, maxFiles)
+        if (persisted != null && persisted.files.isNotEmpty()) {
+            scanCache[key] = persisted.files to persisted.playlists
+            applyCachedScanResult(persisted.files, persisted.playlists, maxFiles, message, deepScan)
+            return true
+        }
+        return false
+    }
+
+    private fun prepareScanState(maxFiles: Int, deepScan: Boolean, scanProgressMsg: String) {
+        val current = _uiState.value
+        _uiState.value = current.copy(
+            scan = current.scan.copy(
+                isScanning = true,
+                scannedFiles = emptyList(),
+                discoveredPlaylists = emptyList(),
+                lastScanLimit = maxFiles,
+                deepScanEnabled = deepScan,
+                scanMessage = null,
+                scanProgress = scanProgressMsg
+            ),
+            library = LibraryState(),
+            playlist = current.playlist.copy(
+                selectedPlaylist = null,
+                playlistSongs = emptyList(),
+                isPlaylistLoading = false
+            )
+        )
+    }
+
+    private fun finalizeScan(key: String, uri: Uri, maxFiles: Int, message: String, deepScan: Boolean = false) {
+        val files = mediaCacheService.cachedFiles
+        val playlists = mediaCacheService.discoveredPlaylists
+        scanCache[key] = files to playlists
+        if (!deepScan) {
+            mediaCacheService.persistCache(getApplication(), uri, maxFiles)
+        }
+        applyCachedScanResult(files, playlists, maxFiles, message, deepScan)
+    }
+
     fun scanWholeDevice(maxFiles: Int, forceRescan: Boolean = false) {
         val key = "whole_device|$maxFiles"
-        if (!forceRescan) {
-            val cached = scanCache[key]
-            if (cached != null) {
-                mediaCacheService.clearCache()
-                mediaCacheService.addAllFiles(cached.first)
-                mediaCacheService.addAllPlaylists(cached.second)
-                _uiState.value = resetAfterScan(
-                    cached.first,
-                    cached.second,
-                    maxFiles,
-                    deepScan = false,
-                    scanMessage = "Whole-drive scan loaded from cache"
-                )
-                reimportPlaylistsFromSaveFolderIfNeeded()
-                metadataKey = null
-                return
-            }
-        }
+        val message = "Whole-drive scan loaded from cache"
+
+        if (!forceRescan && loadFromMemoryCache(key, maxFiles, message)) return
 
         viewModelScope.launch(Dispatchers.IO) {
-            if (!forceRescan) {
-                val wholeDeviceUri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
-                val persisted =
-                    mediaCacheService.loadPersistedCache(getApplication(), wholeDeviceUri, maxFiles)
-                if (persisted != null && persisted.files.isNotEmpty()) {
-                    scanCache[key] = persisted.files to persisted.playlists
-                    _uiState.value = resetAfterScan(
-                        persisted.files,
-                        persisted.playlists,
-                        maxFiles,
-                        deepScan = false,
-                        scanMessage = "Whole-drive scan loaded from cache"
-                    )
-                    reimportPlaylistsFromSaveFolderIfNeeded()
-                    metadataKey = null
-                    return@launch
-                }
-            }
-            val current = _uiState.value
-            _uiState.value = current.copy(
-                scan = current.scan.copy(
-                    isScanning = true,
-                    scannedFiles = emptyList(),
-                    discoveredPlaylists = emptyList(),
-                    lastScanLimit = maxFiles,
-                    deepScanEnabled = false,
-                    scanMessage = null,
-                    scanProgress = "Scanning whole drive… 0 songs"
-                ),
-                library = LibraryState(),
-                playlist = current.playlist.copy(
-                    selectedPlaylist = null,
-                    playlistSongs = emptyList(),
-                    isPlaylistLoading = false
-                )
-            )
-            val stats = mediaCacheService.scanWholeDevice(
-                getApplication(),
-                maxFiles
-            ) { songsFound, _ ->
+            val wholeDeviceUri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+            if (!forceRescan && loadFromPersistedCache(key, wholeDeviceUri, maxFiles, message)) return@launch
+
+            prepareScanState(maxFiles, false, "Scanning whole drive… 0 songs")
+
+            val stats = mediaCacheService.scanWholeDevice(getApplication(), maxFiles) { songsFound, _ ->
                 val cur = _uiState.value
                 _uiState.value = cur.copy(
                     scan = cur.scan.copy(
@@ -347,24 +360,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 )
             }
-            val files = mediaCacheService.cachedFiles
-            val playlists = mediaCacheService.discoveredPlaylists
-            scanCache[key] = files to playlists
-            mediaCacheService.persistCache(
-                getApplication(),
-                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                maxFiles
-            )
-            val message = formatWholeDeviceScanMessage(stats)
-            _uiState.value = resetAfterScan(
-                files,
-                playlists,
-                maxFiles,
-                deepScan = false,
-                scanMessage = message
-            )
-            reimportPlaylistsFromSaveFolderIfNeeded()
-            metadataKey = null
+
+            val scanMessage = formatWholeDeviceScanMessage(stats)
+            finalizeScan(key, wholeDeviceUri, maxFiles, scanMessage)
         }
     }
 
