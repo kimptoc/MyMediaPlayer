@@ -30,7 +30,7 @@ class ShadowDocumentFile {
 }
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [33], shadows = [ShadowDocumentFile::class])
+@Config(sdk = [34], shadows = [ShadowDocumentFile::class])
 class PlaylistServiceTreeTest {
 
     private lateinit var rootDir: File
