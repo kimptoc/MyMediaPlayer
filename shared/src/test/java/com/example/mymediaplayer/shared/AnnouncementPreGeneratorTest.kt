@@ -58,4 +58,47 @@ class AnnouncementPreGeneratorTest {
 
         assertNull(result)
     }
+
+    @Test
+    fun getReadyAudio_fetchKiloTextException_returnsNull() = runTest {
+        // Since URLStreamHandlerFactory is set globally in this JVM by NetworkQualityCheckerTest,
+        // we can use its static mockFailConnection to simulate a network failure.
+        NetworkQualityCheckerTest.installMockFactory()
+        NetworkQualityCheckerTest.mockFailConnection = true
+
+        try {
+            val context = ApplicationProvider.getApplicationContext<Context>()
+
+            val prefs = context.getSharedPreferences("api_keys", Context.MODE_PRIVATE)
+            prefs.edit()
+                .putString("pref_kilo_key", "fake_kilo_key")
+                .putString("pref_cloud_tts_key", "fake_tts_key")
+                .apply()
+
+            val preGen = AnnouncementPreGenerator(context, TestScope(this.testScheduler))
+
+            val track = MediaFileInfo(
+                uriString = "test_uri_exception",
+                displayName = "Exception Title",
+                title = "Exception Title",
+                artist = "Exception Artist",
+                album = null,
+                durationMs = 10000,
+                sizeBytes = 1000L
+            )
+
+            var result: File? = File("dummy")
+            val job = launch {
+                result = preGen.getReadyAudio(track, true)
+            }
+
+            testScheduler.advanceUntilIdle()
+            job.join()
+
+            assertNull("Audio should be null due to simulated network exception", result)
+        } finally {
+            NetworkQualityCheckerTest.mockFailConnection = false
+        }
+    }
+
 }
