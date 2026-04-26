@@ -7,6 +7,7 @@ import android.content.pm.ProviderInfo
 import android.database.Cursor
 import android.net.Uri
 import androidx.test.core.app.ApplicationProvider
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -97,4 +98,38 @@ class PlaylistServiceErrorTest {
         assertNull(result)
     }
 
+    @Test
+    fun overwritePlaylist_returnsFalseOnIOException() {
+        val baseContext = ApplicationProvider.getApplicationContext<Context>()
+
+        val playlistUri = Uri.parse("content://myauth_valid/document/existing_file")
+
+        val shadowResolver = Shadows.shadowOf(baseContext.contentResolver)
+        shadowResolver.registerOutputStreamSupplier(playlistUri) {
+            throw IOException("Mocked exception")
+        }
+
+        val service = PlaylistService()
+        val files = listOf(MediaFileInfo("content://test/song1", "Song One", 1L, "Song One"))
+
+        val result = service.overwritePlaylist(baseContext, playlistUri, files)
+        assertFalse(result)
+    }
+
+    @Test
+    fun overwritePlaylist_returnsFalseOnSecurityException() {
+        val baseContext = ApplicationProvider.getApplicationContext<Context>()
+        val shadowResolver = Shadows.shadowOf(baseContext.contentResolver)
+        val targetUri = Uri.parse("content://myauth_valid/document/new_file")
+
+        shadowResolver.registerOutputStreamSupplier(targetUri) {
+            throw SecurityException("Mocked exception")
+        }
+
+        val service = PlaylistService()
+        val files = listOf(MediaFileInfo("content://test/song1", "Song One", 1L, "Song One"))
+
+        val result = service.overwritePlaylist(baseContext, targetUri, files)
+        assertFalse(result)
+    }
 }
