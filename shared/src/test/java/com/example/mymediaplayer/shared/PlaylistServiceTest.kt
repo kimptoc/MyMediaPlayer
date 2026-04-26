@@ -112,4 +112,108 @@ class PlaylistServiceTest {
         assertTrue(content.contains("song1#EXTINF:-1,Maliciouscontent://test/malicious"))
     }
 
+    @Test
+    fun overwritePlaylist_returnsFalseOnEmptyFiles() {
+        val baseContext = ApplicationProvider.getApplicationContext<Context>()
+        val uri = Uri.parse("content://test/playlist.m3u")
+        val service = PlaylistService()
+        val files = emptyList<MediaFileInfo>()
+
+        val result = service.overwritePlaylist(
+            baseContext,
+            uri,
+            files
+        )
+
+        assertFalse(result)
+    }
+
+    @Test
+    fun overwritePlaylist_returnsFalseOnIOException() {
+        val baseContext = ApplicationProvider.getApplicationContext<Context>()
+        val uri = Uri.parse("content://test/playlist.m3u")
+        val shadowResolver = Shadows.shadowOf(baseContext.contentResolver)
+        shadowResolver.registerOutputStreamSupplier(uri) {
+            throw IOException("fail")
+        }
+        val service = PlaylistService()
+        val files = listOf(
+            MediaFileInfo(
+                uriString = "content://test/song1",
+                displayName = "Song One",
+                sizeBytes = 1L,
+                title = "Song One"
+            )
+        )
+
+        val result = service.overwritePlaylist(
+            baseContext,
+            uri,
+            files
+        )
+
+        assertFalse(result)
+    }
+
+    @Test
+    fun overwritePlaylist_returnsFalseOnSecurityException() {
+        val baseContext = ApplicationProvider.getApplicationContext<Context>()
+        val uri = Uri.parse("content://test/playlist.m3u")
+        val shadowResolver = Shadows.shadowOf(baseContext.contentResolver)
+        shadowResolver.registerOutputStreamSupplier(uri) {
+            throw SecurityException("fail")
+        }
+        val service = PlaylistService()
+        val files = listOf(
+            MediaFileInfo(
+                uriString = "content://test/song1",
+                displayName = "Song One",
+                sizeBytes = 1L,
+                title = "Song One"
+            )
+        )
+
+        val result = service.overwritePlaylist(
+            baseContext,
+            uri,
+            files
+        )
+
+        assertFalse(result)
+    }
+
+    @Test
+    fun overwritePlaylist_returnsTrueOnSuccess() {
+        val baseContext = ApplicationProvider.getApplicationContext<Context>()
+        val uri = Uri.parse("content://test/playlist.m3u")
+        val shadowResolver = Shadows.shadowOf(baseContext.contentResolver)
+        var streamClosed = false
+        shadowResolver.registerOutputStreamSupplier(uri) {
+            object : java.io.ByteArrayOutputStream() {
+                override fun close() {
+                    super.close()
+                    streamClosed = true
+                }
+            }
+        }
+        val service = PlaylistService()
+        val files = listOf(
+            MediaFileInfo(
+                uriString = "content://test/song1",
+                displayName = "Song One",
+                sizeBytes = 1L,
+                title = "Song One"
+            )
+        )
+
+        val result = service.overwritePlaylist(
+            baseContext,
+            uri,
+            files
+        )
+
+        assertTrue(result)
+        assertTrue(streamClosed)
+    }
+
 }
