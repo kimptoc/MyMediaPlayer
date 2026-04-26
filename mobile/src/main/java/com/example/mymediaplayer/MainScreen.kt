@@ -1486,20 +1486,19 @@ private fun CategorySongsSection(
     }
 }
 
+private inline fun buildCounts(
+    files: List<MediaFileInfo>,
+    crossinline selector: (MediaFileInfo) -> String
+): Map<String, Int> = files.groupingBy(selector).eachCount()
+
 private fun buildAlbumCounts(files: List<MediaFileInfo>): Map<String, Int> =
-    files.groupingBy { file ->
-        file.album?.ifBlank { null } ?: "Unknown Album"
-    }.eachCount()
+    buildCounts(files) { it.album?.ifBlank { null } ?: "Unknown Album" }
 
 private fun buildArtistCounts(files: List<MediaFileInfo>): Map<String, Int> =
-    files.groupingBy { file ->
-        file.artist?.ifBlank { null } ?: "Unknown Artist"
-    }.eachCount()
+    buildCounts(files) { it.artist?.ifBlank { null } ?: "Unknown Artist" }
 
 private fun buildGenreCounts(files: List<MediaFileInfo>): Map<String, Int> =
-    files.groupingBy { file ->
-        bucketGenre(file.genre)
-    }.eachCount()
+    buildCounts(files) { bucketGenre(it.genre) }
 
 private fun decadeLabelForYear(year: Int?): String {
     if (year == null || year <= 0) return "Unknown Decade"
