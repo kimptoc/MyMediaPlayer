@@ -44,14 +44,30 @@ class BluetoothAutoPlayReceiverTest {
             .apply()
     }
 
-    private fun createConnectedIntent(): Intent {
+    private fun createConnectedIntent(isBonded: Boolean = true): Intent {
         @Suppress("DEPRECATION")
         val adapter = BluetoothAdapter.getDefaultAdapter()
         val bluetoothDevice = adapter.getRemoteDevice(testAddress)
 
+        if (isBonded) {
+            shadowOf(adapter).setBondedDevices(setOf(bluetoothDevice))
+            // Robolectric BluetoothDevice shadow doesn't automatically update bond state when set in adapter
+            shadowOf(bluetoothDevice).setBondState(BluetoothDevice.BOND_BONDED)
+        } else {
+            shadowOf(bluetoothDevice).setBondState(BluetoothDevice.BOND_NONE)
+        }
+
         return Intent(BluetoothDevice.ACTION_ACL_CONNECTED).apply {
             putExtra(BluetoothDevice.EXTRA_DEVICE, bluetoothDevice)
         }
+    }
+
+    @Test
+    fun `when connection happens with unbonded device, it is rejected`() {
+        val intent = createConnectedIntent(isBonded = false)
+        receiver.onReceive(context, intent)
+
+        assertEquals("unbonded_device", prefs.getString("bt_last_reason", null))
     }
 
     @Test
