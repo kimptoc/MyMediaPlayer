@@ -4,12 +4,15 @@ import android.content.Context
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.util.Log
+import android.util.LruCache
 
 object MediaMetadataHelper {
 
     private const val TAG = "MediaMetadataHelper"
+    private val metadataCache = LruCache<String, MediaMetadataInfo>(1024)
 
     fun extractMetadata(context: Context, uriString: String): MediaMetadataInfo? {
+        metadataCache.get(uriString)?.let { return it }
         val retriever = MediaMetadataRetriever()
         return try {
             retriever.setDataSource(context, Uri.parse(uriString))
@@ -23,7 +26,7 @@ object MediaMetadataHelper {
             if (title == null && artist == null && album == null) {
                 Log.w(TAG, "No ID3 tags found for: $uriString")
             }
-            MediaMetadataInfo(
+            val info = MediaMetadataInfo(
                 title = title,
                 album = album,
                 artist = artist,
@@ -31,6 +34,8 @@ object MediaMetadataHelper {
                 year = year,
                 durationMs = durationMs
             )
+            metadataCache.put(uriString, info)
+            info
         } catch (e: Exception) {
             Log.e(TAG, "extractMetadata FAILED for $uriString: ${e.javaClass.simpleName}: ${e.message}")
             null

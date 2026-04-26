@@ -230,18 +230,19 @@ class MediaCacheService {
         audioIds: Set<Long>,
         allGenresByAudioId: MutableMap<Long, MutableList<String>>
     ) {
+        if (audioIds.isEmpty()) return
         val membersUri = MediaStore.Audio.Genres.Members.getContentUri("external", genreId)
+        val selection = "${MediaStore.Audio.Genres.Members.AUDIO_ID} IN (${audioIds.joinToString(",")})"
         resolver.query(
             membersUri,
             arrayOf(MediaStore.Audio.Genres.Members.AUDIO_ID),
-            null,
+            selection,
             null,
             null
         )?.use { membersCursor ->
             val audioIdIndex = membersCursor.getColumnIndexOrThrow(MediaStore.Audio.Genres.Members.AUDIO_ID)
             while (membersCursor.moveToNext()) {
                 val audioId = membersCursor.getLong(audioIdIndex)
-                if (audioId !in audioIds) continue
                 allGenresByAudioId.getOrPut(audioId) { mutableListOf() }.add(genreName)
             }
         }
