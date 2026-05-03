@@ -20,7 +20,6 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLConnection
 import java.net.URLStreamHandler
-import java.net.URLStreamHandlerFactory
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.ResponseBody.Companion.toResponseBody
 
