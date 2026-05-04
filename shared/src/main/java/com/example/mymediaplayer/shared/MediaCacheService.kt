@@ -155,10 +155,12 @@ class MediaCacheService {
         if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.R) {
             val genresByAudioId = loadWholeDriveGenres(context, outIds.toSet())
             if (genresByAudioId.isNotEmpty()) {
+                val genreCache = mutableMapOf<String, String>()
                 for (index in out.indices) {
                     val audioId = outIds[index]
                     val mappedGenre = genresByAudioId[audioId] ?: continue
-                    out[index] = out[index].copy(genre = normalizeGenre(mappedGenre))
+                    val normalized = genreCache.getOrPut(mappedGenre) { normalizeGenre(mappedGenre) }
+                    out[index] = out[index].copy(genre = normalized)
                 }
             }
         }
