@@ -62,6 +62,39 @@ class MediaCacheService {
         val out = mutableListOf<MediaFileInfo>()
         val outIds = mutableListOf<Long>()
 
+        queryWholeDeviceAudioFiles(context, out, outIds, extensionCounts, onProgress)
+
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.R) {
+            applyLegacyGenres(context, out, outIds)
+        }
+        synchronized(cacheLock) {
+            _cachedFiles.clear()
+            _cachedFiles.addAll(out)
+            _cachedFilesByUri.clear()
+            _cachedFilesByUri.putAll(out.associateBy { it.uriString })
+            _discoveredPlaylists.clear()
+            albumArtistIndexed = false
+        }
+        onProgress?.invoke(out.size, 0)
+        val durationMs = android.os.SystemClock.elapsedRealtime() - startTime
+        ScanStats(
+            durationMs = durationMs,
+            foldersScanned = 0,
+            songsFound = out.size,
+            extensionCounts = extensionCounts.toMap(),
+            skippedReasons = emptyMap(),
+            deepScan = false,
+            probedCandidates = 0
+        )
+    }
+
+    private fun queryWholeDeviceAudioFiles(
+        context: Context,
+        out: MutableList<MediaFileInfo>,
+        outIds: MutableList<Long>,
+        extensionCounts: MutableMap<String, Int>,
+        onProgress: ((songsFound: Int, foldersScanned: Int) -> Unit)?
+    ) {
         val projectionList = mutableListOf(
             MediaStore.Audio.Media._ID,
             MediaStore.Audio.Media.DISPLAY_NAME,
@@ -152,37 +185,23 @@ class MediaCacheService {
                 }
             }
         }
-        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.R) {
-            val genresByAudioId = loadWholeDriveGenres(context, outIds.toSet())
-            if (genresByAudioId.isNotEmpty()) {
-                val genreCache = mutableMapOf<String, String>()
-                for (index in out.indices) {
-                    val audioId = outIds[index]
-                    val mappedGenre = genresByAudioId[audioId] ?: continue
-                    val normalized = genreCache.getOrPut(mappedGenre) { normalizeGenre(mappedGenre) }
-                    out[index] = out[index].copy(genre = normalized)
-                }
+    }
+
+    private fun applyLegacyGenres(
+        context: Context,
+        out: MutableList<MediaFileInfo>,
+        outIds: MutableList<Long>
+    ) {
+        val genresByAudioId = loadWholeDriveGenres(context, outIds.toSet())
+        if (genresByAudioId.isNotEmpty()) {
+            val genreCache = mutableMapOf<String, String>()
+            for (index in out.indices) {
+                val audioId = outIds[index]
+                val mappedGenre = genresByAudioId[audioId] ?: continue
+                val normalized = genreCache.getOrPut(mappedGenre) { normalizeGenre(mappedGenre) }
+                out[index] = out[index].copy(genre = normalized)
             }
         }
-        synchronized(cacheLock) {
-            _cachedFiles.clear()
-            _cachedFiles.addAll(out)
-            _cachedFilesByUri.clear()
-            _cachedFilesByUri.putAll(out.associateBy { it.uriString })
-            _discoveredPlaylists.clear()
-            albumArtistIndexed = false
-        }
-        onProgress?.invoke(out.size, 0)
-        val durationMs = android.os.SystemClock.elapsedRealtime() - startTime
-        ScanStats(
-            durationMs = durationMs,
-            foldersScanned = 0,
-            songsFound = out.size,
-            extensionCounts = extensionCounts.toMap(),
-            skippedReasons = emptyMap(),
-            deepScan = false,
-            probedCandidates = 0
-        )
     }
 
     private fun loadWholeDriveGenres(context: Context, audioIds: Set<Long>): Map<Long, String> {

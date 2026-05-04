@@ -281,132 +281,137 @@ class MainActivity : ComponentActivity() {
         observeViewModel()
 
         setContent {
-            MaterialTheme {
-                val uiState = viewModel.uiState.collectAsState()
-                if (showSettings.value) {
-                    SettingsScreen(
-                        trackVoiceIntroEnabled = trackVoiceIntroEnabled.value,
-                        trackVoiceOutroEnabled = trackVoiceOutroEnabled.value,
-                        onToggleTrackVoiceIntro = { toggleTrackVoiceIntro() },
-                        onToggleTrackVoiceOutro = { toggleTrackVoiceOutro() },
-                        cloudAnnouncementKiloKey = cloudAnnouncementKiloKey.value,
-                        cloudAnnouncementTtsKey = cloudAnnouncementTtsKey.value,
-                        debugCloudAnnouncements = debugCloudAnnouncements.value,
-                        onSetDebugCloudAnnouncements = { enabled ->
-                            debugCloudAnnouncements.value = enabled
-                            getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit {
-                                putBoolean(KEY_DEBUG_CLOUD_ANNOUNCEMENTS, enabled)
-                            }
-                            sendDebugCloudSettingToService(enabled)
-                        },
-                        onSaveCloudAnnouncementKeys = ::saveCloudAnnouncementKeys,
-                        bluetoothAutoPlayEnabled = bluetoothAutoPlayEnabled.value,
-                        onToggleBluetoothAutoPlay = { toggleBluetoothAutoPlay() },
-                        onAddCurrentBluetoothDevice = { addCurrentBluetoothDeviceToAllowlist() },
-                        trustedBluetoothDevices = trustedBluetoothDevices.value,
-                        bluetoothDiagnostics = bluetoothDiagnostics.value,
-                        onRemoveTrustedBluetoothDevice = { address -> removeTrustedBluetoothDevice(address) },
-                        onClearTrustedBluetoothDevices = { clearTrustedBluetoothDevices() },
-                        onRefreshBluetoothDiagnostics = { refreshBluetoothState() },
-                        onChoosePlaylistSaveFolder = { openPlaylistDocumentTree.launch(null) },
-                        onBack = { showSettings.value = false }
-                    )
-                } else {
-                    MainScreen(
-                        uiState = uiState.value,
-                        onSelectFolderWithLimit = { limit, deepScan ->
-                            pendingScanLimit = limit
-                            pendingDeepScan = deepScan
-                            openDocumentTree.launch(null)
-                        },
-                        onChoosePlaylistSaveFolder = {
-                            openPlaylistDocumentTree.launch(null)
-                        },
-                        onScanWholeDriveWithLimit = ::handleScanWholeDriveWithLimit,
-                        onFileClick = { file -> playFile(file, uiState.value.scan.scannedFiles) },
-                        onPlayPause = { togglePlayPause(uiState.value.playback.isPlaying) },
-                        onStop = { stopPlayback() },
-                        onNext = { skipToNext() },
-                        onPrev = { skipToPrevious() },
-                        onToggleRepeat = { toggleRepeatMode(uiState.value.playback.repeatMode) },
-                        onQueueItemSelected = { queueId -> skipToQueueItem(queueId) },
-                        onSeekTo = { positionMs -> seekTo(positionMs) },
-                        onCreatePlaylist = { count -> viewModel.createRandomPlaylist(count) },
-                        onPlaylistMessageDismissed = { viewModel.clearPlaylistMessage() },
-                        onFolderMessageDismissed = { viewModel.clearFolderMessage() },
-                        onScanMessageDismissed = { viewModel.clearScanMessage() },
-                        onTabSelected = { viewModel.selectTab(it) },
-                        onAlbumSelected = { viewModel.selectAlbum(it) },
-                        onAlbumSortModeChanged = { viewModel.setAlbumSortMode(it) },
-                        onGenreSelected = { viewModel.selectGenre(it) },
-                        onArtistSelected = { viewModel.selectArtist(it) },
-                        onSearchQueryChanged = { viewModel.updateSearchQuery(it) },
-                        onClearSearch = { viewModel.clearSearch() },
-                        onClearCategorySelection = { viewModel.clearCategorySelection() },
-                        onPlaylistSelected = { viewModel.selectPlaylist(it) },
-                        onClearPlaylistSelection = { viewModel.clearSelectedPlaylist() },
-                        onDeletePlaylist = { playlist -> viewModel.deletePlaylist(playlist) },
-                        onRenamePlaylist = { playlist, newName ->
-                            viewModel.renamePlaylist(playlist, newName)
-                        },
-                        onSavePlaylistEdits = { playlist, songs ->
-                            viewModel.savePlaylistEdits(playlist, songs)
-                        },
-                        onPlaySongs = { songs ->
-                            playUiList(
-                                songs = songs,
-                                shuffle = false,
-                                queueTitle = queueTitleForCurrentUiList(uiState.value)
-                            )
-                        },
-                        onShuffleSongs = { songs ->
-                            playUiList(
-                                songs = songs,
-                                shuffle = true,
-                                queueTitle = queueTitleForCurrentUiList(uiState.value)
-                            )
-                        },
-                        onPlaySearchResults = { songs ->
-                            playSearchResults(songs, shuffle = false)
-                        },
-                        onShuffleSearchResults = { songs ->
-                            playSearchResults(songs, shuffle = true)
-                        },
-                        onAddToExistingPlaylist = { playlist, files ->
-                            viewModel.addManyToExistingPlaylist(playlist, files)
-                        },
-                        onCreatePlaylistFromSongs = { name, files ->
-                            viewModel.createPlaylistFromSongs(name, files)
-                        },
-                        onToggleFavorite = { file ->
-                            viewModel.toggleFavorite(file.uriString)
-                        },
-                        nowPlayingArt = nowPlayingArt.value,
-                        showPlaylistSaveFolderPrompt = showPlaylistSaveFolderPrompt.value,
-                        onDismissPlaylistSaveFolderPrompt = {
-                            showPlaylistSaveFolderPrompt.value = false
-                        },
-                        onSetPlaylistSaveFolderNow = {
-                            showPlaylistSaveFolderPrompt.value = false
-                            openPlaylistDocumentTree.launch(null)
-                        },
-                        onOpenSettings = { showSettings.value = true },
-                        onPlayPlaylist = { playlist ->
+            MediaPlayerAppContent()
+        }
+    }
+
+    @androidx.compose.runtime.Composable
+    private fun MediaPlayerAppContent() {
+        MaterialTheme {
+            val uiState = viewModel.uiState.collectAsState()
+            if (showSettings.value) {
+                SettingsScreen(
+                    trackVoiceIntroEnabled = trackVoiceIntroEnabled.value,
+                    trackVoiceOutroEnabled = trackVoiceOutroEnabled.value,
+                    onToggleTrackVoiceIntro = { toggleTrackVoiceIntro() },
+                    onToggleTrackVoiceOutro = { toggleTrackVoiceOutro() },
+                    cloudAnnouncementKiloKey = cloudAnnouncementKiloKey.value,
+                    cloudAnnouncementTtsKey = cloudAnnouncementTtsKey.value,
+                    debugCloudAnnouncements = debugCloudAnnouncements.value,
+                    onSetDebugCloudAnnouncements = { enabled ->
+                        debugCloudAnnouncements.value = enabled
+                        getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit {
+                            putBoolean(KEY_DEBUG_CLOUD_ANNOUNCEMENTS, enabled)
+                        }
+                        sendDebugCloudSettingToService(enabled)
+                    },
+                    onSaveCloudAnnouncementKeys = ::saveCloudAnnouncementKeys,
+                    bluetoothAutoPlayEnabled = bluetoothAutoPlayEnabled.value,
+                    onToggleBluetoothAutoPlay = { toggleBluetoothAutoPlay() },
+                    onAddCurrentBluetoothDevice = { addCurrentBluetoothDeviceToAllowlist() },
+                    trustedBluetoothDevices = trustedBluetoothDevices.value,
+                    bluetoothDiagnostics = bluetoothDiagnostics.value,
+                    onRemoveTrustedBluetoothDevice = { address -> removeTrustedBluetoothDevice(address) },
+                    onClearTrustedBluetoothDevices = { clearTrustedBluetoothDevices() },
+                    onRefreshBluetoothDiagnostics = { refreshBluetoothState() },
+                    onChoosePlaylistSaveFolder = { openPlaylistDocumentTree.launch(null) },
+                    onBack = { showSettings.value = false }
+                )
+            } else {
+                MainScreen(
+                    uiState = uiState.value,
+                    onSelectFolderWithLimit = { limit, deepScan ->
+                        pendingScanLimit = limit
+                        pendingDeepScan = deepScan
+                        openDocumentTree.launch(null)
+                    },
+                    onChoosePlaylistSaveFolder = {
+                        openPlaylistDocumentTree.launch(null)
+                    },
+                    onScanWholeDriveWithLimit = ::handleScanWholeDriveWithLimit,
+                    onFileClick = { file -> playFile(file, uiState.value.scan.scannedFiles) },
+                    onPlayPause = { togglePlayPause(uiState.value.playback.isPlaying) },
+                    onStop = { stopPlayback() },
+                    onNext = { skipToNext() },
+                    onPrev = { skipToPrevious() },
+                    onToggleRepeat = { toggleRepeatMode(uiState.value.playback.repeatMode) },
+                    onQueueItemSelected = { queueId -> skipToQueueItem(queueId) },
+                    onSeekTo = { positionMs -> seekTo(positionMs) },
+                    onCreatePlaylist = { count -> viewModel.createRandomPlaylist(count) },
+                    onPlaylistMessageDismissed = { viewModel.clearPlaylistMessage() },
+                    onFolderMessageDismissed = { viewModel.clearFolderMessage() },
+                    onScanMessageDismissed = { viewModel.clearScanMessage() },
+                    onTabSelected = { viewModel.selectTab(it) },
+                    onAlbumSelected = { viewModel.selectAlbum(it) },
+                    onAlbumSortModeChanged = { viewModel.setAlbumSortMode(it) },
+                    onGenreSelected = { viewModel.selectGenre(it) },
+                    onArtistSelected = { viewModel.selectArtist(it) },
+                    onSearchQueryChanged = { viewModel.updateSearchQuery(it) },
+                    onClearSearch = { viewModel.clearSearch() },
+                    onClearCategorySelection = { viewModel.clearCategorySelection() },
+                    onPlaylistSelected = { viewModel.selectPlaylist(it) },
+                    onClearPlaylistSelection = { viewModel.clearSelectedPlaylist() },
+                    onDeletePlaylist = { playlist -> viewModel.deletePlaylist(playlist) },
+                    onRenamePlaylist = { playlist, newName ->
+                        viewModel.renamePlaylist(playlist, newName)
+                    },
+                    onSavePlaylistEdits = { playlist, songs ->
+                        viewModel.savePlaylistEdits(playlist, songs)
+                    },
+                    onPlaySongs = { songs ->
+                        playUiList(
+                            songs = songs,
+                            shuffle = false,
+                            queueTitle = queueTitleForCurrentUiList(uiState.value)
+                        )
+                    },
+                    onShuffleSongs = { songs ->
+                        playUiList(
+                            songs = songs,
+                            shuffle = true,
+                            queueTitle = queueTitleForCurrentUiList(uiState.value)
+                        )
+                    },
+                    onPlaySearchResults = { songs ->
+                        playSearchResults(songs, shuffle = false)
+                    },
+                    onShuffleSearchResults = { songs ->
+                        playSearchResults(songs, shuffle = true)
+                    },
+                    onAddToExistingPlaylist = { playlist, files ->
+                        viewModel.addManyToExistingPlaylist(playlist, files)
+                    },
+                    onCreatePlaylistFromSongs = { name, files ->
+                        viewModel.createPlaylistFromSongs(name, files)
+                    },
+                    onToggleFavorite = { file ->
+                        viewModel.toggleFavorite(file.uriString)
+                    },
+                    nowPlayingArt = nowPlayingArt.value,
+                    showPlaylistSaveFolderPrompt = showPlaylistSaveFolderPrompt.value,
+                    onDismissPlaylistSaveFolderPrompt = {
+                        showPlaylistSaveFolderPrompt.value = false
+                    },
+                    onSetPlaylistSaveFolderNow = {
+                        showPlaylistSaveFolderPrompt.value = false
+                        openPlaylistDocumentTree.launch(null)
+                    },
+                    onOpenSettings = { showSettings.value = true },
+                    onPlayPlaylist = { playlist ->
+                        sendFilesToServiceIfNeeded(uiState.value.scan.scannedFiles)
+                        sendPlaylistsToServiceIfNeeded(uiState.value.scan.discoveredPlaylists)
+                        val mediaId = getPlaylistMediaId(playlist.uriString)
+                        mediaController?.transportControls?.playFromMediaId(mediaId, null)
+                    },
+                    onShufflePlaylistSongs = { playlist, songs ->
+                        if (songs.isNotEmpty()) {
                             sendFilesToServiceIfNeeded(uiState.value.scan.scannedFiles)
                             sendPlaylistsToServiceIfNeeded(uiState.value.scan.discoveredPlaylists)
-                            val mediaId = getPlaylistMediaId(playlist.uriString)
+                            val mediaId = getPlaylistShuffleMediaId(playlist.uriString)
                             mediaController?.transportControls?.playFromMediaId(mediaId, null)
-                        },
-                        onShufflePlaylistSongs = { playlist, songs ->
-                            if (songs.isNotEmpty()) {
-                                sendFilesToServiceIfNeeded(uiState.value.scan.scannedFiles)
-                                sendPlaylistsToServiceIfNeeded(uiState.value.scan.discoveredPlaylists)
-                                val mediaId = getPlaylistShuffleMediaId(playlist.uriString)
-                                mediaController?.transportControls?.playFromMediaId(mediaId, null)
-                            }
                         }
-                    )
-                }
+                    }
+                )
             }
         }
     }
@@ -776,21 +781,23 @@ class MainActivity : ComponentActivity() {
         val safeQuery = if (rawQuery.length > 500) rawQuery.substring(0, 500) else rawQuery
 
         val safeExtras = Bundle()
-        try {
-            intent.extras?.let { extras ->
-                for (key in extras.keySet()) {
-                    when (val value = extras.get(key)) {
-                        is String -> safeExtras.putString(key, if (value.length > 500) value.substring(0, 500) else value)
-                        is Int -> safeExtras.putInt(key, value)
-                        is Long -> safeExtras.putLong(key, value)
-                        is Boolean -> safeExtras.putBoolean(key, value)
-                        is Float -> safeExtras.putFloat(key, value)
-                        is Double -> safeExtras.putDouble(key, value)
-                    }
+        val allowedKeys = listOf(
+            android.provider.MediaStore.EXTRA_MEDIA_FOCUS,
+            android.provider.MediaStore.EXTRA_MEDIA_TITLE,
+            android.provider.MediaStore.EXTRA_MEDIA_ARTIST,
+            android.provider.MediaStore.EXTRA_MEDIA_ALBUM,
+            android.provider.MediaStore.EXTRA_MEDIA_GENRE,
+            android.provider.MediaStore.EXTRA_MEDIA_PLAYLIST
+        )
+        for (key in allowedKeys) {
+            try {
+                val value = intent.getStringExtra(key)
+                if (value != null) {
+                    safeExtras.putString(key, if (value.length > 500) value.substring(0, 500) else value)
                 }
+            } catch (e: Exception) {
+                Log.w("MainActivity", "Failed to explicitly extract voice search extra", e)
             }
-        } catch (e: Exception) {
-            Log.w("MainActivity", "Failed to unparcel voice search extras", e)
         }
 
         pendingVoiceSearchQuery = safeQuery
