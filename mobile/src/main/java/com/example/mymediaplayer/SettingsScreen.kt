@@ -64,52 +64,25 @@ fun SettingsScreen(
     BackHandler { onBack() }
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Settings") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Text("\u2190", style = MaterialTheme.typography.titleLarge)
-                    }
-                }
-            )
-        }
+        topBar = { SettingsTopAppBar(onBack = onBack) }
     ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            VoiceAnnouncementsSection(
-                trackVoiceIntroEnabled = trackVoiceIntroEnabled,
-                trackVoiceOutroEnabled = trackVoiceOutroEnabled,
-                onToggleTrackVoiceIntro = onToggleTrackVoiceIntro,
-                onToggleTrackVoiceOutro = onToggleTrackVoiceOutro,
-                onShowCloudAnnouncementSettingsDialog = { showCloudAnnouncementSettingsDialog = true }
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            BluetoothSection(
-                bluetoothAutoPlayEnabled = bluetoothAutoPlayEnabled,
-                onToggleBluetoothAutoPlay = onToggleBluetoothAutoPlay,
-                onAddCurrentBluetoothDevice = onAddCurrentBluetoothDevice,
-                onShowManageTrustedBluetoothDialog = { showManageTrustedBluetoothDialog = true },
-                onShowBluetoothDiagnosticsDialog = {
-                    onRefreshBluetoothDiagnostics()
-                    showBluetoothDiagnosticsDialog = true
-                }
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            StorageSection(
-                onChoosePlaylistSaveFolder = onChoosePlaylistSaveFolder
-            )
-        }
+        SettingsScreenContent(
+            padding = padding,
+            trackVoiceIntroEnabled = trackVoiceIntroEnabled,
+            trackVoiceOutroEnabled = trackVoiceOutroEnabled,
+            onToggleTrackVoiceIntro = onToggleTrackVoiceIntro,
+            onToggleTrackVoiceOutro = onToggleTrackVoiceOutro,
+            onShowCloudAnnouncementSettingsDialog = { showCloudAnnouncementSettingsDialog = true },
+            bluetoothAutoPlayEnabled = bluetoothAutoPlayEnabled,
+            onToggleBluetoothAutoPlay = onToggleBluetoothAutoPlay,
+            onAddCurrentBluetoothDevice = onAddCurrentBluetoothDevice,
+            onShowManageTrustedBluetoothDialog = { showManageTrustedBluetoothDialog = true },
+            onShowBluetoothDiagnosticsDialog = {
+                onRefreshBluetoothDiagnostics()
+                showBluetoothDiagnosticsDialog = true
+            },
+            onChoosePlaylistSaveFolder = onChoosePlaylistSaveFolder
+        )
     }
 
     if (showCloudAnnouncementSettingsDialog) {
@@ -429,4 +402,66 @@ internal fun BluetoothDiagnosticsDialog(
             }
         }
     )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SettingsTopAppBar(onBack: () -> Unit) {
+    TopAppBar(
+        title = { Text("Settings") },
+        navigationIcon = {
+            IconButton(onClick = onBack) {
+                Text("\u2190", style = MaterialTheme.typography.titleLarge)
+            }
+        }
+    )
+}
+
+@Composable
+private fun SettingsScreenContent(
+    padding: androidx.compose.foundation.layout.PaddingValues,
+    trackVoiceIntroEnabled: Boolean,
+    trackVoiceOutroEnabled: Boolean,
+    onToggleTrackVoiceIntro: () -> Unit,
+    onToggleTrackVoiceOutro: () -> Unit,
+    onShowCloudAnnouncementSettingsDialog: () -> Unit,
+    bluetoothAutoPlayEnabled: Boolean,
+    onToggleBluetoothAutoPlay: () -> Unit,
+    onAddCurrentBluetoothDevice: () -> Unit,
+    onShowManageTrustedBluetoothDialog: () -> Unit,
+    onShowBluetoothDiagnosticsDialog: () -> Unit,
+    onChoosePlaylistSaveFolder: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(padding)
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        VoiceAnnouncementsSection(
+            trackVoiceIntroEnabled = trackVoiceIntroEnabled,
+            trackVoiceOutroEnabled = trackVoiceOutroEnabled,
+            onToggleTrackVoiceIntro = onToggleTrackVoiceIntro,
+            onToggleTrackVoiceOutro = onToggleTrackVoiceOutro,
+            onShowCloudAnnouncementSettingsDialog = onShowCloudAnnouncementSettingsDialog
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        BluetoothSection(
+            bluetoothAutoPlayEnabled = bluetoothAutoPlayEnabled,
+            onToggleBluetoothAutoPlay = onToggleBluetoothAutoPlay,
+            onAddCurrentBluetoothDevice = onAddCurrentBluetoothDevice,
+            onShowManageTrustedBluetoothDialog = onShowManageTrustedBluetoothDialog,
+            onShowBluetoothDiagnosticsDialog = onShowBluetoothDiagnosticsDialog
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        StorageSection(
+            onChoosePlaylistSaveFolder = onChoosePlaylistSaveFolder
+        )
+    }
 }
