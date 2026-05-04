@@ -400,160 +400,174 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
         override fun onCustomAction(action: String?, extras: Bundle?) {
             when (action) {
-                ACTION_SET_MEDIA_FILES -> {
-                    if (extras == null) return
-                    val uris = extras.getStringArrayList(EXTRA_URIS) ?: return
-                    val names = extras.getStringArrayList(EXTRA_NAMES) ?: return
-                    val sizes = extras.getLongArray(EXTRA_SIZES) ?: return
-                    val titles = extras.getStringArrayList(EXTRA_TITLES)
-                    val artists = extras.getStringArrayList(EXTRA_ARTISTS)
-                    val albums = extras.getStringArrayList(EXTRA_ALBUMS)
-                    val genres = extras.getStringArrayList(EXTRA_GENRES)
-                    val durations = extras.getLongArray(EXTRA_DURATIONS)
-                    val years = extras.getIntArray(EXTRA_YEARS)
-                    val addedAt = extras.getLongArray(EXTRA_ADDED_AT)
+                ACTION_SET_MEDIA_FILES -> handleSetMediaFiles(extras)
+                ACTION_REFRESH_LIBRARY -> loadCachedTreeIfAvailable()
+                ACTION_PLAY_SEARCH_LIST -> handlePlaySearchList(extras)
+                ACTION_PLAY_UI_LIST -> handlePlayUiList(extras)
+                ACTION_SET_PLAYLISTS -> handleSetPlaylists(extras)
+                ACTION_SET_TRACK_VOICE_INTRO -> handleSetTrackVoiceIntro(extras)
+                ACTION_SET_TRACK_VOICE_OUTRO -> handleSetTrackVoiceOutro(extras)
+                ACTION_SET_DEBUG_CLOUD -> handleSetDebugCloud(extras)
+                CUSTOM_ACTION_FLAG -> handleCustomActionFlag()
+            }
+        }
 
-                    mediaCacheService.clearFiles()
-                    val count = minOf(uris.size, names.size, sizes.size)
-                    for (i in 0 until count) {
-                        val title = titles?.getOrNull(i).orEmpty().ifBlank { names[i].substringBeforeLast('.') }
-                        val artist = artists?.getOrNull(i).orEmpty().ifBlank { null }
-                        val album = albums?.getOrNull(i).orEmpty().ifBlank { null }
-                        val genre = genres?.getOrNull(i).orEmpty().ifBlank { null }
-                        val durationMs = durations?.getOrNull(i)?.takeIf { it >= 0L }
-                        val year = years?.getOrNull(i)?.takeIf { it > 0 }
-                        val addedAtMs = addedAt?.getOrNull(i)?.takeIf { it >= 0L }
-                        mediaCacheService.addFile(
-                            MediaFileInfo(
-                                uriString = uris[i],
-                                displayName = names[i],
-                                sizeBytes = sizes[i],
-                                title = title,
-                                artist = artist,
-                                album = album,
-                                genre = genre,
-                                durationMs = durationMs,
-                                year = year,
-                                addedAtMs = addedAtMs
-                            )
-                        )
-                    }
-                    serviceScope.launch {
-                        val prefs = getPrefs(this@MyMusicService)
-                        val treeUriStr = prefs.getString(KEY_TREE_URI, null)
-                        if (treeUriStr != null) {
-                            val limit = prefs.getInt(KEY_SCAN_LIMIT, MediaCacheService.MAX_CACHE_SIZE)
-                            mediaCacheService.persistCache(this@MyMusicService, Uri.parse(treeUriStr), limit)
-                        }
-                    }
-                    notifyChildrenChanged(ROOT_ID)
-                    notifyChildrenChanged(HOME_ID)
-                    notifyChildrenChanged(SONGS_ID)
-                    notifyChildrenChanged(PLAYLISTS_ID)
-                    notifyChildrenChanged(ALBUMS_ID)
-                    notifyChildrenChanged(GENRES_ID)
-                    notifyChildrenChanged(ARTISTS_ID)
-                    notifyChildrenChanged(DECADES_ID)
-                }
-                ACTION_REFRESH_LIBRARY -> {
-                    loadCachedTreeIfAvailable()
-                }
-                ACTION_PLAY_SEARCH_LIST -> {
-                    if (extras == null) return
-                    val uris = extras.getStringArrayList(EXTRA_SEARCH_URIS) ?: return
-                    val shuffle = extras.getBoolean(EXTRA_SEARCH_SHUFFLE, false)
-                    playProvidedUriList(
-                        uris = uris,
-                        shuffle = shuffle,
-                        queueTitle = "Search Results",
-                        setSearchResults = true
-                    )
-                }
-                ACTION_PLAY_UI_LIST -> {
-                    if (extras == null) return
-                    val uris = extras.getStringArrayList(EXTRA_LIST_URIS) ?: return
-                    val shuffle = extras.getBoolean(EXTRA_LIST_SHUFFLE, false)
-                    val queueTitle = extras.getString(EXTRA_LIST_TITLE).orEmpty()
-                    playProvidedUriList(
-                        uris = uris,
-                        shuffle = shuffle,
-                        queueTitle = if (queueTitle.isNotBlank()) queueTitle else "All Songs",
-                        setSearchResults = false
-                    )
-                }
-                ACTION_SET_PLAYLISTS -> {
-                    if (extras == null) return
-                    val playlistUris = extras.getStringArrayList(EXTRA_PLAYLIST_URIS) ?: return
-                    val playlistNames = extras.getStringArrayList(EXTRA_PLAYLIST_NAMES) ?: return
+        private fun handleSetMediaFiles(extras: Bundle?) {
+            if (extras == null) return
+            val uris = extras.getStringArrayList(EXTRA_URIS) ?: return
+            val names = extras.getStringArrayList(EXTRA_NAMES) ?: return
+            val sizes = extras.getLongArray(EXTRA_SIZES) ?: return
+            val titles = extras.getStringArrayList(EXTRA_TITLES)
+            val artists = extras.getStringArrayList(EXTRA_ARTISTS)
+            val albums = extras.getStringArrayList(EXTRA_ALBUMS)
+            val genres = extras.getStringArrayList(EXTRA_GENRES)
+            val durations = extras.getLongArray(EXTRA_DURATIONS)
+            val years = extras.getIntArray(EXTRA_YEARS)
+            val addedAt = extras.getLongArray(EXTRA_ADDED_AT)
 
-                    mediaCacheService.clearPlaylists()
-                    val count = minOf(playlistUris.size, playlistNames.size)
-                    for (i in 0 until count) {
-                        mediaCacheService.addPlaylist(
-                            PlaylistInfo(
-                                uriString = playlistUris[i],
-                                displayName = playlistNames[i]
-                            )
-                        )
-                    }
-                    serviceScope.launch {
-                        mediaCacheService.persistPlaylists(this@MyMusicService)
-                    }
-                    rebuildPlaylistShortIds()
-                    notifyChildrenChanged(ROOT_ID)
-                    notifyChildrenChanged(PLAYLISTS_ID)
-                }
-                ACTION_SET_TRACK_VOICE_INTRO -> {
-                    val enabled = extras?.getBoolean(EXTRA_TRACK_VOICE_INTRO_ENABLED) ?: false
-                    trackVoiceIntroEnabled = enabled
-                    getPrefs(this@MyMusicService)
-                        .edit()
-                        .putBoolean(KEY_TRACK_VOICE_INTRO_ENABLED, enabled)
-                        .apply()
-                    if (enabled) {
-                        ensureTextToSpeechInitialized()
-                    } else if (!trackVoiceOutroEnabled) {
-                        clearPendingIntro()
-                    }
-                }
-                ACTION_SET_TRACK_VOICE_OUTRO -> {
-                    val enabled = extras?.getBoolean(EXTRA_TRACK_VOICE_OUTRO_ENABLED) ?: false
-                    trackVoiceOutroEnabled = enabled
-                    getPrefs(this@MyMusicService)
-                        .edit()
-                        .putBoolean(KEY_TRACK_VOICE_OUTRO_ENABLED, enabled)
-                        .apply()
-                    if (enabled) {
-                        ensureTextToSpeechInitialized()
-                    } else if (!trackVoiceIntroEnabled) {
-                        clearPendingIntro()
-                    }
-                }
-                ACTION_SET_DEBUG_CLOUD -> {
-                    val enabled = extras?.getBoolean(EXTRA_DEBUG_CLOUD_ENABLED) ?: false
-                    debugCloudAnnouncementsEnabled = enabled
-                    getPrefs(this@MyMusicService)
-                        .edit()
-                        .putBoolean(KEY_DEBUG_CLOUD_ANNOUNCEMENTS, enabled)
-                        .apply()
-                }
-                CUSTOM_ACTION_FLAG -> {
-                    val uri = currentFileInfo?.uriString ?: currentMediaId ?: return
-                    val prefs = getPrefs(this@MyMusicService)
-                    val flagged = prefs.getStringSet(KEY_FLAGGED_URIS, emptySet())
-                        ?.toMutableSet() ?: mutableSetOf()
-                    if (uri in flagged) {
-                        flagged.remove(uri)
-                    } else {
-                        flagged.add(uri)
-                    }
-                    prefs.edit().putStringSet(KEY_FLAGGED_URIS, flagged).apply()
-                    // Refresh playback state to toggle the icon
-                    val currentState = lastPlaybackState()?.state
-                        ?: PlaybackStateCompat.STATE_NONE
-                    updatePlaybackState(currentState)
+            mediaCacheService.clearFiles()
+            val count = minOf(uris.size, names.size, sizes.size)
+            for (i in 0 until count) {
+                val title = titles?.getOrNull(i).orEmpty().ifBlank { names[i].substringBeforeLast('.') }
+                val artist = artists?.getOrNull(i).orEmpty().ifBlank { null }
+                val album = albums?.getOrNull(i).orEmpty().ifBlank { null }
+                val genre = genres?.getOrNull(i).orEmpty().ifBlank { null }
+                val durationMs = durations?.getOrNull(i)?.takeIf { it >= 0L }
+                val year = years?.getOrNull(i)?.takeIf { it > 0 }
+                val addedAtMs = addedAt?.getOrNull(i)?.takeIf { it >= 0L }
+                mediaCacheService.addFile(
+                    MediaFileInfo(
+                        uriString = uris[i],
+                        displayName = names[i],
+                        sizeBytes = sizes[i],
+                        title = title,
+                        artist = artist,
+                        album = album,
+                        genre = genre,
+                        durationMs = durationMs,
+                        year = year,
+                        addedAtMs = addedAtMs
+                    )
+                )
+            }
+            serviceScope.launch {
+                val prefs = getPrefs(this@MyMusicService)
+                val treeUriStr = prefs.getString(KEY_TREE_URI, null)
+                if (treeUriStr != null) {
+                    val limit = prefs.getInt(KEY_SCAN_LIMIT, MediaCacheService.MAX_CACHE_SIZE)
+                    mediaCacheService.persistCache(this@MyMusicService, Uri.parse(treeUriStr), limit)
                 }
             }
+            notifyChildrenChanged(ROOT_ID)
+            notifyChildrenChanged(HOME_ID)
+            notifyChildrenChanged(SONGS_ID)
+            notifyChildrenChanged(PLAYLISTS_ID)
+            notifyChildrenChanged(ALBUMS_ID)
+            notifyChildrenChanged(GENRES_ID)
+            notifyChildrenChanged(ARTISTS_ID)
+            notifyChildrenChanged(DECADES_ID)
+        }
+
+        private fun handlePlaySearchList(extras: Bundle?) {
+            if (extras == null) return
+            val uris = extras.getStringArrayList(EXTRA_SEARCH_URIS) ?: return
+            val shuffle = extras.getBoolean(EXTRA_SEARCH_SHUFFLE, false)
+            playProvidedUriList(
+                uris = uris,
+                shuffle = shuffle,
+                queueTitle = "Search Results",
+                setSearchResults = true
+            )
+        }
+
+        private fun handlePlayUiList(extras: Bundle?) {
+            if (extras == null) return
+            val uris = extras.getStringArrayList(EXTRA_LIST_URIS) ?: return
+            val shuffle = extras.getBoolean(EXTRA_LIST_SHUFFLE, false)
+            val queueTitle = extras.getString(EXTRA_LIST_TITLE).orEmpty()
+            playProvidedUriList(
+                uris = uris,
+                shuffle = shuffle,
+                queueTitle = if (queueTitle.isNotBlank()) queueTitle else "All Songs",
+                setSearchResults = false
+            )
+        }
+
+        private fun handleSetPlaylists(extras: Bundle?) {
+            if (extras == null) return
+            val playlistUris = extras.getStringArrayList(EXTRA_PLAYLIST_URIS) ?: return
+            val playlistNames = extras.getStringArrayList(EXTRA_PLAYLIST_NAMES) ?: return
+
+            mediaCacheService.clearPlaylists()
+            val count = minOf(playlistUris.size, playlistNames.size)
+            for (i in 0 until count) {
+                mediaCacheService.addPlaylist(
+                    PlaylistInfo(
+                        uriString = playlistUris[i],
+                        displayName = playlistNames[i]
+                    )
+                )
+            }
+            serviceScope.launch {
+                mediaCacheService.persistPlaylists(this@MyMusicService)
+            }
+            rebuildPlaylistShortIds()
+            notifyChildrenChanged(ROOT_ID)
+            notifyChildrenChanged(PLAYLISTS_ID)
+        }
+
+        private fun handleSetTrackVoiceIntro(extras: Bundle?) {
+            val enabled = extras?.getBoolean(EXTRA_TRACK_VOICE_INTRO_ENABLED) ?: false
+            trackVoiceIntroEnabled = enabled
+            getPrefs(this@MyMusicService)
+                .edit()
+                .putBoolean(KEY_TRACK_VOICE_INTRO_ENABLED, enabled)
+                .apply()
+            if (enabled) {
+                ensureTextToSpeechInitialized()
+            } else if (!trackVoiceOutroEnabled) {
+                clearPendingIntro()
+            }
+        }
+
+        private fun handleSetTrackVoiceOutro(extras: Bundle?) {
+            val enabled = extras?.getBoolean(EXTRA_TRACK_VOICE_OUTRO_ENABLED) ?: false
+            trackVoiceOutroEnabled = enabled
+            getPrefs(this@MyMusicService)
+                .edit()
+                .putBoolean(KEY_TRACK_VOICE_OUTRO_ENABLED, enabled)
+                .apply()
+            if (enabled) {
+                ensureTextToSpeechInitialized()
+            } else if (!trackVoiceIntroEnabled) {
+                clearPendingIntro()
+            }
+        }
+
+        private fun handleSetDebugCloud(extras: Bundle?) {
+            val enabled = extras?.getBoolean(EXTRA_DEBUG_CLOUD_ENABLED) ?: false
+            debugCloudAnnouncementsEnabled = enabled
+            getPrefs(this@MyMusicService)
+                .edit()
+                .putBoolean(KEY_DEBUG_CLOUD_ANNOUNCEMENTS, enabled)
+                .apply()
+        }
+
+        private fun handleCustomActionFlag() {
+            val uri = currentFileInfo?.uriString ?: currentMediaId ?: return
+            val prefs = getPrefs(this@MyMusicService)
+            val flagged = prefs.getStringSet(KEY_FLAGGED_URIS, emptySet())
+                ?.toMutableSet() ?: mutableSetOf()
+            if (uri in flagged) {
+                flagged.remove(uri)
+            } else {
+                flagged.add(uri)
+            }
+            prefs.edit().putStringSet(KEY_FLAGGED_URIS, flagged).apply()
+            // Refresh playback state to toggle the icon
+            val currentState = lastPlaybackState()?.state
+                ?: PlaybackStateCompat.STATE_NONE
+            updatePlaybackState(currentState)
         }
     }
 
@@ -2140,7 +2154,43 @@ class MyMusicService : MediaBrowserServiceCompat() {
         )
 
         val parentId = lastBrowseParentId
-        val listFromParent = when {
+        val listFromParent = getListFromParent(parentId)
+
+        val searchList = if (lastSearchResults.any { it.uriString == resolvedMediaId }) {
+            lastSearchResults
+        } else {
+            emptyList()
+        }
+        val parentList = when {
+            listFromParent.isNotEmpty() -> listFromParent
+            searchList.isNotEmpty() -> searchList
+            mediaCacheService.cachedFiles.isNotEmpty() -> mediaCacheService.cachedFiles
+            else -> emptyList()
+        }
+
+        if (parentList.isNotEmpty()) {
+            playlistQueue = parentList
+            currentQueueIndex = parentList.indexOfFirst { it.uriString == resolvedMediaId }
+            if (currentQueueIndex < 0) {
+                playlistQueue = emptyList()
+                currentQueueIndex = -1
+                currentPlaylistName = null
+            } else {
+                currentPlaylistName = getPlaylistNameForSingleItem(parentId, searchList.isNotEmpty(), listFromParent.isEmpty())
+            }
+        } else {
+            playlistQueue = emptyList()
+            currentQueueIndex = -1
+            currentPlaylistName = null
+        }
+
+        updateSessionQueue()
+        playTrack(fileInfo)
+        savePlaybackSnapshot()
+    }
+
+    private fun getListFromParent(parentId: String?): List<MediaFileInfo> {
+        return when {
             parentId == SONGS_ID -> mediaCacheService.cachedFiles
             parentId == SONGS_ALL_ID -> mediaCacheService.cachedFiles
             parentId != null && parentId.startsWith(ALBUM_PREFIX) -> {
@@ -2183,63 +2233,35 @@ class MyMusicService : MediaBrowserServiceCompat() {
             }
             else -> emptyList()
         }
+    }
 
-        val searchList = if (lastSearchResults.any { it.uriString == resolvedMediaId }) {
-            lastSearchResults
-        } else {
-            emptyList()
-        }
-        val parentList = when {
-            listFromParent.isNotEmpty() -> listFromParent
-            searchList.isNotEmpty() -> searchList
-            mediaCacheService.cachedFiles.isNotEmpty() -> mediaCacheService.cachedFiles
-            else -> emptyList()
-        }
-
-        if (parentList.isNotEmpty()) {
-            playlistQueue = parentList
-            currentQueueIndex = parentList.indexOfFirst { it.uriString == resolvedMediaId }
-            if (currentQueueIndex < 0) {
-                playlistQueue = emptyList()
-                currentQueueIndex = -1
-                currentPlaylistName = null
-            } else {
-                currentPlaylistName = when {
-                    searchList.isNotEmpty() -> {
-                        val query = lastSearchQuery?.trim().orEmpty()
-                        if (query.isNotEmpty()) "Search: $query" else "Search Results"
-                    }
-                    parentId == SONGS_ID || parentId == SONGS_ALL_ID || listFromParent.isEmpty() -> "All Songs"
-                    parentId?.startsWith(ALBUM_PREFIX) == true ->
-                        Uri.decode(parentId.removePrefix(ALBUM_PREFIX))
-                    parentId?.startsWith(GENRE_PREFIX) == true ->
-                        Uri.decode(parentId.removePrefix(GENRE_PREFIX))
-                    parentId?.startsWith(ARTIST_PREFIX) == true ->
-                        Uri.decode(parentId.removePrefix(ARTIST_PREFIX))
-                    parentId?.startsWith(DECADE_PREFIX) == true ->
-                        Uri.decode(parentId.removePrefix(DECADE_PREFIX))
-                    parentId?.startsWith(SONG_LETTER_PREFIX) == true -> {
-                        val letter = Uri.decode(parentId.removePrefix(SONG_LETTER_PREFIX))
-                        "Songs $letter"
-                    }
-                    parentId?.startsWith(GENRE_SONG_LETTER_PREFIX) == true -> {
-                        formatBucketTitle(parentId, GENRE_SONG_LETTER_PREFIX)
-                    }
-                    parentId?.startsWith(DECADE_SONG_LETTER_PREFIX) == true -> {
-                        formatBucketTitle(parentId, DECADE_SONG_LETTER_PREFIX)
-                    }
-                    else -> null
-                }
+    private fun getPlaylistNameForSingleItem(parentId: String?, isFromSearch: Boolean, listFromParentIsEmpty: Boolean): String? {
+        return when {
+            isFromSearch -> {
+                val query = lastSearchQuery?.trim().orEmpty()
+                if (query.isNotEmpty()) "Search: $query" else "Search Results"
             }
-        } else {
-            playlistQueue = emptyList()
-            currentQueueIndex = -1
-            currentPlaylistName = null
+            parentId == SONGS_ID || parentId == SONGS_ALL_ID || listFromParentIsEmpty -> "All Songs"
+            parentId?.startsWith(ALBUM_PREFIX) == true ->
+                Uri.decode(parentId.removePrefix(ALBUM_PREFIX))
+            parentId?.startsWith(GENRE_PREFIX) == true ->
+                Uri.decode(parentId.removePrefix(GENRE_PREFIX))
+            parentId?.startsWith(ARTIST_PREFIX) == true ->
+                Uri.decode(parentId.removePrefix(ARTIST_PREFIX))
+            parentId?.startsWith(DECADE_PREFIX) == true ->
+                Uri.decode(parentId.removePrefix(DECADE_PREFIX))
+            parentId?.startsWith(SONG_LETTER_PREFIX) == true -> {
+                val letter = Uri.decode(parentId.removePrefix(SONG_LETTER_PREFIX))
+                "Songs $letter"
+            }
+            parentId?.startsWith(GENRE_SONG_LETTER_PREFIX) == true -> {
+                formatBucketTitle(parentId, GENRE_SONG_LETTER_PREFIX)
+            }
+            parentId?.startsWith(DECADE_SONG_LETTER_PREFIX) == true -> {
+                formatBucketTitle(parentId, DECADE_SONG_LETTER_PREFIX)
+            }
+            else -> null
         }
-
-        updateSessionQueue()
-        playTrack(fileInfo)
-        savePlaybackSnapshot()
     }
 
     private suspend fun handlePlayFromSearch(query: String?, extras: Bundle?) {
