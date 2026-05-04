@@ -776,21 +776,23 @@ class MainActivity : ComponentActivity() {
         val safeQuery = if (rawQuery.length > 500) rawQuery.substring(0, 500) else rawQuery
 
         val safeExtras = Bundle()
-        try {
-            intent.extras?.let { extras ->
-                for (key in extras.keySet()) {
-                    when (val value = extras.get(key)) {
-                        is String -> safeExtras.putString(key, if (value.length > 500) value.substring(0, 500) else value)
-                        is Int -> safeExtras.putInt(key, value)
-                        is Long -> safeExtras.putLong(key, value)
-                        is Boolean -> safeExtras.putBoolean(key, value)
-                        is Float -> safeExtras.putFloat(key, value)
-                        is Double -> safeExtras.putDouble(key, value)
-                    }
+        val allowedKeys = listOf(
+            android.provider.MediaStore.EXTRA_MEDIA_FOCUS,
+            android.provider.MediaStore.EXTRA_MEDIA_TITLE,
+            android.provider.MediaStore.EXTRA_MEDIA_ARTIST,
+            android.provider.MediaStore.EXTRA_MEDIA_ALBUM,
+            android.provider.MediaStore.EXTRA_MEDIA_GENRE,
+            android.provider.MediaStore.EXTRA_MEDIA_PLAYLIST
+        )
+        for (key in allowedKeys) {
+            try {
+                val value = intent.getStringExtra(key)
+                if (value != null) {
+                    safeExtras.putString(key, if (value.length > 500) value.substring(0, 500) else value)
                 }
+            } catch (e: Exception) {
+                Log.w("MainActivity", "Failed to explicitly extract voice search extra", e)
             }
-        } catch (e: Exception) {
-            Log.w("MainActivity", "Failed to unparcel voice search extras", e)
         }
 
         pendingVoiceSearchQuery = safeQuery
