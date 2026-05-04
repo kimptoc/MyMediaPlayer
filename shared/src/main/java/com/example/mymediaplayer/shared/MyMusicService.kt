@@ -2140,7 +2140,43 @@ class MyMusicService : MediaBrowserServiceCompat() {
         )
 
         val parentId = lastBrowseParentId
-        val listFromParent = when {
+        val listFromParent = getListFromParent(parentId)
+
+        val searchList = if (lastSearchResults.any { it.uriString == resolvedMediaId }) {
+            lastSearchResults
+        } else {
+            emptyList()
+        }
+        val parentList = when {
+            listFromParent.isNotEmpty() -> listFromParent
+            searchList.isNotEmpty() -> searchList
+            mediaCacheService.cachedFiles.isNotEmpty() -> mediaCacheService.cachedFiles
+            else -> emptyList()
+        }
+
+        if (parentList.isNotEmpty()) {
+            playlistQueue = parentList
+            currentQueueIndex = parentList.indexOfFirst { it.uriString == resolvedMediaId }
+            if (currentQueueIndex < 0) {
+                playlistQueue = emptyList()
+                currentQueueIndex = -1
+                currentPlaylistName = null
+            } else {
+                currentPlaylistName = getPlaylistNameForSingleItem(parentId, searchList.isNotEmpty(), listFromParent.isEmpty())
+            }
+        } else {
+            playlistQueue = emptyList()
+            currentQueueIndex = -1
+            currentPlaylistName = null
+        }
+
+        updateSessionQueue()
+        playTrack(fileInfo)
+        savePlaybackSnapshot()
+    }
+
+    private fun getListFromParent(parentId: String?): List<MediaFileInfo> {
+        return when {
             parentId == SONGS_ID -> mediaCacheService.cachedFiles
             parentId == SONGS_ALL_ID -> mediaCacheService.cachedFiles
             parentId != null && parentId.startsWith(ALBUM_PREFIX) -> {
@@ -2183,63 +2219,35 @@ class MyMusicService : MediaBrowserServiceCompat() {
             }
             else -> emptyList()
         }
+    }
 
-        val searchList = if (lastSearchResults.any { it.uriString == resolvedMediaId }) {
-            lastSearchResults
-        } else {
-            emptyList()
-        }
-        val parentList = when {
-            listFromParent.isNotEmpty() -> listFromParent
-            searchList.isNotEmpty() -> searchList
-            mediaCacheService.cachedFiles.isNotEmpty() -> mediaCacheService.cachedFiles
-            else -> emptyList()
-        }
-
-        if (parentList.isNotEmpty()) {
-            playlistQueue = parentList
-            currentQueueIndex = parentList.indexOfFirst { it.uriString == resolvedMediaId }
-            if (currentQueueIndex < 0) {
-                playlistQueue = emptyList()
-                currentQueueIndex = -1
-                currentPlaylistName = null
-            } else {
-                currentPlaylistName = when {
-                    searchList.isNotEmpty() -> {
-                        val query = lastSearchQuery?.trim().orEmpty()
-                        if (query.isNotEmpty()) "Search: $query" else "Search Results"
-                    }
-                    parentId == SONGS_ID || parentId == SONGS_ALL_ID || listFromParent.isEmpty() -> "All Songs"
-                    parentId?.startsWith(ALBUM_PREFIX) == true ->
-                        Uri.decode(parentId.removePrefix(ALBUM_PREFIX))
-                    parentId?.startsWith(GENRE_PREFIX) == true ->
-                        Uri.decode(parentId.removePrefix(GENRE_PREFIX))
-                    parentId?.startsWith(ARTIST_PREFIX) == true ->
-                        Uri.decode(parentId.removePrefix(ARTIST_PREFIX))
-                    parentId?.startsWith(DECADE_PREFIX) == true ->
-                        Uri.decode(parentId.removePrefix(DECADE_PREFIX))
-                    parentId?.startsWith(SONG_LETTER_PREFIX) == true -> {
-                        val letter = Uri.decode(parentId.removePrefix(SONG_LETTER_PREFIX))
-                        "Songs $letter"
-                    }
-                    parentId?.startsWith(GENRE_SONG_LETTER_PREFIX) == true -> {
-                        formatBucketTitle(parentId, GENRE_SONG_LETTER_PREFIX)
-                    }
-                    parentId?.startsWith(DECADE_SONG_LETTER_PREFIX) == true -> {
-                        formatBucketTitle(parentId, DECADE_SONG_LETTER_PREFIX)
-                    }
-                    else -> null
-                }
+    private fun getPlaylistNameForSingleItem(parentId: String?, isFromSearch: Boolean, listFromParentIsEmpty: Boolean): String? {
+        return when {
+            isFromSearch -> {
+                val query = lastSearchQuery?.trim().orEmpty()
+                if (query.isNotEmpty()) "Search: $query" else "Search Results"
             }
-        } else {
-            playlistQueue = emptyList()
-            currentQueueIndex = -1
-            currentPlaylistName = null
+            parentId == SONGS_ID || parentId == SONGS_ALL_ID || listFromParentIsEmpty -> "All Songs"
+            parentId?.startsWith(ALBUM_PREFIX) == true ->
+                Uri.decode(parentId.removePrefix(ALBUM_PREFIX))
+            parentId?.startsWith(GENRE_PREFIX) == true ->
+                Uri.decode(parentId.removePrefix(GENRE_PREFIX))
+            parentId?.startsWith(ARTIST_PREFIX) == true ->
+                Uri.decode(parentId.removePrefix(ARTIST_PREFIX))
+            parentId?.startsWith(DECADE_PREFIX) == true ->
+                Uri.decode(parentId.removePrefix(DECADE_PREFIX))
+            parentId?.startsWith(SONG_LETTER_PREFIX) == true -> {
+                val letter = Uri.decode(parentId.removePrefix(SONG_LETTER_PREFIX))
+                "Songs $letter"
+            }
+            parentId?.startsWith(GENRE_SONG_LETTER_PREFIX) == true -> {
+                formatBucketTitle(parentId, GENRE_SONG_LETTER_PREFIX)
+            }
+            parentId?.startsWith(DECADE_SONG_LETTER_PREFIX) == true -> {
+                formatBucketTitle(parentId, DECADE_SONG_LETTER_PREFIX)
+            }
+            else -> null
         }
-
-        updateSessionQueue()
-        playTrack(fileInfo)
-        savePlaybackSnapshot()
     }
 
     private suspend fun handlePlayFromSearch(query: String?, extras: Bundle?) {
