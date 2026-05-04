@@ -1978,12 +1978,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }
     }
 
-    private suspend fun handlePlayAllOrShuffle(resolvedMediaId: String) {
-        val isShuffle = resolvedMediaId.startsWith(ACTION_SHUFFLE_PREFIX)
-        val listKey = resolvedMediaId.removePrefix(
-            if (isShuffle) ACTION_SHUFFLE_PREFIX else ACTION_PLAY_ALL_PREFIX
-        )
-        val tracks = when {
+    private suspend fun resolveTracksForListKey(listKey: String): List<MediaFileInfo> {
+        return when {
             listKey == SONGS_ID -> mediaCacheService.cachedFiles
             listKey == PLAYLISTS_ID -> {
                 val all = kotlinx.coroutines.coroutineScope {
@@ -2053,16 +2049,10 @@ class MyMusicService : MediaBrowserServiceCompat() {
             }
             else -> emptyList()
         }
+    }
 
-        if (tracks.isEmpty()) {
-            updatePlaybackState(PlaybackStateCompat.STATE_ERROR)
-            return
-        }
-
-        val ordered = if (isShuffle) tracks.shuffled() else tracks
-        playlistQueue = ordered
-        currentQueueIndex = 0
-        currentPlaylistName = when {
+    private fun resolvePlaylistNameForListKey(listKey: String): String {
+        return when {
             listKey == SONGS_ID -> "All Songs"
             listKey == PLAYLISTS_ID -> "All Playlists"
             listKey.startsWith(PLAYLIST_SHORT_PREFIX) -> {
@@ -2096,9 +2086,21 @@ class MyMusicService : MediaBrowserServiceCompat() {
             }
             else -> "Playlist"
         }
-        updateSessionQueue()
-        playTrack(playlistQueue[currentQueueIndex])
-        savePlaybackSnapshot()
+    }
+
+    private suspend fun handlePlayAllOrShuffle(resolvedMediaId: String) {
+        val isShuffle = resolvedMediaId.startsWith(ACTION_SHUFFLE_PREFIX)
+        val listKey = resolvedMediaId.removePrefix(
+            if (isShuffle) ACTION_SHUFFLE_PREFIX else ACTION_PLAY_ALL_PREFIX
+        )
+        val tracks = resolveTracksForListKey(listKey)
+
+        if (tracks.isEmpty()) {
+            updatePlaybackState(PlaybackStateCompat.STATE_ERROR)
+            return
+        }
+
+        playQueueAndSaveSnapshot(tracks, isShuffle, resolvePlaylistNameForListKey(listKey))
     }
 
     private suspend fun handlePlayPlaylist(resolvedMediaId: String) {
