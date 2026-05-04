@@ -1228,15 +1228,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         val presentLetters = BooleanArray(26)
         var hasOther = false
         for (song in songs) {
-            val title = song.cleanTitle
-            var firstChar: Char? = null
-            for (i in title.indices) {
-                val c = title[i]
-                if (!c.isWhitespace()) {
-                    firstChar = c.uppercaseChar()
-                    break
-                }
-            }
+            val firstChar = song.cleanTitle.firstOrNull { !it.isWhitespace() }?.uppercaseChar()
             if (firstChar != null && firstChar in 'A'..'Z') {
                 presentLetters[firstChar - 'A'] = true
             } else {
