@@ -24,12 +24,11 @@ open class PlaylistService {
     fun generateM3uContent(files: List<MediaFileInfo>): String {
         val builder = StringBuilder()
         builder.append("#EXTM3U\n")
-        val newlineRegex = Regex("[\r\n]")
         for (file in files) {
             builder.append("#EXTINF:-1,")
-            builder.append(file.displayName.replace(newlineRegex, ""))
+            builder.append(file.displayName.replace("\n", "").replace("\r", ""))
             builder.append("\n")
-            builder.append(file.uriString.replace(newlineRegex, ""))
+            builder.append(file.uriString.replace("\n", "").replace("\r", ""))
             builder.append("\n")
         }
         return builder.toString()
