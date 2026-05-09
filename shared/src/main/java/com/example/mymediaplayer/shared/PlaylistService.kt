@@ -91,7 +91,9 @@ open class PlaylistService {
 
         kotlinx.coroutines.coroutineScope {
             suspend fun traverse(node: DocumentFile) {
-                val children = runCatching { node.listFiles().toList() }.getOrNull() ?: return
+                val children = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    runCatching { node.listFiles().toList() }.getOrNull()
+                } ?: return
 
                 val dirs = mutableListOf<DocumentFile>()
                 for (child in children) {
