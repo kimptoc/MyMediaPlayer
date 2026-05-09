@@ -26,7 +26,6 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -56,9 +55,9 @@ fun SettingsScreen(
     onChoosePlaylistSaveFolder: () -> Unit,
     onBack: () -> Unit
 ) {
-    val showCloudAnnouncementSettingsDialogState = remember { mutableStateOf(false) }
-    val showManageTrustedBluetoothDialogState = remember { mutableStateOf(false) }
-    val showBluetoothDiagnosticsDialogState = remember { mutableStateOf(false) }
+    val (showCloudAnnouncementSettingsDialog, setShowCloudAnnouncementSettingsDialog) = remember { mutableStateOf(false) }
+    val (showManageTrustedBluetoothDialog, setShowManageTrustedBluetoothDialog) = remember { mutableStateOf(false) }
+    val (showBluetoothDiagnosticsDialog, setShowBluetoothDiagnosticsDialog) = remember { mutableStateOf(false) }
 
     BackHandler { onBack() }
 
@@ -71,44 +70,44 @@ fun SettingsScreen(
             trackVoiceOutroEnabled = trackVoiceOutroEnabled,
             onToggleTrackVoiceIntro = onToggleTrackVoiceIntro,
             onToggleTrackVoiceOutro = onToggleTrackVoiceOutro,
-            onShowCloudAnnouncementSettingsDialog = { showCloudAnnouncementSettingsDialogState.value = true },
+            onShowCloudAnnouncementSettingsDialog = { setShowCloudAnnouncementSettingsDialog(true) },
             bluetoothAutoPlayEnabled = bluetoothAutoPlayEnabled,
             onToggleBluetoothAutoPlay = onToggleBluetoothAutoPlay,
             onAddCurrentBluetoothDevice = onAddCurrentBluetoothDevice,
-            onShowManageTrustedBluetoothDialog = { showManageTrustedBluetoothDialogState.value = true },
+            onShowManageTrustedBluetoothDialog = { setShowManageTrustedBluetoothDialog(true) },
             onShowBluetoothDiagnosticsDialog = {
                 onRefreshBluetoothDiagnostics()
-                showBluetoothDiagnosticsDialogState.value = true
+                setShowBluetoothDiagnosticsDialog(true)
             },
             onChoosePlaylistSaveFolder = onChoosePlaylistSaveFolder
         )
     }
 
-    if (showCloudAnnouncementSettingsDialogState.value) {
+    if (showCloudAnnouncementSettingsDialog) {
         CloudAnnouncementSettingsDialog(
             cloudAnnouncementKiloKey = cloudAnnouncementKiloKey,
             cloudAnnouncementTtsKey = cloudAnnouncementTtsKey,
             debugCloudAnnouncements = debugCloudAnnouncements,
             onSetDebugCloudAnnouncements = onSetDebugCloudAnnouncements,
             onSaveCloudAnnouncementKeys = onSaveCloudAnnouncementKeys,
-            onDismissRequest = { showCloudAnnouncementSettingsDialogState.value = false }
+            onDismissRequest = { setShowCloudAnnouncementSettingsDialog(false) }
         )
     }
 
-    if (showManageTrustedBluetoothDialogState.value) {
+    if (showManageTrustedBluetoothDialog) {
         ManageTrustedBluetoothDialog(
             trustedBluetoothDevices = trustedBluetoothDevices,
             onRemoveTrustedBluetoothDevice = onRemoveTrustedBluetoothDevice,
             onClearTrustedBluetoothDevices = onClearTrustedBluetoothDevices,
-            onDismissRequest = { showManageTrustedBluetoothDialogState.value = false }
+            onDismissRequest = { setShowManageTrustedBluetoothDialog(false) }
         )
     }
 
-    if (showBluetoothDiagnosticsDialogState.value) {
+    if (showBluetoothDiagnosticsDialog) {
         BluetoothDiagnosticsDialog(
             bluetoothDiagnostics = bluetoothDiagnostics,
             onRefreshBluetoothDiagnostics = onRefreshBluetoothDiagnostics,
-            onDismissRequest = { showBluetoothDiagnosticsDialogState.value = false }
+            onDismissRequest = { setShowBluetoothDiagnosticsDialog(false) }
         )
     }
 }
@@ -251,8 +250,8 @@ internal fun CloudAnnouncementSettingsDialog(
     onSaveCloudAnnouncementKeys: (String, String, () -> Unit) -> Unit,
     onDismissRequest: () -> Unit
 ) {
-    val kiloKeyInputState = remember { mutableStateOf(cloudAnnouncementKiloKey) }
-    val ttsKeyInputState = remember { mutableStateOf(cloudAnnouncementTtsKey) }
+    val (kiloKeyInput, setKiloKeyInput) = remember { mutableStateOf(cloudAnnouncementKiloKey) }
+    val (ttsKeyInput, setTtsKeyInput) = remember { mutableStateOf(cloudAnnouncementTtsKey) }
     AlertDialog(
         onDismissRequest = onDismissRequest,
         title = { Text("AI Announcement Settings") },
@@ -263,8 +262,8 @@ internal fun CloudAnnouncementSettingsDialog(
                     style = MaterialTheme.typography.bodySmall
                 )
                 TextField(
-                    value = kiloKeyInputState.value,
-                    onValueChange = { kiloKeyInputState.value = it },
+                    value = kiloKeyInput,
+                    onValueChange = setKiloKeyInput,
                     label = { Text("Kilo API key (optional)") },
                     placeholder = { Text("Leave blank for anonymous") },
                     singleLine = true,
@@ -272,8 +271,8 @@ internal fun CloudAnnouncementSettingsDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
                 TextField(
-                    value = ttsKeyInputState.value,
-                    onValueChange = { ttsKeyInputState.value = it },
+                    value = ttsKeyInput,
+                    onValueChange = setTtsKeyInput,
                     label = { Text("Google Cloud TTS key (optional)") },
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
@@ -302,7 +301,7 @@ internal fun CloudAnnouncementSettingsDialog(
         confirmButton = {
             TextButton(
                 onClick = {
-                    onSaveCloudAnnouncementKeys(kiloKeyInputState.value.trim(), ttsKeyInputState.value.trim(), onDismissRequest)
+                    onSaveCloudAnnouncementKeys(kiloKeyInput.trim(), ttsKeyInput.trim(), onDismissRequest)
                 }
             ) { Text("Save") }
         },
