@@ -3,6 +3,7 @@ package com.example.mymediaplayer.shared
 import android.content.Context
 import android.net.Uri
 import androidx.test.core.app.ApplicationProvider
+import java.io.FileNotFoundException
 import java.io.IOException
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -38,6 +39,55 @@ class PlaylistServiceTest {
         val shadowResolver = Shadows.shadowOf(baseContext.contentResolver)
         shadowResolver.registerInputStreamSupplier(uri) {
             throw SecurityException("nope")
+        }
+        val service = PlaylistService()
+
+        val results = service.readPlaylist(baseContext, uri)
+
+        assertTrue(results.isEmpty())
+    }
+
+    @Test
+    fun readPlaylist_returnsEmptyOnFileNotFoundException() {
+        val baseContext = ApplicationProvider.getApplicationContext<Context>()
+        val uri = Uri.parse("content://test/playlist.m3u")
+        val shadowResolver = Shadows.shadowOf(baseContext.contentResolver)
+        shadowResolver.registerInputStreamSupplier(uri) {
+            throw FileNotFoundException("nope")
+        }
+        val service = PlaylistService()
+
+        val results = service.readPlaylist(baseContext, uri)
+
+        assertTrue(results.isEmpty())
+    }
+
+    @Test
+    fun readPlaylist_returnsEmptyOnIOException() {
+        val baseContext = ApplicationProvider.getApplicationContext<Context>()
+        val uri = Uri.parse("content://test/playlist.m3u")
+        val shadowResolver = Shadows.shadowOf(baseContext.contentResolver)
+        shadowResolver.registerInputStreamSupplier(uri) {
+            throw IOException("nope")
+        }
+        val service = PlaylistService()
+
+        val results = service.readPlaylist(baseContext, uri)
+
+        assertTrue(results.isEmpty())
+    }
+
+    @Test
+    fun readPlaylist_returnsEmptyOnReadIOException() {
+        val baseContext = ApplicationProvider.getApplicationContext<Context>()
+        val uri = Uri.parse("content://test/playlist.m3u")
+        val shadowResolver = Shadows.shadowOf(baseContext.contentResolver)
+        shadowResolver.registerInputStreamSupplier(uri) {
+            object : java.io.InputStream() {
+                override fun read(): Int {
+                    throw IOException("read error")
+                }
+            }
         }
         val service = PlaylistService()
 
