@@ -182,6 +182,70 @@ class PlaylistServiceTest {
         assertFalse(result)
     }
 
+    @org.robolectric.annotation.Config(shadows = [ShadowDocumentFile::class])
+    @Test
+    fun writePlaylistWithName_returnsNullOnSecurityException() {
+        val baseContext = ApplicationProvider.getApplicationContext<Context>()
+        val treeUri = Uri.parse("content://mock/tree")
+        val service = PlaylistService()
+        val files = listOf(MediaFileInfo("content://test/song1", "Song One", 1L, "Song One"))
+
+        val mockRoot = androidx.documentfile.provider.MockDocumentFile(null, treeUri, "tree")
+        ShadowDocumentFile.mockRoot = mockRoot
+
+        try {
+            val targetUri = Uri.parse("$treeUri/test_playlist.m3u")
+            val shadowResolver = Shadows.shadowOf(baseContext.contentResolver)
+            shadowResolver.registerOutputStreamSupplier(targetUri) {
+                object : java.io.OutputStream() {
+                    override fun write(b: Int) {
+                        throw SecurityException("Security exception thrown from write")
+                    }
+                    override fun write(b: ByteArray) {
+                        throw SecurityException("Security exception thrown from write array")
+                    }
+                }
+            }
+
+            val result = service.writePlaylistWithName(baseContext, treeUri, files, "test_playlist")
+            assertNull(result)
+        } finally {
+            ShadowDocumentFile.mockRoot = null
+        }
+    }
+
+    @org.robolectric.annotation.Config(shadows = [ShadowDocumentFile::class])
+    @Test
+    fun writePlaylistWithName_returnsNullOnIOException() {
+        val baseContext = ApplicationProvider.getApplicationContext<Context>()
+        val treeUri = Uri.parse("content://mock/tree")
+        val service = PlaylistService()
+        val files = listOf(MediaFileInfo("content://test/song1", "Song One", 1L, "Song One"))
+
+        val mockRoot = androidx.documentfile.provider.MockDocumentFile(null, treeUri, "tree")
+        ShadowDocumentFile.mockRoot = mockRoot
+
+        try {
+            val targetUri = Uri.parse("$treeUri/test_playlist.m3u")
+            val shadowResolver = Shadows.shadowOf(baseContext.contentResolver)
+            shadowResolver.registerOutputStreamSupplier(targetUri) {
+                object : java.io.OutputStream() {
+                    override fun write(b: Int) {
+                        throw IOException("IO exception thrown from write")
+                    }
+                    override fun write(b: ByteArray) {
+                        throw IOException("IO exception thrown from write array")
+                    }
+                }
+            }
+
+            val result = service.writePlaylistWithName(baseContext, treeUri, files, "test_playlist")
+            assertNull(result)
+        } finally {
+            ShadowDocumentFile.mockRoot = null
+        }
+    }
+
     @Test
     fun overwritePlaylist_returnsTrueOnSuccess() {
         val baseContext = ApplicationProvider.getApplicationContext<Context>()
