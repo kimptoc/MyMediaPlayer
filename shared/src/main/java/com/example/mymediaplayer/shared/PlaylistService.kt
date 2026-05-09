@@ -21,14 +21,23 @@ open class PlaylistService {
         private const val TAG = "PlaylistService"
     }
 
+    private fun StringBuilder.appendWithoutNewlines(str: String) {
+        for (i in 0 until str.length) {
+            val c = str[i]
+            if (c != '\n' && c != '\r') {
+                append(c)
+            }
+        }
+    }
+
     fun generateM3uContent(files: List<MediaFileInfo>): String {
         val builder = StringBuilder()
         builder.append("#EXTM3U\n")
         for (file in files) {
             builder.append("#EXTINF:-1,")
-            builder.append(file.displayName.replace("\n", "").replace("\r", ""))
+            builder.appendWithoutNewlines(file.displayName)
             builder.append("\n")
-            builder.append(file.uriString.replace("\n", "").replace("\r", ""))
+            builder.appendWithoutNewlines(file.uriString)
             builder.append("\n")
         }
         return builder.toString()
