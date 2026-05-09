@@ -2424,7 +2424,7 @@ private fun ExpandedNowPlayingDialog(
     )
 }
 
-private fun formatPlaybackDuration(durationMs: Long): String {
+internal fun formatPlaybackDuration(durationMs: Long): String {
     val totalSeconds = (durationMs / 1000L).coerceAtLeast(0L)
     val minutes = totalSeconds / 60L
     val seconds = totalSeconds % 60L
