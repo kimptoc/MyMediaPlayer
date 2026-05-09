@@ -2553,7 +2553,8 @@ private fun buildSongDetails(file: MediaFileInfo): String {
     return parts.joinToString(" • ")
 }
 
-private fun formatDuration(durationMs: Long): String {
+@androidx.annotation.VisibleForTesting
+internal fun formatDuration(durationMs: Long): String {
     if (durationMs <= 0L) return ""
     val totalSeconds = durationMs / 1000
     val minutes = totalSeconds / 60
