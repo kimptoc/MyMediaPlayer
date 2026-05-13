@@ -217,25 +217,25 @@ class MyMusicServiceTest {
         val service = MyMusicService()
 
         // Cache-independent: must respond immediately even while scanning.
-        assertFalse(service.parentRequiresLoadedCache("root"))
-        assertFalse(service.parentRequiresLoadedCache("search"))
-        assertFalse(service.parentRequiresLoadedCache("home"))
+        assertFalse(service.parentRequiresLoadedCache(MyMusicService.ROOT_ID))
+        assertFalse(service.parentRequiresLoadedCache(MyMusicService.SEARCH_ID))
+        assertFalse(service.parentRequiresLoadedCache(MyMusicService.HOME_ID))
 
         // Cache-dependent top-level tabs.
-        assertTrue(service.parentRequiresLoadedCache("songs"))
-        assertTrue(service.parentRequiresLoadedCache("songs_all"))
-        assertTrue(service.parentRequiresLoadedCache("playlists"))
-        assertTrue(service.parentRequiresLoadedCache("albums"))
-        assertTrue(service.parentRequiresLoadedCache("genres"))
-        assertTrue(service.parentRequiresLoadedCache("artists"))
-        assertTrue(service.parentRequiresLoadedCache("decades"))
+        assertTrue(service.parentRequiresLoadedCache(MyMusicService.SONGS_ID))
+        assertTrue(service.parentRequiresLoadedCache(MyMusicService.SONGS_ALL_ID))
+        assertTrue(service.parentRequiresLoadedCache(MyMusicService.PLAYLISTS_ID))
+        assertTrue(service.parentRequiresLoadedCache(MyMusicService.ALBUMS_ID))
+        assertTrue(service.parentRequiresLoadedCache(MyMusicService.GENRES_ID))
+        assertTrue(service.parentRequiresLoadedCache(MyMusicService.ARTISTS_ID))
+        assertTrue(service.parentRequiresLoadedCache(MyMusicService.DECADES_ID))
 
         // Cache-dependent prefix-based children (conservative default).
-        assertTrue(service.parentRequiresLoadedCache("album:Rock"))
-        assertTrue(service.parentRequiresLoadedCache("artist:Beatles"))
-        assertTrue(service.parentRequiresLoadedCache("genre:Jazz"))
-        assertTrue(service.parentRequiresLoadedCache("playlist:abc"))
-        assertTrue(service.parentRequiresLoadedCache("smart_playlist:flagged"))
+        assertTrue(service.parentRequiresLoadedCache(MyMusicService.ALBUM_PREFIX + "Rock"))
+        assertTrue(service.parentRequiresLoadedCache(MyMusicService.ARTIST_PREFIX + "Beatles"))
+        assertTrue(service.parentRequiresLoadedCache(MyMusicService.GENRE_PREFIX + "Jazz"))
+        assertTrue(service.parentRequiresLoadedCache(MyMusicService.PLAYLIST_PREFIX + "abc"))
+        assertTrue(service.parentRequiresLoadedCache(MyMusicService.SMART_PLAYLIST_PREFIX + "flagged"))
 
         // Unknown IDs default to true (safer to defer than to over-respond).
         assertTrue(service.parentRequiresLoadedCache("something_unexpected"))
