@@ -1436,6 +1436,18 @@ class MyMusicService : MediaBrowserServiceCompat() {
             parentId.startsWith(ARTIST_LETTER_PREFIX) || parentId.startsWith(GENRE_LETTER_PREFIX) ||
             parentId.startsWith(GENRE_SONG_LETTER_PREFIX) || parentId.startsWith(DECADE_SONG_LETTER_PREFIX)
 
+    internal fun parentRequiresLoadedCache(parentId: String): Boolean {
+        // Cache-independent: these screens render purely from static data,
+        // so they MUST respond even while the service is loading its cache.
+        // Returning a Result.detach() for the root tree past Android Auto's
+        // onLoadChildren timeout causes "MyMediaPlayer doesn't seem to be
+        // working at the moment."
+        return when (parentId) {
+            ROOT_ID, SEARCH_ID, HOME_ID -> false
+            else -> true
+        }
+    }
+
     internal fun shouldLoadChildrenAsync(parentId: String, hasIndexes: Boolean): Boolean =
         needsMetadataIndexes(parentId) && !hasIndexes
 

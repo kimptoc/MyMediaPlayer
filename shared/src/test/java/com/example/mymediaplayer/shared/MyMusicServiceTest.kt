@@ -213,6 +213,35 @@ class MyMusicServiceTest {
     }
 
     @Test
+    fun parentRequiresLoadedCache_falseForRootSearchHome_trueForDataIds() {
+        val service = Robolectric.buildService(MyMusicService::class.java).get()
+
+        // Cache-independent: must respond immediately even while scanning.
+        assertFalse(service.parentRequiresLoadedCache("root"))
+        assertFalse(service.parentRequiresLoadedCache("search"))
+        assertFalse(service.parentRequiresLoadedCache("home"))
+
+        // Cache-dependent top-level tabs.
+        assertTrue(service.parentRequiresLoadedCache("songs"))
+        assertTrue(service.parentRequiresLoadedCache("songs_all"))
+        assertTrue(service.parentRequiresLoadedCache("playlists"))
+        assertTrue(service.parentRequiresLoadedCache("albums"))
+        assertTrue(service.parentRequiresLoadedCache("genres"))
+        assertTrue(service.parentRequiresLoadedCache("artists"))
+        assertTrue(service.parentRequiresLoadedCache("decades"))
+
+        // Cache-dependent prefix-based children (conservative default).
+        assertTrue(service.parentRequiresLoadedCache("album:Rock"))
+        assertTrue(service.parentRequiresLoadedCache("artist:Beatles"))
+        assertTrue(service.parentRequiresLoadedCache("genre:Jazz"))
+        assertTrue(service.parentRequiresLoadedCache("playlist:abc"))
+        assertTrue(service.parentRequiresLoadedCache("smart_playlist:flagged"))
+
+        // Unknown IDs default to true (safer to defer than to over-respond).
+        assertTrue(service.parentRequiresLoadedCache("something_unexpected"))
+    }
+
+    @Test
     fun shouldLoadChildrenAsync_requiresIndexes() {
         val service = MyMusicService()
 
