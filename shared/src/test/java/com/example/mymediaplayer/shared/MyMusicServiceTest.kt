@@ -214,7 +214,7 @@ class MyMusicServiceTest {
 
     @Test
     fun parentRequiresLoadedCache_falseForRootSearchHome_trueForDataIds() {
-        val service = Robolectric.buildService(MyMusicService::class.java).get()
+        val service = MyMusicService()
 
         // Cache-independent: must respond immediately even while scanning.
         assertFalse(service.parentRequiresLoadedCache("root"))
