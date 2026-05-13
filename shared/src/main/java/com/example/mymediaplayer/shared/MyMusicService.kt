@@ -733,6 +733,11 @@ class MyMusicService : MediaBrowserServiceCompat() {
     }
 
     override fun onLoadChildren(parentId: String, result: Result<MutableList<MediaItem>>) {
+        // No direct integration test for this gate: MediaBrowserServiceCompat.Result
+        // has a package-private constructor and cannot be subclassed from our test
+        // sources without a fake in androidx.media. The two operands are tested
+        // independently — parentRequiresLoadedCache via parentRequiresLoadedCache_…
+        // in MyMusicServiceTest; the isScanning lifecycle via loadCachedTreeIfAvailable.
         if (isScanning && parentRequiresLoadedCache(parentId)) {
             synchronized(pendingResults) {
                 val list = pendingResults.getOrPut(parentId) { mutableListOf() }
