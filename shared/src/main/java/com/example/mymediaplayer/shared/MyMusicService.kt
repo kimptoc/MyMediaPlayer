@@ -733,7 +733,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
     }
 
     override fun onLoadChildren(parentId: String, result: Result<MutableList<MediaItem>>) {
-        if (isScanning) {
+        if (isScanning && parentRequiresLoadedCache(parentId)) {
             synchronized(pendingResults) {
                 val list = pendingResults.getOrPut(parentId) { mutableListOf() }
                 list.add(result)
