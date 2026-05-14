@@ -43,8 +43,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -1957,19 +1955,6 @@ class MyMusicService : MediaBrowserServiceCompat() {
     private suspend fun resolveTracksForListKey(listKey: String): List<MediaFileInfo> {
         return when {
             listKey == SONGS_ID -> mediaCacheService.cachedFiles
-            listKey == PLAYLISTS_ID -> {
-                val all = kotlinx.coroutines.coroutineScope {
-                    mediaCacheService.discoveredPlaylists.map { playlist ->
-                        async(Dispatchers.IO) {
-                            playlistService.readPlaylist(
-                                this@MyMusicService,
-                                Uri.parse(playlist.uriString)
-                            )
-                        }
-                    }.awaitAll().flatten()
-                }
-                enrichFromCache(all)
-            }
             listKey.startsWith(PLAYLIST_SHORT_PREFIX) -> {
                 val shortId = listKey.removePrefix(PLAYLIST_SHORT_PREFIX)
                 val playlistUri = playlistShortIds[shortId] ?: ""
@@ -2030,7 +2015,6 @@ class MyMusicService : MediaBrowserServiceCompat() {
     private fun resolvePlaylistNameForListKey(listKey: String): String {
         return when {
             listKey == SONGS_ID -> "All Songs"
-            listKey == PLAYLISTS_ID -> "All Playlists"
             listKey.startsWith(PLAYLIST_SHORT_PREFIX) -> {
                 val shortId = listKey.removePrefix(PLAYLIST_SHORT_PREFIX)
                 val uri = playlistShortIds[shortId]
