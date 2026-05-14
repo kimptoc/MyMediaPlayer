@@ -858,7 +858,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         result.sendResult(items)
     }
 
-    private fun buildMediaItemsForPrefix(parentId: String): MutableList<MediaItem>? {
+    private fun buildMediaItemsForPrefix(parentId: String): List<MediaItem>? {
         return when {
             parentId.startsWith(SMART_PLAYLIST_PREFIX) -> buildMediaItemsForSmartPlaylist(parentId)
             parentId.startsWith(PLAYLIST_PREFIX) -> buildMediaItemsForPlaylist(parentId)
@@ -875,7 +875,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }
     }
 
-    private fun buildMediaItemsForSmartPlaylist(parentId: String): MutableList<MediaItem> {
+    private fun buildMediaItemsForSmartPlaylist(parentId: String): List<MediaItem> {
             val smartId = Uri.decode(parentId.removePrefix(SMART_PLAYLIST_PREFIX))
             val tracks = resolveSmartPlaylistTracksById(smartId) ?: emptyList()
             return buildSongListItems(
@@ -885,7 +885,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
             )
     }
 
-    private fun buildMediaItemsForPlaylist(parentId: String): MutableList<MediaItem> {
+    private fun buildMediaItemsForPlaylist(parentId: String): List<MediaItem> {
             val shortId = parentId.removePrefix(PLAYLIST_PREFIX)
             val playlistUri = playlistShortIds[shortId] ?: return mutableListOf()
             val songs = enrichFromCache(
@@ -895,13 +895,13 @@ class MyMusicService : MediaBrowserServiceCompat() {
             return buildSongListItems(songs, PLAYLIST_SHORT_PREFIX + shortId, songIconUri)
     }
 
-    private fun buildMediaItemsForAlbum(parentId: String): MutableList<MediaItem> {
+    private fun buildMediaItemsForAlbum(parentId: String): List<MediaItem> {
             ensureMetadataIndexes()
             val album = Uri.decode(parentId.removePrefix(ALBUM_PREFIX))
             return buildSongListItems(mediaCacheService.songsForAlbum(album), ALBUM_PREFIX + Uri.encode(album), resourceIconUri(R.drawable.ic_album_placeholder))
     }
 
-    private fun buildMediaItemsForGenre(parentId: String): MutableList<MediaItem> {
+    private fun buildMediaItemsForGenre(parentId: String): List<MediaItem> {
             ensureMetadataIndexes()
             val genre = Uri.decode(parentId.removePrefix(GENRE_PREFIX))
             val songs = mediaCacheService.songsForGenre(genre)
@@ -915,7 +915,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
             return buildSongListItems(songs, GENRE_PREFIX + Uri.encode(genre), resourceIconUri(R.drawable.ic_album_placeholder))
     }
 
-    private fun buildMediaItemsForGenreSongLetter(parentId: String): MutableList<MediaItem> {
+    private fun buildMediaItemsForGenreSongLetter(parentId: String): List<MediaItem> {
             ensureMetadataIndexes()
             val parts = parseBucketParts(parentId, GENRE_SONG_LETTER_PREFIX) ?: return mutableListOf()
             val genre = parts.first
@@ -928,13 +928,13 @@ class MyMusicService : MediaBrowserServiceCompat() {
             )
     }
 
-    private fun buildMediaItemsForArtist(parentId: String): MutableList<MediaItem> {
+    private fun buildMediaItemsForArtist(parentId: String): List<MediaItem> {
             ensureMetadataIndexes()
             val artist = Uri.decode(parentId.removePrefix(ARTIST_PREFIX))
             return buildSongListItems(mediaCacheService.songsForArtist(artist), ARTIST_PREFIX + Uri.encode(artist), resourceIconUri(R.drawable.ic_album_placeholder))
     }
 
-    private fun buildMediaItemsForArtistLetter(parentId: String): MutableList<MediaItem> {
+    private fun buildMediaItemsForArtistLetter(parentId: String): List<MediaItem> {
             ensureMetadataIndexes()
             val letter = Uri.decode(parentId.removePrefix(ARTIST_LETTER_PREFIX))
             return buildCategoryListItems(
@@ -945,7 +945,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
             )
     }
 
-    private fun buildMediaItemsForDecade(parentId: String): MutableList<MediaItem> {
+    private fun buildMediaItemsForDecade(parentId: String): List<MediaItem> {
             ensureMetadataIndexes()
             val decade = Uri.decode(parentId.removePrefix(DECADE_PREFIX))
             val songs = mediaCacheService.songsForDecade(decade)
@@ -959,7 +959,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
             return buildSongListItems(songs, DECADE_PREFIX + Uri.encode(decade), resourceIconUri(R.drawable.ic_album_placeholder))
     }
 
-    private fun buildMediaItemsForDecadeSongLetter(parentId: String): MutableList<MediaItem> {
+    private fun buildMediaItemsForDecadeSongLetter(parentId: String): List<MediaItem> {
             ensureMetadataIndexes()
             val parts = parseBucketParts(parentId, DECADE_SONG_LETTER_PREFIX) ?: return mutableListOf()
             val decade = parts.first
@@ -972,7 +972,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
             )
     }
 
-    private fun buildMediaItemsForGenreLetter(parentId: String): MutableList<MediaItem> {
+    private fun buildMediaItemsForGenreLetter(parentId: String): List<MediaItem> {
             ensureMetadataIndexes()
             val letter = Uri.decode(parentId.removePrefix(GENRE_LETTER_PREFIX))
             return buildCategoryListItems(
@@ -982,7 +982,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
             )
     }
 
-    private fun buildMediaItemsForSongLetter(parentId: String): MutableList<MediaItem> {
+    private fun buildMediaItemsForSongLetter(parentId: String): List<MediaItem> {
             val letter = Uri.decode(parentId.removePrefix(SONG_LETTER_PREFIX))
             val filtered = filterSongsByLetter(mediaCacheService.cachedMusicFiles, letter)
             return buildSongLetterItems(
@@ -991,7 +991,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
             )
     }
 
-    private fun buildMediaItemsForId(parentId: String): MutableList<MediaItem> {
+    private fun buildMediaItemsForId(parentId: String): List<MediaItem> {
         return when (parentId) {
             ROOT_ID -> buildRootItems()
             HOME_ID -> buildHomeItems()
@@ -1007,7 +1007,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }
     }
 
-    private fun buildRootItems(): MutableList<MediaItem> {
+    private fun buildRootItems(): List<MediaItem> {
         val items = mutableListOf<MediaItem>()
         items.add(
             MediaItem(
@@ -1036,7 +1036,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         return items
     }
 
-    private fun buildSongsItems(): MutableList<MediaItem> {
+    private fun buildSongsItems(): List<MediaItem> {
         val items = mutableListOf<MediaItem>()
         if (mediaCacheService.cachedMusicFiles.isNotEmpty()) {
             items.add(
@@ -1071,7 +1071,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         return items
     }
 
-    private fun buildSongsAllItems(): MutableList<MediaItem> {
+    private fun buildSongsAllItems(): List<MediaItem> {
         val titles = mediaCacheService.cachedMusicFiles.map { it.cleanTitle }
         return buildCategoryListItems(
             buildLetterBuckets(titles),
@@ -1080,7 +1080,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         )
     }
 
-    private fun buildPlaylistsItems(): MutableList<MediaItem> {
+    private fun buildPlaylistsItems(): List<MediaItem> {
         return playlistEntriesForBrowse(mediaCacheService.discoveredPlaylists).map { entry ->
             val description = MediaDescriptionCompat.Builder()
                 .setMediaId(entry.mediaId)
@@ -1088,10 +1088,10 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 .setIconUri(resourceIconUri(R.drawable.ic_auto_playlists))
                 .build()
             MediaItem(description, MediaItem.FLAG_BROWSABLE)
-        }.toMutableList()
+        }
     }
 
-    private fun buildAlbumsItems(): MutableList<MediaItem> {
+    private fun buildAlbumsItems(): List<MediaItem> {
         ensureMetadataIndexes()
         return buildCategoryListItems(
             mediaCacheService.albums(),
@@ -1101,7 +1101,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         )
     }
 
-    private fun buildGenresItems(): MutableList<MediaItem> {
+    private fun buildGenresItems(): List<MediaItem> {
         ensureMetadataIndexes()
         return buildCategoryListItems(
             mediaCacheService.genres(),
@@ -1111,7 +1111,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         )
     }
 
-    private fun buildArtistsItems(): MutableList<MediaItem> {
+    private fun buildArtistsItems(): List<MediaItem> {
         ensureMetadataIndexes()
         return buildCategoryListItems(
             buildLetterBuckets(mediaCacheService.artists()),
@@ -1120,7 +1120,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         )
     }
 
-    private fun buildDecadesItems(): MutableList<MediaItem> {
+    private fun buildDecadesItems(): List<MediaItem> {
         ensureMetadataIndexes()
         return buildCategoryListItems(
             mediaCacheService.decades(),
@@ -1130,7 +1130,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         )
     }
 
-    private fun buildSearchItems(): MutableList<MediaItem> {
+    private fun buildSearchItems(): List<MediaItem> {
         return mutableListOf(
             MediaItem(
                 MediaDescriptionCompat.Builder()
@@ -1141,7 +1141,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
             )
         )
     }
-    internal fun buildMediaItems(parentId: String): MutableList<MediaItem> {
+    internal fun buildMediaItems(parentId: String): List<MediaItem> {
         val start = SystemClock.elapsedRealtime()
 
         val prefixItems = buildMediaItemsForPrefix(parentId)
@@ -1313,7 +1313,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }.eachCount()
     }
 
-    private fun buildPlayAllShuffleItems(listKey: String): MutableList<MediaItem> {
+    private fun buildPlayAllShuffleItems(listKey: String): List<MediaItem> {
         val items = mutableListOf<MediaItem>()
         items.add(
             MediaItem(
@@ -2933,7 +2933,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }
     }
 
-    internal fun buildHomeItems(): MutableList<MediaItem> {
+    internal fun buildHomeItems(): List<MediaItem> {
         val items = mutableListOf<MediaItem>()
         val childListExtras = Bundle().apply {
             putInt(
