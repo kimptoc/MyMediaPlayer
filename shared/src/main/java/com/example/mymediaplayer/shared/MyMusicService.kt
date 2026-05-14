@@ -43,8 +43,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -1058,38 +1056,14 @@ class MyMusicService : MediaBrowserServiceCompat() {
     }
 
     private fun buildPlaylistsItems(): MutableList<MediaItem> {
-        val items = mutableListOf<MediaItem>()
-        if (mediaCacheService.discoveredPlaylists.isNotEmpty() ||
-            mediaCacheService.cachedFiles.isNotEmpty()
-        ) {
-            items.add(
-                MediaItem(
-                    MediaDescriptionCompat.Builder()
-                        .setMediaId(ACTION_PLAY_ALL_PREFIX + PLAYLISTS_ID)
-                        .setTitle("[Play All]")
-                        .build(),
-                    MediaItem.FLAG_PLAYABLE
-                )
-            )
-            items.add(
-                MediaItem(
-                    MediaDescriptionCompat.Builder()
-                        .setMediaId(ACTION_SHUFFLE_PREFIX + PLAYLISTS_ID)
-                        .setTitle("[Shuffle]")
-                        .build(),
-                    MediaItem.FLAG_PLAYABLE
-                )
-            )
-        }
-        items += playlistEntriesForBrowse(mediaCacheService.discoveredPlaylists).map { entry ->
+        return playlistEntriesForBrowse(mediaCacheService.discoveredPlaylists).map { entry ->
             val description = MediaDescriptionCompat.Builder()
                 .setMediaId(entry.mediaId)
                 .setTitle(entry.title)
                 .setIconUri(resourceIconUri(R.drawable.ic_auto_playlists))
                 .build()
             MediaItem(description, MediaItem.FLAG_BROWSABLE)
-        }
-        return items
+        }.toMutableList()
     }
 
     private fun buildAlbumsItems(): MutableList<MediaItem> {
@@ -2040,19 +2014,6 @@ class MyMusicService : MediaBrowserServiceCompat() {
     private suspend fun resolveTracksForListKey(listKey: String): List<MediaFileInfo> {
         return when {
             listKey == SONGS_ID -> mediaCacheService.cachedFiles
-            listKey == PLAYLISTS_ID -> {
-                val all = kotlinx.coroutines.coroutineScope {
-                    mediaCacheService.discoveredPlaylists.map { playlist ->
-                        async(Dispatchers.IO) {
-                            playlistService.readPlaylist(
-                                this@MyMusicService,
-                                Uri.parse(playlist.uriString)
-                            )
-                        }
-                    }.awaitAll().flatten()
-                }
-                enrichFromCache(all)
-            }
             listKey.startsWith(PLAYLIST_SHORT_PREFIX) -> {
                 val shortId = listKey.removePrefix(PLAYLIST_SHORT_PREFIX)
                 val playlistUri = playlistShortIds[shortId] ?: ""
@@ -2113,7 +2074,6 @@ class MyMusicService : MediaBrowserServiceCompat() {
     private fun resolvePlaylistNameForListKey(listKey: String): String {
         return when {
             listKey == SONGS_ID -> "All Songs"
-            listKey == PLAYLISTS_ID -> "All Playlists"
             listKey.startsWith(PLAYLIST_SHORT_PREFIX) -> {
                 val shortId = listKey.removePrefix(PLAYLIST_SHORT_PREFIX)
                 val uri = playlistShortIds[shortId]
