@@ -16,7 +16,6 @@
         <service
             android:name="com.example.mymediaplayer.shared.MyMusicService"
             android:exported="true"
-            android:permission="android.permission.BIND_MEDIA_BROWSER_SERVICE"
             android:foregroundServiceType="mediaPlayback">
             <intent-filter>
                 <action android:name="android.media.browse.MediaBrowserService" />

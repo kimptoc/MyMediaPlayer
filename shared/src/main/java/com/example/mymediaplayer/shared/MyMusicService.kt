@@ -54,23 +54,26 @@ import java.util.concurrent.atomic.AtomicReference
 class MyMusicService : MediaBrowserServiceCompat() {
 
     companion object {
-        private const val ROOT_ID = "root"
-        private const val HOME_ID = "home"
-        private const val SONGS_ID = "songs"
-        private const val SONGS_ALL_ID = "songs_all"
-        private const val PLAYLISTS_ID = "playlists"
-        private const val ALBUMS_ID = "albums"
-        private const val GENRES_ID = "genres"
-        private const val ARTISTS_ID = "artists"
-        private const val DECADES_ID = "decades"
-        private const val SEARCH_ID = "search"
-        private const val PLAYLIST_PREFIX = "playlist:"
-        private const val SMART_PLAYLIST_PREFIX = "smart_playlist:"
+        // Top-level browse IDs and category prefixes are `internal` so test code can
+        // reference them; leaf sub-prefixes (letters, smart-playlist categories,
+        // short-id forms) stay `private` as implementation details.
+        internal const val ROOT_ID = "root"
+        internal const val HOME_ID = "home"
+        internal const val SONGS_ID = "songs"
+        internal const val SONGS_ALL_ID = "songs_all"
+        internal const val PLAYLISTS_ID = "playlists"
+        internal const val ALBUMS_ID = "albums"
+        internal const val GENRES_ID = "genres"
+        internal const val ARTISTS_ID = "artists"
+        internal const val DECADES_ID = "decades"
+        internal const val SEARCH_ID = "search"
+        internal const val PLAYLIST_PREFIX = "playlist:"
+        internal const val SMART_PLAYLIST_PREFIX = "smart_playlist:"
         private const val PLAYLIST_SHORT_PREFIX = "pl:"
-        private const val ALBUM_PREFIX = "album:"
-        private const val GENRE_PREFIX = "genre:"
+        internal const val ALBUM_PREFIX = "album:"
+        internal const val GENRE_PREFIX = "genre:"
         private const val GENRE_SONG_LETTER_PREFIX = "genre_song_letter:"
-        private const val ARTIST_PREFIX = "artist:"
+        internal const val ARTIST_PREFIX = "artist:"
         private const val DECADE_PREFIX = "decade:"
         private const val DECADE_SONG_LETTER_PREFIX = "decade_song_letter:"
         private const val ARTIST_LETTER_PREFIX = "artist_letter:"
@@ -282,6 +285,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
     private val callback = object : MediaSessionCompat.Callback() {
         override fun onPlay() {
+            Log.d("MyMusicService", "callback.onPlay()")
             resumeOnAudioFocusGain = false
             if (mediaPlayer == null) {
                 val resumeFromQueue =
@@ -305,11 +309,14 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }
 
         override fun onPlayFromMediaId(mediaId: String?, extras: Bundle?) {
+            Log.d("MyMusicService", "callback.onPlayFromMediaId(mediaId=$mediaId)")
             val resolvedMediaId = mediaId ?: return
             playJob?.cancel()
             playJob = serviceScope.launch {
                 playMutex.withLock {
+                    Log.d("MyMusicService", "callback.onPlayFromMediaId: invoking handler for $resolvedMediaId")
                     handlePlayFromMediaId(resolvedMediaId)
+                    Log.d("MyMusicService", "callback.onPlayFromMediaId: handler returned for $resolvedMediaId")
                 }
             }
         }
@@ -399,6 +406,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }
 
         override fun onCustomAction(action: String?, extras: Bundle?) {
+            Log.d("MyMusicService", "callback.onCustomAction(action=$action)")
             when (action) {
                 ACTION_SET_MEDIA_FILES -> handleSetMediaFiles(extras)
                 ACTION_REFRESH_LIBRARY -> loadCachedTreeIfAvailable()
@@ -572,11 +580,18 @@ class MyMusicService : MediaBrowserServiceCompat() {
     }
 
     override fun onCreate() {
+        val t0 = SystemClock.elapsedRealtime()
+        fun mark(step: String) {
+            Log.d("MyMusicService", "onCreate[+${SystemClock.elapsedRealtime() - t0}ms] $step")
+        }
+        mark("enter")
         super.onCreate()
+        mark("super.onCreate done")
 
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         notificationManager = NotificationManagerCompat.from(this)
         ensureNotificationChannel()
+        mark("notification setup done")
 
         session = MediaSessionCompat(this, "MyMusicService")
         session.setSessionActivity(buildLaunchIntent())
@@ -587,6 +602,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
             MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS or
                 MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS
         )
+        mark("session setup done")
 
         playbackStateBuilder
             .setActions(
@@ -599,6 +615,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         session.setPlaybackState(playbackStateBuilder.build())
         session.setRepeatMode(repeatMode)
         session.isActive = true
+        mark("playback state set")
 
         trackVoiceIntroEnabled = getPrefs(this@MyMusicService)
             .getBoolean(KEY_TRACK_VOICE_INTRO_ENABLED, false)
@@ -606,13 +623,36 @@ class MyMusicService : MediaBrowserServiceCompat() {
             .getBoolean(KEY_TRACK_VOICE_OUTRO_ENABLED, false)
         debugCloudAnnouncementsEnabled = getPrefs(this@MyMusicService)
             .getBoolean(KEY_DEBUG_CLOUD_ANNOUNCEMENTS, false)
+        mark("prefs read (intro=$trackVoiceIntroEnabled outro=$trackVoiceOutroEnabled debug=$debugCloudAnnouncementsEnabled)")
         if (trackVoiceIntroEnabled || trackVoiceOutroEnabled) {
             ensureTextToSpeechInitialized()
+            mark("TTS init done")
         }
         announcementPreGenerator = AnnouncementPreGenerator(this, serviceScope)
+        mark("announcementPreGenerator built")
 
         restorePlaybackSnapshot()
+        mark("restorePlaybackSnapshot done")
         loadCachedTreeIfAvailable()
+        mark("loadCachedTreeIfAvailable returned (isScanning=$isScanning, cachedFiles=${mediaCacheService.cachedFiles.size})")
+        startForegroundReady()
+        mark("startForegroundReady done")
+        mark("exit")
+    }
+
+    // Promote the service to a foreground service the moment AA binds, so Android
+    // (and Samsung's "Freecess" aggressive freezer in particular) cannot freeze
+    // the process before the user's first play command arrives. Without this,
+    // gearhead's binder transactions to our MediaSession fail with error -32
+    // ("sent binder to frozen apps"), and AA's spinner ("getting your selection")
+    // hangs forever.
+    private fun startForegroundReady() {
+        runCatching {
+            val notification = buildNowPlayingNotification(PlaybackStateCompat.STATE_NONE)
+            startForeground(NOW_PLAYING_NOTIFICATION_ID, notification)
+        }.onFailure {
+            Log.w("MyMusicService", "Failed to start foreground service", it)
+        }
     }
 
     private fun playProvidedUriList(
@@ -715,6 +755,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         clientUid: Int,
         rootHints: Bundle?
     ): MediaBrowserServiceCompat.BrowserRoot {
+        Log.d("MyMusicService", "onGetRoot from $clientPackageName uid=$clientUid")
         val rootExtras = Bundle().apply {
             putInt(
                 MediaConstants.BROWSER_ROOT_HINTS_KEY_ROOT_CHILDREN_SUPPORTED_FLAGS,
@@ -733,7 +774,13 @@ class MyMusicService : MediaBrowserServiceCompat() {
     }
 
     override fun onLoadChildren(parentId: String, result: Result<MutableList<MediaItem>>) {
-        if (isScanning) {
+        Log.d("MyMusicService", "onLoadChildren($parentId) isScanning=$isScanning cachedFiles=${mediaCacheService.cachedFiles.size}")
+        // No direct integration test for this gate: MediaBrowserServiceCompat.Result
+        // has a package-private constructor and cannot be subclassed from our test
+        // sources without a fake in androidx.media. The two operands are tested
+        // independently — parentRequiresLoadedCache via parentRequiresLoadedCache_…
+        // in MyMusicServiceTest; the isScanning lifecycle via loadCachedTreeIfAvailable.
+        if (isScanning && parentRequiresLoadedCache(parentId)) {
             synchronized(pendingResults) {
                 val list = pendingResults.getOrPut(parentId) { mutableListOf() }
                 list.add(result)
@@ -1435,6 +1482,18 @@ class MyMusicService : MediaBrowserServiceCompat() {
             parentId.startsWith(ARTIST_PREFIX) || parentId.startsWith(DECADE_PREFIX) ||
             parentId.startsWith(ARTIST_LETTER_PREFIX) || parentId.startsWith(GENRE_LETTER_PREFIX) ||
             parentId.startsWith(GENRE_SONG_LETTER_PREFIX) || parentId.startsWith(DECADE_SONG_LETTER_PREFIX)
+
+    internal fun parentRequiresLoadedCache(parentId: String): Boolean {
+        // Cache-independent: these screens render purely from static data,
+        // so they MUST respond even while the service is loading its cache.
+        // Returning a Result.detach() for the root tree past Android Auto's
+        // onLoadChildren timeout causes "MyMediaPlayer doesn't seem to be
+        // working at the moment."
+        return when (parentId) {
+            ROOT_ID, SEARCH_ID, HOME_ID -> false
+            else -> true
+        }
+    }
 
     internal fun shouldLoadChildrenAsync(parentId: String, hasIndexes: Boolean): Boolean =
         needsMetadataIndexes(parentId) && !hasIndexes
