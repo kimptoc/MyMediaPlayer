@@ -3,6 +3,7 @@ package com.example.mymediaplayer.shared
 import android.content.Context
 import android.net.Uri
 import androidx.test.core.app.ApplicationProvider
+import java.io.FileNotFoundException
 import java.io.IOException
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -11,8 +12,24 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.Implementation
+import org.robolectric.annotation.Implements
+import androidx.documentfile.provider.DocumentFile
+
+@Implements(className = "androidx.documentfile.provider.TreeDocumentFile")
+class ShadowTreeDocumentFile {
+    @Implementation
+    fun createFile(mimeType: String, displayName: String): DocumentFile? {
+        return DocumentFile.fromSingleUri(
+            androidx.test.core.app.ApplicationProvider.getApplicationContext(),
+            android.net.Uri.parse("content://mock/playlist.m3u")
+        )
+    }
+}
 
 @RunWith(RobolectricTestRunner::class)
+@Config(shadows = [ShadowTreeDocumentFile::class])
 class PlaylistServiceTest {
 
     @Test
@@ -22,6 +39,55 @@ class PlaylistServiceTest {
         val shadowResolver = Shadows.shadowOf(baseContext.contentResolver)
         shadowResolver.registerInputStreamSupplier(uri) {
             throw SecurityException("nope")
+        }
+        val service = PlaylistService()
+
+        val results = service.readPlaylist(baseContext, uri)
+
+        assertTrue(results.isEmpty())
+    }
+
+    @Test
+    fun readPlaylist_returnsEmptyOnFileNotFoundException() {
+        val baseContext = ApplicationProvider.getApplicationContext<Context>()
+        val uri = Uri.parse("content://test/playlist.m3u")
+        val shadowResolver = Shadows.shadowOf(baseContext.contentResolver)
+        shadowResolver.registerInputStreamSupplier(uri) {
+            throw FileNotFoundException("nope")
+        }
+        val service = PlaylistService()
+
+        val results = service.readPlaylist(baseContext, uri)
+
+        assertTrue(results.isEmpty())
+    }
+
+    @Test
+    fun readPlaylist_returnsEmptyOnIOException() {
+        val baseContext = ApplicationProvider.getApplicationContext<Context>()
+        val uri = Uri.parse("content://test/playlist.m3u")
+        val shadowResolver = Shadows.shadowOf(baseContext.contentResolver)
+        shadowResolver.registerInputStreamSupplier(uri) {
+            throw IOException("nope")
+        }
+        val service = PlaylistService()
+
+        val results = service.readPlaylist(baseContext, uri)
+
+        assertTrue(results.isEmpty())
+    }
+
+    @Test
+    fun readPlaylist_returnsEmptyOnReadIOException() {
+        val baseContext = ApplicationProvider.getApplicationContext<Context>()
+        val uri = Uri.parse("content://test/playlist.m3u")
+        val shadowResolver = Shadows.shadowOf(baseContext.contentResolver)
+        shadowResolver.registerInputStreamSupplier(uri) {
+            object : java.io.InputStream() {
+                override fun read(): Int {
+                    throw IOException("read error")
+                }
+            }
         }
         val service = PlaylistService()
 
@@ -76,6 +142,42 @@ class PlaylistServiceTest {
         val files = emptyList<MediaFileInfo>()
 
         val result = service.writePlaylistWithName(baseContext, treeUri, files, "test_playlist")
+
+        assertNull(result)
+    }
+
+    @Test
+    fun writePlaylistWithName_returnsNullOnSecurityException() {
+        val baseContext = ApplicationProvider.getApplicationContext<Context>()
+        val shadowResolver = Shadows.shadowOf(baseContext.contentResolver)
+
+        val service = PlaylistService()
+        val files = listOf(MediaFileInfo("content://test/song1", "Song One", 1L, "Song One"))
+
+        val uri = Uri.parse("content://mock/playlist.m3u")
+        shadowResolver.registerOutputStreamSupplier(uri) {
+            throw SecurityException("Mocked SecurityException")
+        }
+
+        val result = service.writePlaylistWithName(baseContext, Uri.parse("content://mock/tree"), files, "test_playlist")
+
+        assertNull(result)
+    }
+
+    @Test
+    fun writePlaylistWithName_returnsNullOnIOException() {
+        val baseContext = ApplicationProvider.getApplicationContext<Context>()
+        val shadowResolver = Shadows.shadowOf(baseContext.contentResolver)
+
+        val service = PlaylistService()
+        val files = listOf(MediaFileInfo("content://test/song1", "Song One", 1L, "Song One"))
+
+        val uri = Uri.parse("content://mock/playlist.m3u")
+        shadowResolver.registerOutputStreamSupplier(uri) {
+            throw IOException("Mocked IOException")
+        }
+
+        val result = service.writePlaylistWithName(baseContext, Uri.parse("content://mock/tree"), files, "test_playlist")
 
         assertNull(result)
     }

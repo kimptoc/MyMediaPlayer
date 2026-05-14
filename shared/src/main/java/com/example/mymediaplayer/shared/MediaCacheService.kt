@@ -62,6 +62,39 @@ class MediaCacheService {
         val out = mutableListOf<MediaFileInfo>()
         val outIds = mutableListOf<Long>()
 
+        queryWholeDeviceAudioFiles(context, out, outIds, extensionCounts, onProgress)
+
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.R) {
+            applyLegacyGenres(context, out, outIds)
+        }
+        synchronized(cacheLock) {
+            _cachedFiles.clear()
+            _cachedFiles.addAll(out)
+            _cachedFilesByUri.clear()
+            _cachedFilesByUri.putAll(out.associateBy { it.uriString })
+            _discoveredPlaylists.clear()
+            albumArtistIndexed = false
+        }
+        onProgress?.invoke(out.size, 0)
+        val durationMs = android.os.SystemClock.elapsedRealtime() - startTime
+        ScanStats(
+            durationMs = durationMs,
+            foldersScanned = 0,
+            songsFound = out.size,
+            extensionCounts = extensionCounts.toMap(),
+            skippedReasons = emptyMap(),
+            deepScan = false,
+            probedCandidates = 0
+        )
+    }
+
+    private fun queryWholeDeviceAudioFiles(
+        context: Context,
+        out: MutableList<MediaFileInfo>,
+        outIds: MutableList<Long>,
+        extensionCounts: MutableMap<String, Int>,
+        onProgress: ((songsFound: Int, foldersScanned: Int) -> Unit)?
+    ) {
         val projectionList = mutableListOf(
             MediaStore.Audio.Media._ID,
             MediaStore.Audio.Media.DISPLAY_NAME,
@@ -152,37 +185,23 @@ class MediaCacheService {
                 }
             }
         }
-        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.R) {
-            val genresByAudioId = loadWholeDriveGenres(context, outIds.toSet())
-            if (genresByAudioId.isNotEmpty()) {
-                val genreCache = mutableMapOf<String, String>()
-                for (index in out.indices) {
-                    val audioId = outIds[index]
-                    val mappedGenre = genresByAudioId[audioId] ?: continue
-                    val normalized = genreCache.getOrPut(mappedGenre) { normalizeGenre(mappedGenre) }
-                    out[index] = out[index].copy(genre = normalized)
-                }
+    }
+
+    private fun applyLegacyGenres(
+        context: Context,
+        out: MutableList<MediaFileInfo>,
+        outIds: MutableList<Long>
+    ) {
+        val genresByAudioId = loadWholeDriveGenres(context, outIds.toSet())
+        if (genresByAudioId.isNotEmpty()) {
+            val genreCache = mutableMapOf<String, String>()
+            for (index in out.indices) {
+                val audioId = outIds[index]
+                val mappedGenre = genresByAudioId[audioId] ?: continue
+                val normalized = genreCache.getOrPut(mappedGenre) { normalizeGenre(mappedGenre) }
+                out[index] = out[index].copy(genre = normalized)
             }
         }
-        synchronized(cacheLock) {
-            _cachedFiles.clear()
-            _cachedFiles.addAll(out)
-            _cachedFilesByUri.clear()
-            _cachedFilesByUri.putAll(out.associateBy { it.uriString })
-            _discoveredPlaylists.clear()
-            albumArtistIndexed = false
-        }
-        onProgress?.invoke(out.size, 0)
-        val durationMs = android.os.SystemClock.elapsedRealtime() - startTime
-        ScanStats(
-            durationMs = durationMs,
-            foldersScanned = 0,
-            songsFound = out.size,
-            extensionCounts = extensionCounts.toMap(),
-            skippedReasons = emptyMap(),
-            deepScan = false,
-            probedCandidates = 0
-        )
     }
 
     private fun loadWholeDriveGenres(context: Context, audioIds: Set<Long>): Map<Long, String> {
@@ -273,13 +292,21 @@ class MediaCacheService {
         val genresByAudioId = loadWholeDriveGenres(context, audioIdByName.values.toSet())
         if (genresByAudioId.isEmpty()) return
 
+        // Pre-compute the displayName -> normalizedGenre mapping outside the lock
+        val genreUpdates = mutableMapOf<String, String>()
+        for ((name, audioId) in audioIdByName) {
+            val genre = genresByAudioId[audioId] ?: continue
+            genreUpdates[name] = normalizeGenre(genre)
+        }
+
+        if (genreUpdates.isEmpty()) return
+
         synchronized(cacheLock) {
             for (i in _cachedFiles.indices) {
                 val file = _cachedFiles[i]
                 if (!file.genre.isNullOrBlank()) continue // prefer ID3 tag genre
-                val audioId = audioIdByName[file.displayName] ?: continue
-                val genre = genresByAudioId[audioId] ?: continue
-                _cachedFiles[i] = file.copy(genre = normalizeGenre(genre))
+                val newGenre = genreUpdates[file.displayName] ?: continue
+                _cachedFiles[i] = file.copy(genre = newGenre)
                 _cachedFilesByUri[file.uriString] = _cachedFiles[i]
             }
         }
