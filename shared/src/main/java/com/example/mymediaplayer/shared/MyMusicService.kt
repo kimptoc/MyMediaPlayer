@@ -1011,38 +1011,14 @@ class MyMusicService : MediaBrowserServiceCompat() {
     }
 
     private fun buildPlaylistsItems(): MutableList<MediaItem> {
-        val items = mutableListOf<MediaItem>()
-        if (mediaCacheService.discoveredPlaylists.isNotEmpty() ||
-            mediaCacheService.cachedFiles.isNotEmpty()
-        ) {
-            items.add(
-                MediaItem(
-                    MediaDescriptionCompat.Builder()
-                        .setMediaId(ACTION_PLAY_ALL_PREFIX + PLAYLISTS_ID)
-                        .setTitle("[Play All]")
-                        .build(),
-                    MediaItem.FLAG_PLAYABLE
-                )
-            )
-            items.add(
-                MediaItem(
-                    MediaDescriptionCompat.Builder()
-                        .setMediaId(ACTION_SHUFFLE_PREFIX + PLAYLISTS_ID)
-                        .setTitle("[Shuffle]")
-                        .build(),
-                    MediaItem.FLAG_PLAYABLE
-                )
-            )
-        }
-        items += playlistEntriesForBrowse(mediaCacheService.discoveredPlaylists).map { entry ->
+        return playlistEntriesForBrowse(mediaCacheService.discoveredPlaylists).map { entry ->
             val description = MediaDescriptionCompat.Builder()
                 .setMediaId(entry.mediaId)
                 .setTitle(entry.title)
                 .setIconUri(resourceIconUri(R.drawable.ic_auto_playlists))
                 .build()
             MediaItem(description, MediaItem.FLAG_BROWSABLE)
-        }
-        return items
+        }.toMutableList()
     }
 
     private fun buildAlbumsItems(): MutableList<MediaItem> {

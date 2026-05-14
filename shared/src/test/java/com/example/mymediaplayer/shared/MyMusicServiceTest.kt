@@ -384,4 +384,27 @@ class MyMusicServiceTest {
         // Distinctness: different URIs must not collide
         assertNotEquals("Different URIs should produce different short IDs", id1, id2)
     }
+
+    @Test
+    fun buildMediaItems_playlistsRoot_hasNoPlayAllOrShuffleEntries() {
+        val service = Robolectric.buildService(MyMusicService::class.java).get()
+        service.mediaCacheService.addPlaylist(
+            PlaylistInfo(uriString = "content://playlists/mix1.m3u", displayName = "Mix 1")
+        )
+        service.mediaCacheService.addPlaylist(
+            PlaylistInfo(uriString = "content://playlists/mix2.m3u", displayName = "Mix 2")
+        )
+
+        val items = service.buildMediaItems("playlists")
+
+        val actionItems = items.filter { item ->
+            val id = item.description.mediaId.orEmpty()
+            id.startsWith("action:play_all:") || id.startsWith("action:shuffle:")
+        }
+        assertTrue(
+            "Expected no [Play All] / [Shuffle] entries at playlists root, found titles: " +
+                actionItems.map { it.description.title.toString() },
+            actionItems.isEmpty()
+        )
+    }
 }
