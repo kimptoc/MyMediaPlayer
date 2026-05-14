@@ -407,4 +407,22 @@ class MyMusicServiceTest {
             actionItems.isEmpty()
         )
     }
+
+    @Test
+    fun buildMediaItems_playlistsRoot_hasNoPlayAllOrShuffleEntries_whenNoDiscoveredPlaylists() {
+        val service = Robolectric.buildService(MyMusicService::class.java).get()
+        // Deliberately do not addPlaylist or addFile — only smart playlists should appear.
+
+        val items = service.buildMediaItems("playlists")
+
+        val actionItems = items.filter { item ->
+            val id = item.description.mediaId.orEmpty()
+            id.startsWith("action:play_all:") || id.startsWith("action:shuffle:")
+        }
+        assertTrue(
+            "Expected no [Play All] / [Shuffle] entries at playlists root with no discovered playlists, " +
+                "found titles: " + actionItems.map { it.description.title.toString() },
+            actionItems.isEmpty()
+        )
+    }
 }
