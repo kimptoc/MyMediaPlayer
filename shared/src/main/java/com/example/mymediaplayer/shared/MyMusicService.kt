@@ -54,6 +54,9 @@ import java.util.concurrent.atomic.AtomicReference
 class MyMusicService : MediaBrowserServiceCompat() {
 
     companion object {
+        // Top-level browse IDs and category prefixes are `internal` so test code can
+        // reference them; leaf sub-prefixes (letters, smart-playlist categories,
+        // short-id forms) stay `private` as implementation details.
         internal const val ROOT_ID = "root"
         internal const val HOME_ID = "home"
         internal const val SONGS_ID = "songs"
@@ -679,7 +682,6 @@ class MyMusicService : MediaBrowserServiceCompat() {
     }
 
     override fun onDestroy() {
-        Log.d("MyMusicService", "onDestroy CALLED stack=${Throwable().stackTraceToString().lines().take(8).joinToString("\\n")}")
         val lastPosition = currentPositionSafeMs()
         savePlaybackSnapshot(positionMsOverride = lastPosition)
         stopForeground(STOP_FOREGROUND_REMOVE)
