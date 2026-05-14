@@ -887,7 +887,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
     private fun buildMediaItemsForPlaylist(parentId: String): List<MediaItem> {
             val shortId = parentId.removePrefix(PLAYLIST_PREFIX)
-            val playlistUri = playlistShortIds[shortId] ?: return mutableListOf()
+            val playlistUri = playlistShortIds[shortId] ?: return emptyList()
             val songs = enrichFromCache(
                 playlistService.readPlaylist(this, Uri.parse(playlistUri))
             )
@@ -917,7 +917,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
     private fun buildMediaItemsForGenreSongLetter(parentId: String): List<MediaItem> {
             ensureMetadataIndexes()
-            val parts = parseBucketParts(parentId, GENRE_SONG_LETTER_PREFIX) ?: return mutableListOf()
+            val parts = parseBucketParts(parentId, GENRE_SONG_LETTER_PREFIX) ?: return emptyList()
             val genre = parts.first
             val letter = parts.second
             val songs = mediaCacheService.songsForGenre(genre)
@@ -961,7 +961,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
     private fun buildMediaItemsForDecadeSongLetter(parentId: String): List<MediaItem> {
             ensureMetadataIndexes()
-            val parts = parseBucketParts(parentId, DECADE_SONG_LETTER_PREFIX) ?: return mutableListOf()
+            val parts = parseBucketParts(parentId, DECADE_SONG_LETTER_PREFIX) ?: return emptyList()
             val decade = parts.first
             val letter = parts.second
             val songs = mediaCacheService.songsForDecade(decade)
@@ -1340,24 +1340,21 @@ class MyMusicService : MediaBrowserServiceCompat() {
         songs: List<MediaFileInfo>,
         listKey: String,
         bucketPrefix: String
-    ): MutableList<MediaItem> {
-        val items = buildPlayAllShuffleItems(listKey)
-        items += buildCategoryListItems(
+    ): List<MediaItem> {
+        return buildPlayAllShuffleItems(listKey) + buildCategoryListItems(
             buildSongLetterBuckets(songs),
             bucketPrefix,
             buildSongLetterCounts(songs),
             resourceIconUri(R.drawable.ic_auto_song)
         )
-        return items
     }
 
     private fun buildSongLetterItems(
         listKey: String,
         songs: List<MediaFileInfo>
-    ): MutableList<MediaItem> {
-        val items = buildPlayAllShuffleItems(listKey)
-        items += buildSongItems(songs, resourceIconUri(R.drawable.ic_album_placeholder))
-        return items
+    ): List<MediaItem> {
+        return buildPlayAllShuffleItems(listKey) +
+            buildSongItems(songs, resourceIconUri(R.drawable.ic_album_placeholder))
     }
 
     @VisibleForTesting

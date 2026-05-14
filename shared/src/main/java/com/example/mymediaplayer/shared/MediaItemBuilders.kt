@@ -8,7 +8,7 @@ internal fun buildSongListItems(
     songs: List<MediaFileInfo>,
     listKey: String,
     defaultIconUri: Uri? = null
-): MutableList<MediaItem> {
+): List<MediaItem> {
     val items = mutableListOf<MediaItem>()
     if (songs.isNotEmpty()) {
         items.add(
@@ -55,7 +55,7 @@ internal fun buildCategoryListItems(
     prefix: String,
     counts: Map<String, Int>? = null,
     iconUri: Uri? = null
-): MutableList<MediaItem> {
+): List<MediaItem> {
     return categories.map { category ->
         val builder = MediaDescriptionCompat.Builder()
             .setMediaId(prefix + Uri.encode(category))
@@ -68,5 +68,5 @@ internal fun buildCategoryListItems(
             builder.setIconUri(iconUri)
         }
         MediaItem(builder.build(), MediaItem.FLAG_BROWSABLE)
-    }.toMutableList()
+    }
 }
