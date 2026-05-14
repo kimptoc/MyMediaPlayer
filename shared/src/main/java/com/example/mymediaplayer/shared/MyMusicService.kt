@@ -282,6 +282,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
     private val callback = object : MediaSessionCompat.Callback() {
         override fun onPlay() {
+            Log.d("MyMusicService", "callback.onPlay()")
             resumeOnAudioFocusGain = false
             if (mediaPlayer == null) {
                 val resumeFromQueue =
@@ -305,11 +306,14 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }
 
         override fun onPlayFromMediaId(mediaId: String?, extras: Bundle?) {
+            Log.d("MyMusicService", "callback.onPlayFromMediaId(mediaId=$mediaId)")
             val resolvedMediaId = mediaId ?: return
             playJob?.cancel()
             playJob = serviceScope.launch {
                 playMutex.withLock {
+                    Log.d("MyMusicService", "callback.onPlayFromMediaId: invoking handler for $resolvedMediaId")
                     handlePlayFromMediaId(resolvedMediaId)
+                    Log.d("MyMusicService", "callback.onPlayFromMediaId: handler returned for $resolvedMediaId")
                 }
             }
         }
@@ -399,6 +403,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }
 
         override fun onCustomAction(action: String?, extras: Bundle?) {
+            Log.d("MyMusicService", "callback.onCustomAction(action=$action)")
             when (action) {
                 ACTION_SET_MEDIA_FILES -> handleSetMediaFiles(extras)
                 ACTION_REFRESH_LIBRARY -> loadCachedTreeIfAvailable()
@@ -572,11 +577,18 @@ class MyMusicService : MediaBrowserServiceCompat() {
     }
 
     override fun onCreate() {
+        val t0 = SystemClock.elapsedRealtime()
+        fun mark(step: String) {
+            Log.d("MyMusicService", "onCreate[+${SystemClock.elapsedRealtime() - t0}ms] $step")
+        }
+        mark("enter")
         super.onCreate()
+        mark("super.onCreate done")
 
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         notificationManager = NotificationManagerCompat.from(this)
         ensureNotificationChannel()
+        mark("notification setup done")
 
         session = MediaSessionCompat(this, "MyMusicService")
         session.setSessionActivity(buildLaunchIntent())
@@ -587,6 +599,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
             MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS or
                 MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS
         )
+        mark("session setup done")
 
         playbackStateBuilder
             .setActions(
@@ -599,6 +612,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         session.setPlaybackState(playbackStateBuilder.build())
         session.setRepeatMode(repeatMode)
         session.isActive = true
+        mark("playback state set")
 
         trackVoiceIntroEnabled = getPrefs(this@MyMusicService)
             .getBoolean(KEY_TRACK_VOICE_INTRO_ENABLED, false)
@@ -606,13 +620,36 @@ class MyMusicService : MediaBrowserServiceCompat() {
             .getBoolean(KEY_TRACK_VOICE_OUTRO_ENABLED, false)
         debugCloudAnnouncementsEnabled = getPrefs(this@MyMusicService)
             .getBoolean(KEY_DEBUG_CLOUD_ANNOUNCEMENTS, false)
+        mark("prefs read (intro=$trackVoiceIntroEnabled outro=$trackVoiceOutroEnabled debug=$debugCloudAnnouncementsEnabled)")
         if (trackVoiceIntroEnabled || trackVoiceOutroEnabled) {
             ensureTextToSpeechInitialized()
+            mark("TTS init done")
         }
         announcementPreGenerator = AnnouncementPreGenerator(this, serviceScope)
+        mark("announcementPreGenerator built")
 
         restorePlaybackSnapshot()
+        mark("restorePlaybackSnapshot done")
         loadCachedTreeIfAvailable()
+        mark("loadCachedTreeIfAvailable returned (isScanning=$isScanning, cachedFiles=${mediaCacheService.cachedFiles.size})")
+        startForegroundReady()
+        mark("startForegroundReady done")
+        mark("exit")
+    }
+
+    // Promote the service to a foreground service the moment AA binds, so Android
+    // (and Samsung's "Freecess" aggressive freezer in particular) cannot freeze
+    // the process before the user's first play command arrives. Without this,
+    // gearhead's binder transactions to our MediaSession fail with error -32
+    // ("sent binder to frozen apps"), and AA's spinner ("getting your selection")
+    // hangs forever.
+    private fun startForegroundReady() {
+        runCatching {
+            val notification = buildNowPlayingNotification(PlaybackStateCompat.STATE_NONE)
+            startForeground(NOW_PLAYING_NOTIFICATION_ID, notification)
+        }.onFailure {
+            Log.w("MyMusicService", "Failed to start foreground service", it)
+        }
     }
 
     private fun playProvidedUriList(
@@ -642,6 +679,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
     }
 
     override fun onDestroy() {
+        Log.d("MyMusicService", "onDestroy CALLED stack=${Throwable().stackTraceToString().lines().take(8).joinToString("\\n")}")
         val lastPosition = currentPositionSafeMs()
         savePlaybackSnapshot(positionMsOverride = lastPosition)
         stopForeground(STOP_FOREGROUND_REMOVE)
@@ -715,6 +753,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         clientUid: Int,
         rootHints: Bundle?
     ): MediaBrowserServiceCompat.BrowserRoot {
+        Log.d("MyMusicService", "onGetRoot from $clientPackageName uid=$clientUid")
         val rootExtras = Bundle().apply {
             putInt(
                 MediaConstants.BROWSER_ROOT_HINTS_KEY_ROOT_CHILDREN_SUPPORTED_FLAGS,
@@ -733,6 +772,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
     }
 
     override fun onLoadChildren(parentId: String, result: Result<MutableList<MediaItem>>) {
+        Log.d("MyMusicService", "onLoadChildren($parentId) isScanning=$isScanning cachedFiles=${mediaCacheService.cachedFiles.size}")
         // No direct integration test for this gate: MediaBrowserServiceCompat.Result
         // has a package-private constructor and cannot be subclassed from our test
         // sources without a fake in androidx.media. The two operands are tested
