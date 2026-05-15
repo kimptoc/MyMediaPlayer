@@ -10,8 +10,10 @@ Treat podcast-like media files as a distinct category. They appear in **Genres â
 
 A file is classified as a podcast when **any** of the following match:
 
-1. Its raw genre tag contains (case-insensitive) `podcast`, `audiobook`, or `spoken`.
+1. Its raw genre tag contains (case-insensitive) `podcast`, `audiobook`, or `spoken word`.
 2. Its folder path or URI contains (case-insensitive) `podcast`.
+
+The space in `spoken word` matters â€” matching bare `spoken` would catch unrelated words like `Unspoken` or `Outspoken`. `Spoken Word` is also the ID3 v2 genre name (180), so the phrase match aligns with what tagged files actually carry.
 
 Implementation: new top-level function in `shared/`:
 
@@ -19,7 +21,7 @@ Implementation: new top-level function in `shared/`:
 // shared/src/main/java/com/example/mymediaplayer/shared/PodcastDetection.kt
 fun isPodcastMedia(rawGenre: String?, pathOrUri: String?): Boolean {
     val g = rawGenre.orEmpty().lowercase(Locale.US)
-    if (g.contains("podcast") || g.contains("audiobook") || g.contains("spoken")) return true
+    if (g.contains("podcast") || g.contains("audiobook") || g.contains("spoken word")) return true
     val p = pathOrUri.orEmpty().lowercase(Locale.US)
     return p.contains("podcast")
 }
