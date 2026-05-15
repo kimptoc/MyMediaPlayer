@@ -10,7 +10,8 @@ data class MediaFileInfo(
     val genre: String? = null,
     val durationMs: Long? = null,
     val year: Int? = null,
-    val addedAtMs: Long? = null
+    val addedAtMs: Long? = null,
+    val isPodcast: Boolean = false
 ) {
     val cleanTitle: String
         get() = title?.takeIf { it.isNotBlank() }

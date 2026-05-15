@@ -173,7 +173,8 @@ class MediaCacheService {
                         genre = normalizeGenre(osGenre ?: inferGenreFromPath(relativePath)),
                         durationMs = durationMs,
                         year = year,
-                        addedAtMs = addedAtMs
+                        addedAtMs = addedAtMs,
+                        isPodcast = isPodcastMedia(osGenre, relativePath)
                     )
                 )
                 outIds.add(id)
@@ -199,7 +200,12 @@ class MediaCacheService {
                 val audioId = outIds[index]
                 val mappedGenre = genresByAudioId[audioId] ?: continue
                 val normalized = genreCache.getOrPut(mappedGenre) { normalizeGenre(mappedGenre) }
-                out[index] = out[index].copy(genre = normalized)
+                val existing = out[index]
+                out[index] = existing.copy(
+                    genre = normalized,
+                    isPodcast = existing.isPodcast ||
+                        isPodcastMedia(mappedGenre, existing.uriString)
+                )
             }
         }
     }
@@ -292,11 +298,13 @@ class MediaCacheService {
         val genresByAudioId = loadWholeDriveGenres(context, audioIdByName.values.toSet())
         if (genresByAudioId.isEmpty()) return
 
-        // Pre-compute the displayName -> normalizedGenre mapping outside the lock
-        val genreUpdates = mutableMapOf<String, String>()
+        // Pre-compute the displayName -> (normalizedGenre, rawGenre) mapping outside the lock.
+        // Raw genre is retained so podcast detection can still see "Podcast" / "Audiobook" /
+        // "Spoken Word" before normalization collapses it.
+        val genreUpdates = mutableMapOf<String, Pair<String, String>>()
         for ((name, audioId) in audioIdByName) {
             val genre = genresByAudioId[audioId] ?: continue
-            genreUpdates[name] = normalizeGenre(genre)
+            genreUpdates[name] = normalizeGenre(genre) to genre
         }
 
         if (genreUpdates.isEmpty()) return
@@ -305,8 +313,13 @@ class MediaCacheService {
             for (i in _cachedFiles.indices) {
                 val file = _cachedFiles[i]
                 if (!file.genre.isNullOrBlank()) continue // prefer ID3 tag genre
-                val newGenre = genreUpdates[file.displayName] ?: continue
-                _cachedFiles[i] = file.copy(genre = newGenre)
+                val update = genreUpdates[file.displayName] ?: continue
+                val (newGenre, rawGenre) = update
+                _cachedFiles[i] = file.copy(
+                    genre = newGenre,
+                    isPodcast = file.isPodcast ||
+                        isPodcastMedia(rawGenre, file.uriString)
+                )
                 _cachedFilesByUri[file.uriString] = _cachedFiles[i]
             }
         }
@@ -315,6 +328,8 @@ class MediaCacheService {
     private val _cachedFiles = mutableListOf<MediaFileInfo>()
     val cachedFiles: List<MediaFileInfo>
         get() = synchronized(cacheLock) { _cachedFiles.toList() }
+    val cachedMusicFiles: List<MediaFileInfo>
+        get() = synchronized(cacheLock) { _cachedFiles.filter { !it.isPodcast } }
 
     private val _cachedFilesByUri = mutableMapOf<String, MediaFileInfo>()
     fun getFileIndexByUri(): Map<String, MediaFileInfo> = synchronized(cacheLock) { _cachedFilesByUri.toMap() }
@@ -454,7 +469,11 @@ class MediaCacheService {
             ),
             durationMs = durationMs,
             year = yearValue,
-            addedAtMs = candidate.lastModified
+            addedAtMs = candidate.lastModified,
+            isPodcast = isPodcastMedia(
+                metadata?.genre,
+                candidate.parentFolderName ?: candidate.uri.toString()
+            )
         )
     }
 
@@ -470,9 +489,8 @@ class MediaCacheService {
             return null
         }
         val files = dao.getAllFiles().map {
-            val genre = it.genre ?: normalizeGenre(
-                inferGenreFromPath(Uri.decode(it.uriString))
-            )
+            val decodedUri = Uri.decode(it.uriString)
+            val genre = it.genre ?: normalizeGenre(inferGenreFromPath(decodedUri))
             MediaFileInfo(
                 uriString = it.uriString,
                 displayName = it.displayName,
@@ -483,7 +501,8 @@ class MediaCacheService {
                 genre = genre,
                 durationMs = it.durationMs,
                 year = it.year,
-                addedAtMs = it.addedAtMs
+                addedAtMs = it.addedAtMs,
+                isPodcast = isPodcastMedia(it.genre, decodedUri)
             )
         }
         val playlists = dao.getAllPlaylists().map {
@@ -796,6 +815,10 @@ class MediaCacheService {
         clearMetadataIndexes()
         val snapshot = synchronized(cacheLock) { _cachedFiles.toList() }
         for (file in snapshot) {
+            if (file.isPodcast) {
+                genreIndex.getOrPut(PODCAST_GENRE) { mutableListOf() }.add(file)
+                continue
+            }
             val album = file.album?.ifBlank { null } ?: "Unknown Album"
             val artist = file.artist?.ifBlank { null } ?: "Unknown Artist"
             val genre = bucketGenre(file.genre)
