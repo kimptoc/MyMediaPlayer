@@ -38,7 +38,7 @@ class MyMusicServiceGenreCountsTest {
         val counts = method.invoke(service, files) as Map<String, Int>
 
         assertEquals(3, counts[PODCAST_GENRE])
-        assertEquals(1, counts["Rock/Metal"])
-        assertEquals(1, counts["Hip-Hop/Rap"])
+        assertEquals(1, counts[bucketGenre("Rock")])
+        assertEquals(1, counts[bucketGenre("Hip-Hop")])
     }
 }

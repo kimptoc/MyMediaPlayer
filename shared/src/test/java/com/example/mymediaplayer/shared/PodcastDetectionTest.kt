@@ -16,6 +16,12 @@ class PodcastDetectionTest {
     }
 
     @Test
+    fun spokenSubstringDoesNotMatchUnrelatedWords() {
+        assertFalse(isPodcastMedia("Unspoken", null))
+        assertFalse(isPodcastMedia("Outspoken", null))
+    }
+
+    @Test
     fun pathDetectsPodcasts() {
         assertTrue(isPodcastMedia(null, "/storage/Podcasts/show.mp3"))
         assertTrue(isPodcastMedia("Rock", "/storage/Podcasts/show.mp3"))
