@@ -2,6 +2,8 @@ package com.example.mymediaplayer.shared
 
 import java.util.Locale
 
+const val PODCAST_GENRE: String = "Podcasts"
+
 fun bucketGenre(raw: String?): String {
     val trimmed = raw?.trim().orEmpty()
     if (trimmed.isBlank()) return "Other"
