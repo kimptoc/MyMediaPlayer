@@ -657,24 +657,38 @@ class MainActivity : ComponentActivity() {
         val uris = files.map { it.uriString }
         if (uris == lastSentUris) return
 
-        val names = files.map { it.displayName }
-        val sizes = files.map { it.sizeBytes }.toLongArray()
-        val titles = files.map { it.title.orEmpty() }
-        val artists = files.map { it.artist.orEmpty() }
-        val albums = files.map { it.album.orEmpty() }
-        val genres = files.map { it.genre.orEmpty() }
-        val durations = files.map { it.durationMs ?: -1L }.toLongArray()
-        val years = files.map { it.year ?: 0 }.toIntArray()
-        val addedAt = files.map { it.addedAtMs ?: -1L }.toLongArray()
+        val size = files.size
+        val names = ArrayList<String>(size)
+        val sizes = LongArray(size)
+        val titles = ArrayList<String>(size)
+        val artists = ArrayList<String>(size)
+        val albums = ArrayList<String>(size)
+        val genres = ArrayList<String>(size)
+        val durations = LongArray(size)
+        val years = IntArray(size)
+        val addedAt = LongArray(size)
+
+        for (i in 0 until size) {
+            val file = files[i]
+            names.add(file.displayName)
+            sizes[i] = file.sizeBytes
+            titles.add(file.title.orEmpty())
+            artists.add(file.artist.orEmpty())
+            albums.add(file.album.orEmpty())
+            genres.add(file.genre.orEmpty())
+            durations[i] = file.durationMs ?: -1L
+            years[i] = file.year ?: 0
+            addedAt[i] = file.addedAtMs ?: -1L
+        }
 
         val bundle = Bundle().apply {
             putStringArrayList(EXTRA_URIS, ArrayList(uris))
-            putStringArrayList(EXTRA_NAMES, ArrayList(names))
+            putStringArrayList(EXTRA_NAMES, names)
             putLongArray(EXTRA_SIZES, sizes)
-            putStringArrayList(EXTRA_TITLES, ArrayList(titles))
-            putStringArrayList(EXTRA_ARTISTS, ArrayList(artists))
-            putStringArrayList(EXTRA_ALBUMS, ArrayList(albums))
-            putStringArrayList(EXTRA_GENRES, ArrayList(genres))
+            putStringArrayList(EXTRA_TITLES, titles)
+            putStringArrayList(EXTRA_ARTISTS, artists)
+            putStringArrayList(EXTRA_ALBUMS, albums)
+            putStringArrayList(EXTRA_GENRES, genres)
             putLongArray(EXTRA_DURATIONS, durations)
             putIntArray(EXTRA_YEARS, years)
             putLongArray(EXTRA_ADDED_AT, addedAt)
