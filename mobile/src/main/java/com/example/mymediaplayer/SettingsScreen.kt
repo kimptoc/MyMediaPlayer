@@ -24,10 +24,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -57,9 +55,9 @@ fun SettingsScreen(
     onChoosePlaylistSaveFolder: () -> Unit,
     onBack: () -> Unit
 ) {
-    var showCloudAnnouncementSettingsDialog by remember { mutableStateOf(false) }
-    var showManageTrustedBluetoothDialog by remember { mutableStateOf(false) }
-    var showBluetoothDiagnosticsDialog by remember { mutableStateOf(false) }
+    val (showCloudAnnouncementSettingsDialog, setShowCloudAnnouncementSettingsDialog) = remember { mutableStateOf(false) }
+    val (showManageTrustedBluetoothDialog, setShowManageTrustedBluetoothDialog) = remember { mutableStateOf(false) }
+    val (showBluetoothDiagnosticsDialog, setShowBluetoothDiagnosticsDialog) = remember { mutableStateOf(false) }
 
     BackHandler { onBack() }
 
@@ -72,14 +70,14 @@ fun SettingsScreen(
             trackVoiceOutroEnabled = trackVoiceOutroEnabled,
             onToggleTrackVoiceIntro = onToggleTrackVoiceIntro,
             onToggleTrackVoiceOutro = onToggleTrackVoiceOutro,
-            onShowCloudAnnouncementSettingsDialog = { showCloudAnnouncementSettingsDialog = true },
+            onShowCloudAnnouncementSettingsDialog = { setShowCloudAnnouncementSettingsDialog(true) },
             bluetoothAutoPlayEnabled = bluetoothAutoPlayEnabled,
             onToggleBluetoothAutoPlay = onToggleBluetoothAutoPlay,
             onAddCurrentBluetoothDevice = onAddCurrentBluetoothDevice,
-            onShowManageTrustedBluetoothDialog = { showManageTrustedBluetoothDialog = true },
+            onShowManageTrustedBluetoothDialog = { setShowManageTrustedBluetoothDialog(true) },
             onShowBluetoothDiagnosticsDialog = {
                 onRefreshBluetoothDiagnostics()
-                showBluetoothDiagnosticsDialog = true
+                setShowBluetoothDiagnosticsDialog(true)
             },
             onChoosePlaylistSaveFolder = onChoosePlaylistSaveFolder
         )
@@ -92,7 +90,7 @@ fun SettingsScreen(
             debugCloudAnnouncements = debugCloudAnnouncements,
             onSetDebugCloudAnnouncements = onSetDebugCloudAnnouncements,
             onSaveCloudAnnouncementKeys = onSaveCloudAnnouncementKeys,
-            onDismissRequest = { showCloudAnnouncementSettingsDialog = false }
+            onDismissRequest = { setShowCloudAnnouncementSettingsDialog(false) }
         )
     }
 
@@ -101,7 +99,7 @@ fun SettingsScreen(
             trustedBluetoothDevices = trustedBluetoothDevices,
             onRemoveTrustedBluetoothDevice = onRemoveTrustedBluetoothDevice,
             onClearTrustedBluetoothDevices = onClearTrustedBluetoothDevices,
-            onDismissRequest = { showManageTrustedBluetoothDialog = false }
+            onDismissRequest = { setShowManageTrustedBluetoothDialog(false) }
         )
     }
 
@@ -109,7 +107,7 @@ fun SettingsScreen(
         BluetoothDiagnosticsDialog(
             bluetoothDiagnostics = bluetoothDiagnostics,
             onRefreshBluetoothDiagnostics = onRefreshBluetoothDiagnostics,
-            onDismissRequest = { showBluetoothDiagnosticsDialog = false }
+            onDismissRequest = { setShowBluetoothDiagnosticsDialog(false) }
         )
     }
 }
@@ -252,8 +250,8 @@ internal fun CloudAnnouncementSettingsDialog(
     onSaveCloudAnnouncementKeys: (String, String, () -> Unit) -> Unit,
     onDismissRequest: () -> Unit
 ) {
-    var kiloKeyInput by remember { mutableStateOf(cloudAnnouncementKiloKey) }
-    var ttsKeyInput by remember { mutableStateOf(cloudAnnouncementTtsKey) }
+    val (kiloKeyInput, setKiloKeyInput) = remember { mutableStateOf(cloudAnnouncementKiloKey) }
+    val (ttsKeyInput, setTtsKeyInput) = remember { mutableStateOf(cloudAnnouncementTtsKey) }
     AlertDialog(
         onDismissRequest = onDismissRequest,
         title = { Text("AI Announcement Settings") },
@@ -265,7 +263,7 @@ internal fun CloudAnnouncementSettingsDialog(
                 )
                 TextField(
                     value = kiloKeyInput,
-                    onValueChange = { kiloKeyInput = it },
+                    onValueChange = { setKiloKeyInput(it) },
                     label = { Text("Kilo API key (optional)") },
                     placeholder = { Text("Leave blank for anonymous") },
                     singleLine = true,
@@ -274,7 +272,7 @@ internal fun CloudAnnouncementSettingsDialog(
                 )
                 TextField(
                     value = ttsKeyInput,
-                    onValueChange = { ttsKeyInput = it },
+                    onValueChange = { setTtsKeyInput(it) },
                     label = { Text("Google Cloud TTS key (optional)") },
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
