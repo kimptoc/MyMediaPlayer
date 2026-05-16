@@ -314,11 +314,10 @@ class MediaCacheService {
                 val file = _cachedFiles[i]
                 if (!file.genre.isNullOrBlank()) continue // prefer ID3 tag genre
                 val update = genreUpdates[file.displayName] ?: continue
-                val (newGenre, rawGenre) = update
                 _cachedFiles[i] = file.copy(
-                    genre = newGenre,
+                    genre = update.first,
                     isPodcast = file.isPodcast ||
-                        isPodcastMedia(rawGenre, file.uriString)
+                        isPodcastMedia(update.second, file.uriString)
                 )
                 _cachedFilesByUri[file.uriString] = _cachedFiles[i]
             }
@@ -906,11 +905,17 @@ class MediaCacheService {
     private fun normalizeGenre(raw: String?): String {
         val trimmed = raw?.trim().orEmpty()
         if (trimmed.isBlank()) return "Other"
-        val primary = trimmed
-            .split(';', '/', '|', ',')
-            .firstOrNull { it.isNotBlank() }
-            ?.trim()
-            .orEmpty()
+
+        var endIndex = trimmed.length
+        for (i in trimmed.indices) {
+            val c = trimmed[i]
+            if (c == ';' || c == '/' || c == '|' || c == ',') {
+                endIndex = i
+                break
+            }
+        }
+
+        val primary = if (endIndex == trimmed.length) trimmed else trimmed.substring(0, endIndex).trim()
         return if (primary.isBlank()) "Other" else primary
     }
 
