@@ -777,24 +777,34 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     ) {
         val latest = _uiState.value
         var replaced = false
-        val updatedPlaylists = latest.scan.discoveredPlaylists.map { existing ->
-            val isTarget = existing.uriString == playlist.uriString ||
-                existing.displayName == playlist.displayName
-            if (isTarget) {
+        val discoveredPlaylists = latest.scan.discoveredPlaylists
+        val unSortedUpdatedPlaylists = ArrayList<PlaylistInfo>(discoveredPlaylists.size + 1)
+        val pUri = playlist.uriString
+        val pName = playlist.displayName
+
+        for (i in discoveredPlaylists.indices) {
+            val existing = discoveredPlaylists[i]
+            if (existing.uriString == pUri || existing.displayName == pName) {
                 replaced = true
-                renamed
+                unSortedUpdatedPlaylists.add(renamed)
             } else {
-                existing
+                unSortedUpdatedPlaylists.add(existing)
             }
-        }.let {
-            if (replaced) it else {
-                // Fallback for providers that mutate URI/name unexpectedly during rename.
-                it.filterNot { p ->
-                    p.displayName == playlist.displayName ||
-                        p.displayName.removeSuffix(".m3u") == playlist.displayName.removeSuffix(".m3u")
-                } + renamed
+        }
+
+        if (!replaced) {
+            val pNameNoExt = pName.removeSuffix(".m3u")
+            val iterator = unSortedUpdatedPlaylists.iterator()
+            while(iterator.hasNext()) {
+                val p = iterator.next()
+                if (p.displayName == pName || p.displayName.removeSuffix(".m3u") == pNameNoExt) {
+                    iterator.remove()
+                }
             }
-        }.let(::sortPlaylists)
+            unSortedUpdatedPlaylists.add(renamed)
+        }
+        val updatedPlaylists = sortPlaylists(unSortedUpdatedPlaylists)
+
         val key = treeUri?.let { "${it}|${latest.scan.lastScanLimit}" }
         if (key != null) {
             val cached = scanCache[key]
