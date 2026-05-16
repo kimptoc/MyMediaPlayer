@@ -707,9 +707,9 @@ class MainActivity : ComponentActivity() {
             controller.transportControls?.playFromMediaId(target.uriString, null)
             return
         }
-        val uris = songs.map { it.uriString }
+        val uris = songs.mapTo(ArrayList(songs.size)) { it.uriString }
         val bundle = Bundle().apply {
-            putStringArrayList(EXTRA_SEARCH_URIS, ArrayList(uris))
+            putStringArrayList(EXTRA_SEARCH_URIS, uris)
             putBoolean(EXTRA_SEARCH_SHUFFLE, shuffle)
         }
         controller.transportControls.sendCustomAction(ACTION_PLAY_SEARCH_LIST, bundle)
