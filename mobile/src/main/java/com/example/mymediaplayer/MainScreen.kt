@@ -1594,8 +1594,9 @@ private fun SearchResultsActionRow(
     onClearSelection: () -> Unit,
     onAddSelected: (List<MediaFileInfo>) -> Unit
 ) {
+    val searchUrisSet = selectedSearchUris.toSet()
     val selectedSearchResults = visibleSearchResults.filter {
-        it.uriString in selectedSearchUris
+        it.uriString in searchUrisSet
     }
 
     LazyRow(
