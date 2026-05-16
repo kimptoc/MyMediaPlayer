@@ -1,0 +1,24 @@
+--- a/shared/src/main/java/com/example/mymediaplayer/shared/MyMusicService.kt
++++ b/shared/src/main/java/com/example/mymediaplayer/shared/MyMusicService.kt
+@@ -406,10 +406,17 @@
+         override fun onCustomAction(action: String?, extras: Bundle?) {
+             Log.d("MyMusicService", "callback.onCustomAction(action=$action)")
+
+             // Validate that custom actions are coming from an allowed client.
+             // Note: In MediaSessionCompat.Callback, we can get the calling UID via MediaSessionManager or Binder.
+-            // For simplicity, we assume we use Binder.getCallingUid() or we validate it using PackageValidator
+             // Custom actions could be triggered by notifications or trusted apps.
+             // MediaSessionCompat doesn't expose caller UID directly on this method, so we must use Binder
+-            val callerUid = android.os.Binder.getCallingUid()
++
++            // Retrieve actual calling uid securely
++            val remoteUserInfo = session.currentControllerInfo
++            val callerUid = remoteUserInfo.uid
++            val callerPackageName = remoteUserInfo.packageName
++
+             val validator = PackageValidator(this@MyMusicService)
+-            if (!validator.isCallerUidValid(callerUid)) {
++            if (!validator.isCallerValid(callerPackageName, callerUid)) {
+                 Log.w("MyMusicService", "Rejecting custom action $action from unauthorized uid $callerUid")
+                 return
+             }
