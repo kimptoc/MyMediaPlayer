@@ -2,7 +2,6 @@ package com.example.mymediaplayer
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
-import androidx.annotation.VisibleForTesting
 
 class MainScreenKtTest {
 
