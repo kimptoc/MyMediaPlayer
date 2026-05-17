@@ -80,15 +80,17 @@ interface MediaCacheDao {
         clearFiles()
         clearPlaylists()
         clearScanState()
-        if (files.isNotEmpty()) insertFiles(files)
-        if (playlists.isNotEmpty()) insertPlaylists(playlists)
+
+        files.chunked(999).forEach { insertFiles(it) }
+        playlists.chunked(999).forEach { insertPlaylists(it) }
+
         upsertScanState(state)
     }
 
     @Transaction
     fun replacePlaylists(playlists: List<PlaylistEntity>) {
         clearPlaylists()
-        if (playlists.isNotEmpty()) insertPlaylists(playlists)
+        playlists.chunked(999).forEach { insertPlaylists(it) }
     }
 }
 
