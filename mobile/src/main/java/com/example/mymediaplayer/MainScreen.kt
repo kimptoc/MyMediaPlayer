@@ -173,8 +173,10 @@ fun MainScreen(
     }
 
     LaunchedEffect(uiState.scan.discoveredPlaylists) {
-        val knownUris = uiState.scan.discoveredPlaylists.map { it.uriString }.toSet()
-        localCreatedPlaylists = localCreatedPlaylists.filterNot { it.uriString in knownUris }
+        if (localCreatedPlaylists.isNotEmpty()) {
+            val knownUris = uiState.scan.discoveredPlaylists.mapTo(HashSet()) { it.uriString }
+            localCreatedPlaylists = localCreatedPlaylists.filterNot { it.uriString in knownUris }
+        }
     }
 
     LaunchedEffect(uiState.playlist.playlistMessage) {
