@@ -116,6 +116,8 @@ class MainActivity : ComponentActivity() {
     private var lastPlaybackState: PlaybackStateCompat? = null
     private var lastMetadata: MediaMetadataCompat? = null
     private var lastRepeatMode: Int = 0
+    private var lastQueue: List<MediaSessionCompat.QueueItem>? = null
+    private var lastMappedQueue: List<QueueEntry> = emptyList()
     private val bluetoothAutoPlayEnabled = mutableStateOf(false)
     private val trustedBluetoothDevices = mutableStateOf<List<TrustedBluetoothDevice>>(emptyList())
     private val bluetoothDiagnostics = mutableStateOf("No Bluetooth auto-play events yet")
@@ -593,14 +595,24 @@ class MainActivity : ComponentActivity() {
     private fun pushQueueState() {
         val controller = mediaController ?: return
         val queueTitle = controller.queueTitle?.toString()
-        val queueItems = controller.queue?.map { item ->
-            val description: MediaDescriptionCompat = item.description
-            QueueEntry(
-                queueId = item.queueId,
-                mediaId = description.mediaId,
-                title = description.title?.toString() ?: description.mediaId ?: "Unknown"
-            )
-        } ?: emptyList()
+
+        val currentQueue = controller.queue
+        val queueItems = if (currentQueue === lastQueue) {
+            lastMappedQueue
+        } else {
+            val mapped = currentQueue?.map { item ->
+                val description: MediaDescriptionCompat = item.description
+                QueueEntry(
+                    queueId = item.queueId,
+                    mediaId = description.mediaId,
+                    title = description.title?.toString() ?: description.mediaId ?: "Unknown"
+                )
+            } ?: emptyList()
+            lastQueue = currentQueue
+            lastMappedQueue = mapped
+            mapped
+        }
+
         val activeQueueId = lastPlaybackState?.activeQueueItemId ?: -1L
         viewModel.updateQueueState(queueTitle, queueItems, activeQueueId)
     }
