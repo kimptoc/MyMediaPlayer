@@ -174,8 +174,10 @@ fun MainScreen(
     }
 
     LaunchedEffect(uiState.scan.discoveredPlaylists) {
-        val knownUris = uiState.scan.discoveredPlaylists.map { it.uriString }.toSet()
-        setLocalCreatedPlaylists(localCreatedPlaylists.filterNot { it.uriString in knownUris })
+        if (localCreatedPlaylists.isNotEmpty()) {
+            val knownUris = uiState.scan.discoveredPlaylists.mapTo(HashSet()) { it.uriString }
+            setLocalCreatedPlaylists(localCreatedPlaylists.filterNot { it.uriString in knownUris })
+        }
     }
 
     LaunchedEffect(uiState.playlist.playlistMessage) {
@@ -1595,8 +1597,9 @@ private fun SearchResultsActionRow(
     onClearSelection: () -> Unit,
     onAddSelected: (List<MediaFileInfo>) -> Unit
 ) {
+    val searchUrisSet = selectedSearchUris.toSet()
     val selectedSearchResults = visibleSearchResults.filter {
-        it.uriString in selectedSearchUris
+        it.uriString in searchUrisSet
     }
 
     LazyRow(
@@ -2315,7 +2318,7 @@ private fun ExpandedNowPlayingDialog(
     } else {
         projectedPositionMs.coerceAtLeast(0L)
     }
-    val (isSeeking, setIsSeeking) = remember { mutableStateOf(false) }
+    var isSeeking by remember { mutableStateOf(false) }
     var seekValueMs by remember(
         trackName,
         artistName,
@@ -2374,12 +2377,12 @@ private fun ExpandedNowPlayingDialog(
                     Slider(
                         value = seekValueMs.coerceIn(0f, durationSafe.toFloat()),
                         onValueChange = {
-                            setIsSeeking(true)
+                            isSeeking = true
                             seekValueMs = it
                         },
                         valueRange = 0f..durationSafe.toFloat(),
                         onValueChangeFinished = {
-                            setIsSeeking(false)
+                            isSeeking = false
                             onSeekTo(seekValueMs.toLong())
                         },
                         colors = SliderDefaults.colors(

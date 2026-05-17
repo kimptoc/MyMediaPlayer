@@ -405,6 +405,18 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
         override fun onCustomAction(action: String?, extras: Bundle?) {
             Log.d("MyMusicService", "callback.onCustomAction(action=$action)")
+
+            // Validate that custom actions are coming from an allowed client.
+            // In MediaSessionCompat.Callback, we can get the remote client info directly
+            val remoteUserInfo = session.currentControllerInfo
+            val callerUid = remoteUserInfo.uid
+            val callerPackageName = remoteUserInfo.packageName
+            val validator = PackageValidator(this@MyMusicService)
+            if (!validator.isCallerValid(callerPackageName, callerUid)) {
+                Log.w("MyMusicService", "Rejecting custom action $action from unauthorized package $callerPackageName")
+                return
+            }
+
             when (action) {
                 ACTION_SET_MEDIA_FILES -> handleSetMediaFiles(extras)
                 ACTION_REFRESH_LIBRARY -> loadCachedTreeIfAvailable()
@@ -752,8 +764,15 @@ class MyMusicService : MediaBrowserServiceCompat() {
         clientPackageName: String,
         clientUid: Int,
         rootHints: Bundle?
-    ): MediaBrowserServiceCompat.BrowserRoot {
+    ): MediaBrowserServiceCompat.BrowserRoot? {
         Log.d("MyMusicService", "onGetRoot from $clientPackageName uid=$clientUid")
+
+        val validator = PackageValidator(this)
+        if (!validator.isCallerValid(clientPackageName, clientUid)) {
+            Log.w("MyMusicService", "Rejecting connection from unauthorized package $clientPackageName")
+            return null
+        }
+
         val rootExtras = Bundle().apply {
             putInt(
                 MediaConstants.BROWSER_ROOT_HINTS_KEY_ROOT_CHILDREN_SUPPORTED_FLAGS,
