@@ -53,10 +53,14 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.Checkbox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
@@ -132,47 +136,47 @@ fun MainScreen(
     onOpenSettings: () -> Unit,
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
-    val (menuExpanded, setMenuExpanded) = remember { mutableStateOf(false) }
-    val (showPlaylistDialog, setShowPlaylistDialog) = remember { mutableStateOf(false) }
-    val (playlistCountText, setPlaylistCountText) = remember { mutableStateOf("3") }
-    val (showScanDialog, setShowScanDialog) = remember { mutableStateOf(false) }
-    val (scanCountText, setScanCountText) = remember { mutableStateOf(uiState.scan.lastScanLimit.toString()) }
-    val (scanDeepMode, setScanDeepMode) = remember { mutableStateOf(uiState.scan.deepScanEnabled) }
-    val (scanWholeDriveMode, setScanWholeDriveMode) = remember { mutableStateOf(false) }
-    val (showAddToPlaylistDialog, setShowAddToPlaylistDialog) = remember { mutableStateOf(false) }
-    val (showCreateFromSelectionDialog, setShowCreateFromSelectionDialog) = remember { mutableStateOf(false) }
-    val (createFromSelectionNameText, setCreateFromSelectionNameText) = remember { mutableStateOf("") }
-    val (pendingAddFiles, setPendingAddFiles) = remember { mutableStateOf<List<MediaFileInfo>>(emptyList()) }
-    val (localCreatedPlaylists, setLocalCreatedPlaylists) = remember { mutableStateOf<List<PlaylistInfo>>(emptyList()) }
-    val (isSearchSelectionMode, setIsSearchSelectionMode) = remember { mutableStateOf(false) }
-    val (selectedSearchUris, setSelectedSearchUris) = remember { mutableStateOf<Set<String>>(emptySet()) }
-    val (showDeletePlaylistDialog, setShowDeletePlaylistDialog) = remember { mutableStateOf(false) }
-    val (pendingDeletePlaylist, setPendingDeletePlaylist) = remember { mutableStateOf<PlaylistInfo?>(null) }
-    val (showRenamePlaylistDialog, setShowRenamePlaylistDialog) = remember { mutableStateOf(false) }
-    val (pendingRenamePlaylist, setPendingRenamePlaylist) = remember { mutableStateOf<PlaylistInfo?>(null) }
-    val (renamePlaylistNameText, setRenamePlaylistNameText) = remember { mutableStateOf("") }
-    val (showQueueDialog, setShowQueueDialog) = remember { mutableStateOf(false) }
-    val (showExpandedNowPlayingDialog, setShowExpandedNowPlayingDialog) = remember { mutableStateOf(false) }
-    val (songsFavoritesOnly, setSongsFavoritesOnly) = rememberSaveable { mutableStateOf(false) }
-    val (searchFavoritesOnly, setSearchFavoritesOnly) = rememberSaveable { mutableStateOf(false) }
-    val (isSearchExpanded, setIsSearchExpanded) = rememberSaveable { mutableStateOf(false) }
+    var menuExpanded by remember { mutableStateOf(false) }
+    var showPlaylistDialog by remember { mutableStateOf(false) }
+    var playlistCountText by remember { mutableStateOf("3") }
+    var showScanDialog by remember { mutableStateOf(false) }
+    var scanCountText by remember { mutableStateOf(uiState.scan.lastScanLimit.toString()) }
+    var scanDeepMode by remember { mutableStateOf(uiState.scan.deepScanEnabled) }
+    var scanWholeDriveMode by remember { mutableStateOf(false) }
+    var showAddToPlaylistDialog by remember { mutableStateOf(false) }
+    var showCreateFromSelectionDialog by remember { mutableStateOf(false) }
+    var createFromSelectionNameText by remember { mutableStateOf("") }
+    var pendingAddFiles by remember { mutableStateOf<List<MediaFileInfo>>(emptyList()) }
+    var localCreatedPlaylists by remember { mutableStateOf<List<PlaylistInfo>>(emptyList()) }
+    var isSearchSelectionMode by remember { mutableStateOf(false) }
+    var selectedSearchUris by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var showDeletePlaylistDialog by remember { mutableStateOf(false) }
+    var pendingDeletePlaylist by remember { mutableStateOf<PlaylistInfo?>(null) }
+    var showRenamePlaylistDialog by remember { mutableStateOf(false) }
+    var pendingRenamePlaylist by remember { mutableStateOf<PlaylistInfo?>(null) }
+    var renamePlaylistNameText by remember { mutableStateOf("") }
+    var showQueueDialog by remember { mutableStateOf(false) }
+    var showExpandedNowPlayingDialog by remember { mutableStateOf(false) }
+    var songsFavoritesOnly by rememberSaveable { mutableStateOf(false) }
+    var searchFavoritesOnly by rememberSaveable { mutableStateOf(false) }
+    var isSearchExpanded by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(uiState.search.searchQuery) {
         if (uiState.search.searchQuery.isNotBlank()) {
-            setIsSearchExpanded(true)
+            isSearchExpanded = true
         }
     }
 
     LaunchedEffect(uiState.search.searchQuery, uiState.search.searchResults) {
-        setSelectedSearchUris(selectedSearchUris.intersect(uiState.search.searchResults.map { it.uriString }.toSet()))
+        selectedSearchUris = selectedSearchUris.intersect(uiState.search.searchResults.map { it.uriString }.toSet())
         if (selectedSearchUris.isEmpty()) {
-            setIsSearchSelectionMode(false)
+            isSearchSelectionMode = false
         }
     }
 
     LaunchedEffect(uiState.scan.discoveredPlaylists) {
         val knownUris = uiState.scan.discoveredPlaylists.map { it.uriString }.toSet()
-        setLocalCreatedPlaylists(localCreatedPlaylists.filterNot { it.uriString in knownUris })
+        localCreatedPlaylists = localCreatedPlaylists.filterNot { it.uriString in knownUris }
     }
 
     LaunchedEffect(uiState.playlist.playlistMessage) {
@@ -248,43 +252,43 @@ fun MainScreen(
                         navigationIcon = {
                             if (isSearchExpanded) {
                                 TextButton(onClick = {
-                                    setIsSearchExpanded(false)
+                                    isSearchExpanded = false
                                     onClearSearch()
                                 }) { Text("Back") }
                             }
                         },
                         actions = {
                             if (!isSearchExpanded) {
-                                TextButton(onClick = { setIsSearchExpanded(true) }) { Text("Search") }
-                                TextButton(onClick = { setMenuExpanded(true) }) {
+                                TextButton(onClick = { isSearchExpanded = true }) { Text("Search") }
+                                TextButton(onClick = { menuExpanded = true }) {
                                     Text("Menu")
                                 }
                                 DropdownMenu(
                                     expanded = menuExpanded,
-                                    onDismissRequest = { setMenuExpanded(false) }
+                                    onDismissRequest = { menuExpanded = false }
                                 ) {
                                     DropdownMenuItem(
                                         text = { Text("Select Folder") },
                                         onClick = {
-                                            setMenuExpanded(false)
-                                            setScanCountText(uiState.scan.lastScanLimit.toString())
-                                            setScanDeepMode(uiState.scan.deepScanEnabled)
-                                            setShowScanDialog(true)
+                                            menuExpanded = false
+                                            scanCountText = uiState.scan.lastScanLimit.toString()
+                                            scanDeepMode = uiState.scan.deepScanEnabled
+                                            showScanDialog = true
                                         }
                                     )
                                     DropdownMenuItem(
                                         text = { Text("Create Random Playlist") },
                                         onClick = {
-                                            setMenuExpanded(false)
-                                            setPlaylistCountText(uiState.playlist.lastPlaylistCount.toString())
-                                            setShowPlaylistDialog(true)
+                                            menuExpanded = false
+                                            playlistCountText = uiState.playlist.lastPlaylistCount.toString()
+                                            showPlaylistDialog = true
                                         },
                                         enabled = uiState.scan.scannedFiles.isNotEmpty()
                                     )
                                     DropdownMenuItem(
                                         text = { Text("Settings") },
                                         onClick = {
-                                            setMenuExpanded(false)
+                                            menuExpanded = false
                                             onOpenSettings()
                                         }
                                     )
@@ -318,7 +322,7 @@ fun MainScreen(
                     artistName = uiState.playback.currentArtistName,
                     isPlaying = uiState.playback.isPlaying,
                     onPlayPause = onPlayPause,
-                    onOpenExpanded = { setShowExpandedNowPlayingDialog(true) }
+                    onOpenExpanded = { showExpandedNowPlayingDialog = true }
                 )
             }
         },
@@ -374,31 +378,31 @@ fun MainScreen(
                             onAlbumSelected(album)
                         },
                         onAddAlbumToPlaylist = { songs ->
-                            setPendingAddFiles(songs)
-                            setShowAddToPlaylistDialog(true)
+                            pendingAddFiles = songs
+                            showAddToPlaylistDialog = true
                         },
                         onToggleFavorite = onToggleFavorite
                     )
                 } else {
                     SearchResultsActionRow(
                         searchFavoritesOnly = searchFavoritesOnly,
-                        onToggleSearchFavoritesOnly = { setSearchFavoritesOnly(!searchFavoritesOnly) },
+                        onToggleSearchFavoritesOnly = { searchFavoritesOnly = !searchFavoritesOnly },
                         visibleSearchResults = visibleSearchResults,
                         onAddAll = {
-                            setPendingAddFiles(it)
-                            setShowAddToPlaylistDialog(true)
+                            pendingAddFiles = it
+                            showAddToPlaylistDialog = true
                         },
                         isSearchSelectionMode = isSearchSelectionMode,
                         onToggleSearchSelectionMode = {
-                            setIsSearchSelectionMode(!isSearchSelectionMode)
-                            if (!isSearchSelectionMode) setSelectedSearchUris(emptySet())
+                            isSearchSelectionMode = !isSearchSelectionMode
+                            if (!isSearchSelectionMode) selectedSearchUris = emptySet()
                         },
                         selectedSearchUris = selectedSearchUris,
-                        onSelectAll = { setSelectedSearchUris(it) },
-                        onClearSelection = { setSelectedSearchUris(emptySet()) },
+                        onSelectAll = { selectedSearchUris = it },
+                        onClearSelection = { selectedSearchUris = emptySet() },
                         onAddSelected = {
-                            setPendingAddFiles(it)
-                            setShowAddToPlaylistDialog(true)
+                            pendingAddFiles = it
+                            showAddToPlaylistDialog = true
                         }
                     )
                     SongsListSection(
@@ -416,18 +420,18 @@ fun MainScreen(
                         onPrev = onPrev,
                         onFileClick = onFileClick,
                         onAddToPlaylist = {
-                            setPendingAddFiles(listOf(it))
-                            setShowAddToPlaylistDialog(true)
+                            pendingAddFiles = listOf(it)
+                            showAddToPlaylistDialog = true
                         },
                         onToggleFavorite = onToggleFavorite,
                         enableSelection = isSearchSelectionMode,
                         selectedUris = selectedSearchUris,
                         onSelectionToggle = { file ->
-                            setSelectedSearchUris(if (file.uriString in selectedSearchUris) {
+                            selectedSearchUris = if (file.uriString in selectedSearchUris) {
                                 selectedSearchUris - file.uriString
                             } else {
                                 selectedSearchUris + file.uriString
-                            })
+                            }
                         },
                         currentMediaId = uiState.playback.currentMediaId
                     )
@@ -466,7 +470,7 @@ fun MainScreen(
 
             when (uiState.library.selectedTab) {
                 LibraryTab.Songs -> {
-                    val (selectedDecade, setSelectedDecade) = rememberSaveable { mutableStateOf<String?>(null) }
+                    var selectedDecade by rememberSaveable { mutableStateOf<String?>(null) }
                     val availableDecades = remember(uiState.scan.scannedFiles) {
                         uiState.scan.scannedFiles
                             .map { decadeLabelForYear(it.year) }
@@ -476,10 +480,10 @@ fun MainScreen(
                     }
                     SongsTabContent(
                         songsFavoritesOnly = songsFavoritesOnly,
-                        onToggleSongsFavoritesOnly = { setSongsFavoritesOnly(!songsFavoritesOnly) },
+                        onToggleSongsFavoritesOnly = { songsFavoritesOnly = !songsFavoritesOnly },
                         selectedDecade = selectedDecade,
                         availableDecades = availableDecades,
-                        onDecadeSelected = { setSelectedDecade(it) },
+                        onDecadeSelected = { selectedDecade = it },
                         scannedFiles = uiState.scan.scannedFiles,
                         favoriteUris = uiState.favoriteUris,
                         isPlayingPlaylist = uiState.playback.isPlayingPlaylist,
@@ -492,8 +496,8 @@ fun MainScreen(
                         onPrev = onPrev,
                         onFileClick = onFileClick,
                         onAddToPlaylist = {
-                            setPendingAddFiles(listOf(it))
-                            setShowAddToPlaylistDialog(true)
+                            pendingAddFiles = listOf(it)
+                            showAddToPlaylistDialog = true
                         },
                         onToggleFavorite = onToggleFavorite,
                         currentMediaId = uiState.playback.currentMediaId
@@ -538,13 +542,13 @@ fun MainScreen(
                         onPlaylistSelected = onPlaylistSelected,
                         onClearPlaylistSelection = onClearPlaylistSelection,
                         onRequestDeletePlaylist = {
-                            setPendingDeletePlaylist(it)
-                            setShowDeletePlaylistDialog(true)
+                            pendingDeletePlaylist = it
+                            showDeletePlaylistDialog = true
                         },
                         onRequestRenamePlaylist = {
-                            setPendingRenamePlaylist(it)
-                            setRenamePlaylistNameText(it.displayName.removeSuffix(".m3u"))
-                            setShowRenamePlaylistDialog(true)
+                            pendingRenamePlaylist = it
+                            renamePlaylistNameText = it.displayName.removeSuffix(".m3u")
+                            showRenamePlaylistDialog = true
                         },
                         onSavePlaylistEdits = onSavePlaylistEdits,
                         onPlayPlaylist = onPlayPlaylist,
@@ -554,8 +558,8 @@ fun MainScreen(
                         onPrev = onPrev,
                         onFileClick = onFileClick,
                         onAddToPlaylist = {
-                            setPendingAddFiles(listOf(it))
-                            setShowAddToPlaylistDialog(true)
+                            pendingAddFiles = listOf(it)
+                            showAddToPlaylistDialog = true
                         },
                         favoriteUris = uiState.favoriteUris,
                         onToggleFavorite = onToggleFavorite,
@@ -606,8 +610,8 @@ fun MainScreen(
                         onPrev = onPrev,
                         onFileClick = onFileClick,
                         onAddToPlaylist = {
-                            setPendingAddFiles(listOf(it))
-                            setShowAddToPlaylistDialog(true)
+                            pendingAddFiles = listOf(it)
+                            showAddToPlaylistDialog = true
                         },
                         favoriteUris = uiState.favoriteUris,
                         onToggleFavorite = onToggleFavorite,
@@ -636,8 +640,8 @@ fun MainScreen(
                         onPrev = onPrev,
                         onFileClick = onFileClick,
                         onAddToPlaylist = {
-                            setPendingAddFiles(listOf(it))
-                            setShowAddToPlaylistDialog(true)
+                            pendingAddFiles = listOf(it)
+                            showAddToPlaylistDialog = true
                         },
                         favoriteUris = uiState.favoriteUris,
                         onToggleFavorite = onToggleFavorite,
@@ -666,8 +670,8 @@ fun MainScreen(
                         onPrev = onPrev,
                         onFileClick = onFileClick,
                         onAddToPlaylist = {
-                            setPendingAddFiles(listOf(it))
-                            setShowAddToPlaylistDialog(true)
+                            pendingAddFiles = listOf(it)
+                            showAddToPlaylistDialog = true
                         },
                         favoriteUris = uiState.favoriteUris,
                         onToggleFavorite = onToggleFavorite,
@@ -682,8 +686,8 @@ fun MainScreen(
         CreateRandomPlaylistDialog(
             maxCount = uiState.scan.scannedFiles.size,
             playlistCountText = playlistCountText,
-            onPlaylistCountTextChange = { setPlaylistCountText(it) },
-            onDismissRequest = { setShowPlaylistDialog(false) },
+            onPlaylistCountTextChange = { playlistCountText = it },
+            onDismissRequest = { showPlaylistDialog = false },
             onCreatePlaylist = onCreatePlaylist
         )
     }
@@ -691,12 +695,12 @@ fun MainScreen(
     if (showScanDialog) {
         ScanDialogContent(
             scanCountText = scanCountText,
-            onScanCountTextChange = { setScanCountText(it) },
+            onScanCountTextChange = { scanCountText = it },
             scanWholeDriveMode = scanWholeDriveMode,
-            onScanWholeDriveModeChange = { setScanWholeDriveMode(it) },
+            onScanWholeDriveModeChange = { scanWholeDriveMode = it },
             scanDeepMode = scanDeepMode,
-            onScanDeepModeChange = { setScanDeepMode(it) },
-            onDismissRequest = { setShowScanDialog(false) },
+            onScanDeepModeChange = { scanDeepMode = it },
+            onDismissRequest = { showScanDialog = false },
             onScanWholeDriveWithLimit = onScanWholeDriveWithLimit,
             onSelectFolderWithLimit = onSelectFolderWithLimit
         )
@@ -708,17 +712,17 @@ fun MainScreen(
             localCreatedPlaylists = localCreatedPlaylists,
             discoveredPlaylists = uiState.scan.discoveredPlaylists,
             onDismissRequest = {
-                setShowAddToPlaylistDialog(false)
-                setPendingAddFiles(emptyList())
+                showAddToPlaylistDialog = false
+                pendingAddFiles = emptyList()
             },
             onCreateNewPlaylistClick = {
-                setCreateFromSelectionNameText("")
-                setShowCreateFromSelectionDialog(true)
+                createFromSelectionNameText = ""
+                showCreateFromSelectionDialog = true
             },
             onAddToExistingPlaylist = { playlist, files ->
                 onAddToExistingPlaylist(playlist, files)
-                setShowAddToPlaylistDialog(false)
-                setPendingAddFiles(emptyList())
+                showAddToPlaylistDialog = false
+                pendingAddFiles = emptyList()
             }
         )
     }
@@ -726,28 +730,28 @@ fun MainScreen(
     if (showCreateFromSelectionDialog) {
         CreateFromSelectionDialogContent(
             createFromSelectionNameText = createFromSelectionNameText,
-            onCreateFromSelectionNameTextChange = { setCreateFromSelectionNameText(it) },
+            onCreateFromSelectionNameTextChange = { createFromSelectionNameText = it },
             pendingAddFiles = pendingAddFiles,
             onCreatePlaylistFromSongs = onCreatePlaylistFromSongs,
             onChoosePlaylistSaveFolder = onChoosePlaylistSaveFolder,
             onPlaylistCreated = { created ->
-                setLocalCreatedPlaylists((localCreatedPlaylists + created).distinctBy { it.uriString })
-                setShowCreateFromSelectionDialog(false)
-                setShowAddToPlaylistDialog(false)
-                setPendingAddFiles(emptyList())
-                setCreateFromSelectionNameText("")
+                localCreatedPlaylists = (localCreatedPlaylists + created).distinctBy { it.uriString }
+                showCreateFromSelectionDialog = false
+                showAddToPlaylistDialog = false
+                pendingAddFiles = emptyList()
+                createFromSelectionNameText = ""
             },
-            onDismissRequest = { setShowCreateFromSelectionDialog(false) }
+            onDismissRequest = { showCreateFromSelectionDialog = false }
         )
     }
 
     if (showDeletePlaylistDialog) {
         DeletePlaylistDialogContent(
             pendingDeletePlaylist = pendingDeletePlaylist,
-            onDismissRequest = { setShowDeletePlaylistDialog(false) },
+            onDismissRequest = { showDeletePlaylistDialog = false },
             onDeletePlaylist = { playlist ->
                 onDeletePlaylist(playlist)
-                setShowDeletePlaylistDialog(false)
+                showDeletePlaylistDialog = false
             }
         )
     }
@@ -756,12 +760,12 @@ fun MainScreen(
         RenamePlaylistDialogContent(
             pendingRenamePlaylist = pendingRenamePlaylist,
             renamePlaylistNameText = renamePlaylistNameText,
-            onRenamePlaylistNameTextChange = { setRenamePlaylistNameText(it) },
-            onDismissRequest = { setShowRenamePlaylistDialog(false) },
+            onRenamePlaylistNameTextChange = { renamePlaylistNameText = it },
+            onDismissRequest = { showRenamePlaylistDialog = false },
             onRenamePlaylist = { playlist, newName ->
                 onRenamePlaylist(playlist, newName)
-                setShowRenamePlaylistDialog(false)
-                setPendingRenamePlaylist(null)
+                showRenamePlaylistDialog = false
+                pendingRenamePlaylist = null
             }
         )
     }
@@ -804,7 +808,7 @@ fun MainScreen(
                     flaggedUris.value = current.toSet()
                 }
             },
-            onDismiss = { setShowExpandedNowPlayingDialog(false) }
+            onDismiss = { showExpandedNowPlayingDialog = false }
         )
     }
 
@@ -813,10 +817,10 @@ fun MainScreen(
             queueTitle = uiState.playback.queueTitle,
             queueItems = uiState.playback.queueItems,
             activeQueueId = uiState.playback.activeQueueId,
-            onDismissRequest = { setShowQueueDialog(false) },
+            onDismissRequest = { showQueueDialog = false },
             onQueueItemSelected = { queueId ->
                 onQueueItemSelected(queueId)
-                setShowQueueDialog(false)
+                showQueueDialog = false
             }
         )
     }
@@ -1297,7 +1301,7 @@ private fun CategoryTabContent(
     } else {
         emptyList()
     }
-    val (selectedLetter, setSelectedLetter) = rememberSaveable(title) { mutableStateOf<String?>(null) }
+    var selectedLetter by rememberSaveable(title) { mutableStateOf<String?>(null) }
 
     Column {
         if (headerContent != null) {
@@ -1312,7 +1316,7 @@ private fun CategoryTabContent(
             selectedLetter = selectedLetter,
             enableAlphaIndex = enableAlphaIndex,
             letters = letters,
-            onSelectedLetterChanged = { setSelectedLetter(it) },
+            onSelectedLetterChanged = { selectedLetter = it },
             onCategorySelected = onCategorySelected
         )
 
@@ -1826,21 +1830,21 @@ private fun PlaylistDetails(
     onToggleFavorite: (MediaFileInfo) -> Unit,
     currentMediaId: String?
 ) {
-    val (isEditing, setIsEditing) = remember(selectedPlaylist.uriString) { mutableStateOf(false) }
-    val (editableSongs, setEditableSongs) = remember(selectedPlaylist.uriString) { mutableStateOf<List<MediaFileInfo>>(emptyList()) }
-    val (draggingIndex, setDraggingIndex) = remember(selectedPlaylist.uriString) { mutableStateOf<Int?>(null) }
-    val (draggingOffsetY, setDraggingOffsetY) = remember(selectedPlaylist.uriString) { mutableStateOf(0f) }
-    val (dedupeOnSave, setDedupeOnSave) = remember(selectedPlaylist.uriString) { mutableStateOf(false) }
-    val (editSearchQuery, setEditSearchQuery) = remember(selectedPlaylist.uriString) { mutableStateOf("") }
-    val (showDiscardChangesDialog, setShowDiscardChangesDialog) = remember(selectedPlaylist.uriString) { mutableStateOf(false) }
-    val (pendingClearSelection, setPendingClearSelection) = remember(selectedPlaylist.uriString) { mutableStateOf(false) }
+    var isEditing by remember(selectedPlaylist.uriString) { mutableStateOf(false) }
+    var editableSongs by remember(selectedPlaylist.uriString) { mutableStateOf<List<MediaFileInfo>>(emptyList()) }
+    var draggingIndex by remember(selectedPlaylist.uriString) { mutableStateOf<Int?>(null) }
+    var draggingOffsetY by remember(selectedPlaylist.uriString) { mutableFloatStateOf(0f) }
+    var dedupeOnSave by remember(selectedPlaylist.uriString) { mutableStateOf(false) }
+    var editSearchQuery by remember(selectedPlaylist.uriString) { mutableStateOf("") }
+    var showDiscardChangesDialog by remember(selectedPlaylist.uriString) { mutableStateOf(false) }
+    var pendingClearSelection by remember(selectedPlaylist.uriString) { mutableStateOf(false) }
     val dragSwapThresholdPx = with(androidx.compose.ui.platform.LocalDensity.current) { 56.dp.toPx() }
 
     LaunchedEffect(selectedPlaylist.uriString, playlistSongs, isEditing) {
         if (!isEditing) {
-            setEditableSongs(playlistSongs)
-            setDedupeOnSave(false)
-            setEditSearchQuery("")
+            editableSongs = playlistSongs
+            dedupeOnSave = false
+            editSearchQuery = ""
         }
     }
     val hasUnsavedChanges = isEditing && (editableSongs != playlistSongs || dedupeOnSave)
@@ -1853,8 +1857,8 @@ private fun PlaylistDetails(
             TextButton(
                 onClick = {
                     if (hasUnsavedChanges) {
-                        setPendingClearSelection(true)
-                        setShowDiscardChangesDialog(true)
+                        pendingClearSelection = true
+                        showDiscardChangesDialog = true
                     } else {
                         onClearPlaylistSelection()
                     }
@@ -1873,8 +1877,8 @@ private fun PlaylistDetails(
                 if (!isEditing) {
                     TextButton(
                         onClick = {
-                            setEditableSongs(playlistSongs)
-                            setIsEditing(true)
+                            editableSongs = playlistSongs
+                            isEditing = true
                         },
                         enabled = playlistSongs.isNotEmpty() &&
                             !selectedPlaylist.uriString.startsWith(MainViewModel.SMART_PREFIX)
@@ -1890,12 +1894,12 @@ private fun PlaylistDetails(
                                 editableSongs
                             }
                             onSavePlaylistEdits(selectedPlaylist, songsToSave)
-                            setEditableSongs(songsToSave)
-                            setIsEditing(false)
-                            setDraggingIndex(null)
-                            setDraggingOffsetY(0f)
-                            setDedupeOnSave(false)
-                            setEditSearchQuery("")
+                            editableSongs = songsToSave
+                            isEditing = false
+                            draggingIndex = null
+                            draggingOffsetY = 0f
+                            dedupeOnSave = false
+                            editSearchQuery = ""
                         },
                         enabled = editableSongs.isNotEmpty()
                     ) {
@@ -1903,12 +1907,12 @@ private fun PlaylistDetails(
                     }
                     TextButton(
                         onClick = {
-                            setEditableSongs(playlistSongs)
-                            setIsEditing(false)
-                            setDraggingIndex(null)
-                            setDraggingOffsetY(0f)
-                            setDedupeOnSave(false)
-                            setEditSearchQuery("")
+                            editableSongs = playlistSongs
+                            isEditing = false
+                            draggingIndex = null
+                            draggingOffsetY = 0f
+                            dedupeOnSave = false
+                            editSearchQuery = ""
                         }
                     ) {
                         Text("Cancel")
@@ -1950,12 +1954,12 @@ private fun PlaylistDetails(
                 ) {
                     TextField(
                         value = editSearchQuery,
-                        onValueChange = { setEditSearchQuery(it) },
+                        onValueChange = { editSearchQuery = it },
                         singleLine = true,
                         placeholder = { Text("Filter songs while editing") },
                         modifier = Modifier.weight(1f)
                     )
-                    TextButton(onClick = { setDedupeOnSave(!dedupeOnSave) }) {
+                    TextButton(onClick = { dedupeOnSave = !dedupeOnSave }) {
                         Text(if (dedupeOnSave) "Dedup: On" else "Dedup: Off")
                     }
                 }
@@ -2002,37 +2006,37 @@ private fun PlaylistDetails(
                                 Modifier.pointerInput(sourceIndex, editableSongs) {
                                     detectDragGesturesAfterLongPress(
                                         onDragStart = {
-                                            setDraggingIndex(sourceIndex)
-                                            setDraggingOffsetY(0f)
+                                            draggingIndex = sourceIndex
+                                            draggingOffsetY = 0f
                                         },
                                         onDragEnd = {
-                                            setDraggingIndex(null)
-                                            setDraggingOffsetY(0f)
+                                            draggingIndex = null
+                                            draggingOffsetY = 0f
                                         },
                                         onDragCancel = {
-                                            setDraggingIndex(null)
-                                            setDraggingOffsetY(0f)
+                                            draggingIndex = null
+                                            draggingOffsetY = 0f
                                         },
                                         onDrag = { change, dragAmount ->
                                             if (draggingIndex != sourceIndex) return@detectDragGesturesAfterLongPress
                                             change.consume()
-                                            setDraggingOffsetY(draggingOffsetY + dragAmount.y)
+                                            draggingOffsetY += dragAmount.y
                                             if (draggingOffsetY > dragSwapThresholdPx && sourceIndex < editableSongs.lastIndex) {
                                                 val list = editableSongs.toMutableList()
                                                 val tmp = list[sourceIndex + 1]
                                                 list[sourceIndex + 1] = list[sourceIndex]
                                                 list[sourceIndex] = tmp
-                                                setEditableSongs(list)
-                                                setDraggingIndex(sourceIndex + 1)
-                                                setDraggingOffsetY(draggingOffsetY - dragSwapThresholdPx)
+                                                editableSongs = list
+                                                draggingIndex = sourceIndex + 1
+                                                draggingOffsetY -= dragSwapThresholdPx
                                             } else if (draggingOffsetY < -dragSwapThresholdPx && sourceIndex > 0) {
                                                 val list = editableSongs.toMutableList()
                                                 val tmp = list[sourceIndex - 1]
                                                 list[sourceIndex - 1] = list[sourceIndex]
                                                 list[sourceIndex] = tmp
-                                                setEditableSongs(list)
-                                                setDraggingIndex(sourceIndex - 1)
-                                                setDraggingOffsetY(draggingOffsetY + dragSwapThresholdPx)
+                                                editableSongs = list
+                                                draggingIndex = sourceIndex - 1
+                                                draggingOffsetY += dragSwapThresholdPx
                                             }
                                         }
                                     )
@@ -2073,7 +2077,7 @@ private fun PlaylistDetails(
                                             if (sourceIndex in editableSongs.indices) {
                                                 val list = editableSongs.toMutableList()
                                                 list.removeAt(sourceIndex)
-                                                setEditableSongs(list)
+                                                editableSongs = list
                                             }
                                         }
                                     ) { Text("Remove") }
@@ -2088,19 +2092,19 @@ private fun PlaylistDetails(
 
     if (showDiscardChangesDialog) {
         AlertDialog(
-            onDismissRequest = { setShowDiscardChangesDialog(false) },
+            onDismissRequest = { showDiscardChangesDialog = false },
             title = { Text("Discard changes?") },
             text = { Text("You have unsaved playlist edits.") },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        setShowDiscardChangesDialog(false)
-                        setIsEditing(false)
-                        setEditableSongs(playlistSongs)
-                        setDedupeOnSave(false)
-                        setEditSearchQuery("")
+                        showDiscardChangesDialog = false
+                        isEditing = false
+                        editableSongs = playlistSongs
+                        dedupeOnSave = false
+                        editSearchQuery = ""
                         val clearSelection = pendingClearSelection
-                        setPendingClearSelection(false)
+                        pendingClearSelection = false
                         if (clearSelection) onClearPlaylistSelection()
                     }
                 ) {
@@ -2110,8 +2114,8 @@ private fun PlaylistDetails(
             dismissButton = {
                 TextButton(
                     onClick = {
-                        setShowDiscardChangesDialog(false)
-                        setPendingClearSelection(false)
+                        showDiscardChangesDialog = false
+                        pendingClearSelection = false
                     }
                 ) {
                     Text("Keep editing")
@@ -2312,8 +2316,8 @@ private fun ExpandedNowPlayingDialog(
     } else {
         projectedPositionMs.coerceAtLeast(0L)
     }
-    val (isSeeking, setIsSeeking) = remember { mutableStateOf(false) }
-    val (seekValueMs, setSeekValueMs) = remember(
+    var isSeeking by remember { mutableStateOf(false) }
+    var seekValueMs by remember(
         trackName,
         artistName,
         currentPositionMs,
@@ -2321,7 +2325,7 @@ private fun ExpandedNowPlayingDialog(
         durationMs,
         isPlaying
     ) {
-        mutableStateOf(clampedProjectedMs.toFloat())
+        mutableFloatStateOf(clampedProjectedMs.toFloat())
     }
 
     // Continuously update progress while playing and user is not dragging the slider
@@ -2331,11 +2335,11 @@ private fun ExpandedNowPlayingDialog(
             if (!isSeeking) {
                 val elapsed = (SystemClock.elapsedRealtime() - positionUpdatedAtElapsedMs).coerceAtLeast(0L)
                 val projected = currentPositionMs + (elapsed * playbackSpeed).toLong()
-                setSeekValueMs(if (durationSafe > 0L) {
+                seekValueMs = if (durationSafe > 0L) {
                     projected.coerceIn(0L, durationSafe).toFloat()
                 } else {
                     projected.coerceAtLeast(0L).toFloat()
-                })
+                }
             }
         }
     }
@@ -2371,12 +2375,12 @@ private fun ExpandedNowPlayingDialog(
                     Slider(
                         value = seekValueMs.coerceIn(0f, durationSafe.toFloat()),
                         onValueChange = {
-                            setIsSeeking(true)
-                            setSeekValueMs(it)
+                            isSeeking = true
+                            seekValueMs = it
                         },
                         valueRange = 0f..durationSafe.toFloat(),
                         onValueChangeFinished = {
-                            setIsSeeking(false)
+                            isSeeking = false
                             onSeekTo(seekValueMs.toLong())
                         },
                         colors = SliderDefaults.colors(
@@ -2601,18 +2605,18 @@ private fun SongsTabContent(
             Text(if (songsFavoritesOnly) "Show all songs" else "Favorites only")
         }
 
-        val (decadeMenuExpanded, setDecadeMenuExpanded) = remember { mutableStateOf(false) }
-        TextButton(onClick = { setDecadeMenuExpanded(true) }) {
+        var decadeMenuExpanded by remember { mutableStateOf(false) }
+        TextButton(onClick = { decadeMenuExpanded = true }) {
             Text("Decade: ${selectedDecade ?: "All"}")
         }
         DropdownMenu(
             expanded = decadeMenuExpanded,
-            onDismissRequest = { setDecadeMenuExpanded(false) }
+            onDismissRequest = { decadeMenuExpanded = false }
         ) {
             DropdownMenuItem(
                 text = { Text("All") },
                 onClick = {
-                    setDecadeMenuExpanded(false)
+                    decadeMenuExpanded = false
                     onDecadeSelected(null)
                 }
             )
@@ -2620,7 +2624,7 @@ private fun SongsTabContent(
                 DropdownMenuItem(
                     text = { Text(decade) },
                     onClick = {
-                        setDecadeMenuExpanded(false)
+                        decadeMenuExpanded = false
                         onDecadeSelected(decade)
                     }
                 )
