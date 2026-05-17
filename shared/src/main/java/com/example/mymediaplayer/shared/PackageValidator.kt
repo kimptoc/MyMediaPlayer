@@ -49,7 +49,7 @@ class PackageValidator(private val context: Context) {
             "org.robolectric.default"
         )
 
-        if (callerPackageName in allowedExactPackages || callerPackageName.contains("test")) {
+        if (callerPackageName in allowedExactPackages) {
             return true
         }
 
