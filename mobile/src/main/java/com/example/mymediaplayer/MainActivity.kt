@@ -116,6 +116,8 @@ class MainActivity : ComponentActivity() {
     private var lastPlaybackState: PlaybackStateCompat? = null
     private var lastMetadata: MediaMetadataCompat? = null
     private var lastRepeatMode: Int = 0
+    private var lastQueue: List<MediaSessionCompat.QueueItem>? = null
+    private var lastMappedQueue: List<QueueEntry> = emptyList()
     private val bluetoothAutoPlayEnabled = mutableStateOf(false)
     private val trustedBluetoothDevices = mutableStateOf<List<TrustedBluetoothDevice>>(emptyList())
     private val bluetoothDiagnostics = mutableStateOf("No Bluetooth auto-play events yet")
@@ -593,14 +595,24 @@ class MainActivity : ComponentActivity() {
     private fun pushQueueState() {
         val controller = mediaController ?: return
         val queueTitle = controller.queueTitle?.toString()
-        val queueItems = controller.queue?.map { item ->
-            val description: MediaDescriptionCompat = item.description
-            QueueEntry(
-                queueId = item.queueId,
-                mediaId = description.mediaId,
-                title = description.title?.toString() ?: description.mediaId ?: "Unknown"
-            )
-        } ?: emptyList()
+
+        val currentQueue = controller.queue
+        val queueItems = if (currentQueue === lastQueue) {
+            lastMappedQueue
+        } else {
+            val mapped = currentQueue?.map { item ->
+                val description: MediaDescriptionCompat = item.description
+                QueueEntry(
+                    queueId = item.queueId,
+                    mediaId = description.mediaId,
+                    title = description.title?.toString() ?: description.mediaId ?: "Unknown"
+                )
+            } ?: emptyList()
+            lastQueue = currentQueue
+            lastMappedQueue = mapped
+            mapped
+        }
+
         val activeQueueId = lastPlaybackState?.activeQueueItemId ?: -1L
         viewModel.updateQueueState(queueTitle, queueItems, activeQueueId)
     }
@@ -657,24 +669,38 @@ class MainActivity : ComponentActivity() {
         val uris = files.map { it.uriString }
         if (uris == lastSentUris) return
 
-        val names = files.map { it.displayName }
-        val sizes = files.map { it.sizeBytes }.toLongArray()
-        val titles = files.map { it.title.orEmpty() }
-        val artists = files.map { it.artist.orEmpty() }
-        val albums = files.map { it.album.orEmpty() }
-        val genres = files.map { it.genre.orEmpty() }
-        val durations = files.map { it.durationMs ?: -1L }.toLongArray()
-        val years = files.map { it.year ?: 0 }.toIntArray()
-        val addedAt = files.map { it.addedAtMs ?: -1L }.toLongArray()
+        val size = files.size
+        val names = ArrayList<String>(size)
+        val sizes = LongArray(size)
+        val titles = ArrayList<String>(size)
+        val artists = ArrayList<String>(size)
+        val albums = ArrayList<String>(size)
+        val genres = ArrayList<String>(size)
+        val durations = LongArray(size)
+        val years = IntArray(size)
+        val addedAt = LongArray(size)
+
+        for (i in 0 until size) {
+            val file = files[i]
+            names.add(file.displayName)
+            sizes[i] = file.sizeBytes
+            titles.add(file.title.orEmpty())
+            artists.add(file.artist.orEmpty())
+            albums.add(file.album.orEmpty())
+            genres.add(file.genre.orEmpty())
+            durations[i] = file.durationMs ?: -1L
+            years[i] = file.year ?: 0
+            addedAt[i] = file.addedAtMs ?: -1L
+        }
 
         val bundle = Bundle().apply {
             putStringArrayList(EXTRA_URIS, ArrayList(uris))
-            putStringArrayList(EXTRA_NAMES, ArrayList(names))
+            putStringArrayList(EXTRA_NAMES, names)
             putLongArray(EXTRA_SIZES, sizes)
-            putStringArrayList(EXTRA_TITLES, ArrayList(titles))
-            putStringArrayList(EXTRA_ARTISTS, ArrayList(artists))
-            putStringArrayList(EXTRA_ALBUMS, ArrayList(albums))
-            putStringArrayList(EXTRA_GENRES, ArrayList(genres))
+            putStringArrayList(EXTRA_TITLES, titles)
+            putStringArrayList(EXTRA_ARTISTS, artists)
+            putStringArrayList(EXTRA_ALBUMS, albums)
+            putStringArrayList(EXTRA_GENRES, genres)
             putLongArray(EXTRA_DURATIONS, durations)
             putIntArray(EXTRA_YEARS, years)
             putLongArray(EXTRA_ADDED_AT, addedAt)
@@ -686,13 +712,19 @@ class MainActivity : ComponentActivity() {
 
     private fun sendPlaylistsToServiceIfNeeded(playlists: List<PlaylistInfo>) {
         val controller = mediaController ?: return
-        val uris = playlists.map { it.uriString }
+        val uris = ArrayList<String>(playlists.size)
+        for (playlist in playlists) {
+            uris.add(playlist.uriString)
+        }
         if (uris == lastSentPlaylistUris) return
 
-        val names = playlists.map { it.displayName }
+        val names = ArrayList<String>(playlists.size)
+        for (playlist in playlists) {
+            names.add(playlist.displayName)
+        }
         val bundle = Bundle().apply {
-            putStringArrayList(EXTRA_PLAYLIST_URIS, ArrayList(uris))
-            putStringArrayList(EXTRA_PLAYLIST_NAMES, ArrayList(names))
+            putStringArrayList(EXTRA_PLAYLIST_URIS, uris)
+            putStringArrayList(EXTRA_PLAYLIST_NAMES, names)
         }
         controller.transportControls.sendCustomAction(ACTION_SET_PLAYLISTS, bundle)
         lastSentPlaylistUris = uris
@@ -707,9 +739,9 @@ class MainActivity : ComponentActivity() {
             controller.transportControls?.playFromMediaId(target.uriString, null)
             return
         }
-        val uris = songs.map { it.uriString }
+        val uris = songs.mapTo(ArrayList(songs.size)) { it.uriString }
         val bundle = Bundle().apply {
-            putStringArrayList(EXTRA_SEARCH_URIS, ArrayList(uris))
+            putStringArrayList(EXTRA_SEARCH_URIS, uris)
             putBoolean(EXTRA_SEARCH_SHUFFLE, shuffle)
         }
         controller.transportControls.sendCustomAction(ACTION_PLAY_SEARCH_LIST, bundle)
