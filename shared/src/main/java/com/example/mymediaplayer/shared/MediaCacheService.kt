@@ -906,17 +906,38 @@ class MediaCacheService {
         val trimmed = raw?.trim().orEmpty()
         if (trimmed.isBlank()) return "Other"
 
-        var endIndex = trimmed.length
-        for (i in trimmed.indices) {
-            val c = trimmed[i]
-            if (c == ';' || c == '/' || c == '|' || c == ',') {
-                endIndex = i
-                break
-            }
-        }
+        var start = 0
+        var length = trimmed.length
 
-        val primary = if (endIndex == trimmed.length) trimmed else trimmed.substring(0, endIndex).trim()
-        return if (primary.isBlank()) "Other" else primary
+        while (start < length) {
+            var end = start
+            while (end < length) {
+                val c = trimmed[end]
+                if (c == ';' || c == '/' || c == '|' || c == ',') {
+                    break
+                }
+                end++
+            }
+
+            var segmentHasChar = false
+            for (i in start until end) {
+                if (!trimmed[i].isWhitespace()) {
+                    segmentHasChar = true
+                    break
+                }
+            }
+
+            if (segmentHasChar) {
+                var s = start
+                var e = end - 1
+                while (s <= e && trimmed[s].isWhitespace()) s++
+                while (e >= s && trimmed[e].isWhitespace()) e--
+                return if (s > e) "Other" else trimmed.substring(s, e + 1)
+            }
+
+            start = end + 1
+        }
+        return "Other"
     }
 
     private fun inferGenreFromPath(pathLike: String?): String? {
