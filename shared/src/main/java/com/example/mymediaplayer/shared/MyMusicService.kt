@@ -120,8 +120,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         fun getPrefs(context: Context): android.content.SharedPreferences {
             val existingPrefs = prefsInstance
             if (existingPrefs != null) { return existingPrefs }
-            val masterKey = androidx.security.crypto.MasterKey.Builder(context).setKeyScheme(androidx.security.crypto.MasterKey.KeyScheme.AES256_GCM).build()
-            val encryptedPrefs = androidx.security.crypto.EncryptedSharedPreferences.create(context, "${PREFS_NAME}_encrypted", masterKey, androidx.security.crypto.EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV, androidx.security.crypto.EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM)
+            val encryptedPrefs = EncryptedPrefsManager.createOrGet(context, "${PREFS_NAME}_encrypted")
             val standardPrefsFile = File(context.applicationInfo.dataDir, "shared_prefs/${PREFS_NAME}.xml")
             if (standardPrefsFile.exists() && !encryptedPrefs.getBoolean("migration_completed", false)) {
                 val standardPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
