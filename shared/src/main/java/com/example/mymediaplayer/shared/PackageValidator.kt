@@ -3,6 +3,7 @@ package com.example.mymediaplayer.shared
 import android.content.Context
 import android.os.Process
 import android.util.Log
+import androidx.media.MediaSessionManager
 
 class PackageValidator(private val context: Context) {
     fun isCallerValid(callerPackageName: String, callerUid: Int): Boolean {
@@ -39,17 +40,9 @@ class PackageValidator(private val context: Context) {
             return true
         }
 
-        val allowedExactPackages = setOf(
-            "com.google.android.projection.gearhead",
-            "com.android.car",
-            "com.google.android.car",
-            "com.android.bluetooth",
-            "com.google.android.ext.services",
-            "android.os.cts",
-            "org.robolectric.default"
-        )
-
-        if (callerPackageName in allowedExactPackages) {
+        val manager = MediaSessionManager.getSessionManager(context)
+        val info = MediaSessionManager.RemoteUserInfo(callerPackageName, -1, callerUid)
+        if (manager.isTrustedForMediaControl(info)) {
             return true
         }
 
