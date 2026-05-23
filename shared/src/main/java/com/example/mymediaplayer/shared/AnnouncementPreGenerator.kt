@@ -11,6 +11,8 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlin.coroutines.resumeWithException
+import kotlin.coroutines.resume
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -19,6 +21,8 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.RequestBody.Companion.toRequestBody
 
 /**
  * Pre-generates announcement audio for upcoming track intros and outros while the current
@@ -269,17 +273,19 @@ internal class AnnouncementPreGenerator(
         }
     }
 
+    private val okHttpClient by lazy {
+        okhttp3.OkHttpClient.Builder()
+            .connectTimeout(5_000L, java.util.concurrent.TimeUnit.MILLISECONDS)
+            .readTimeout(10_000L, java.util.concurrent.TimeUnit.MILLISECONDS)
+            .addInterceptor { chain ->
+                NetworkQualityChecker.testInterceptor?.intercept(chain) ?: chain.proceed(chain.request())
+            }
+            .build()
+    }
+
     private suspend fun fetchGoogleTtsAudio(text: String, apiKey: String): File? =
         withContext(Dispatchers.IO) {
             runCatching {
-                val conn = URL("https://texttospeech.googleapis.com/v1/text:synthesize?key=$apiKey")
-                    .openConnection() as HttpURLConnection
-                conn.connectTimeout = 5_000
-                conn.readTimeout = 10_000
-                conn.requestMethod = "POST"
-                conn.setRequestProperty("content-type", "application/json")
-                conn.doOutput = true
-
                 val body = JSONObject().apply {
                     put("input", JSONObject().put("text", text))
                     put("voice", JSONObject().apply {
@@ -295,23 +301,53 @@ internal class AnnouncementPreGenerator(
                     })
                 }.toString()
 
-                OutputStreamWriter(conn.outputStream).use { it.write(body) }
+                val mediaType = "application/json".toMediaTypeOrNull()
+                val requestBody = body.toRequestBody(mediaType)
+                val request = okhttp3.Request.Builder()
+                    .url("https://texttospeech.googleapis.com/v1/text:synthesize?key=$apiKey")
+                    .post(requestBody)
+                    .build()
 
-                if (conn.responseCode != 200) {
-                    Log.w(TAG, "Google TTS API returned HTTP ${conn.responseCode}")
-                    return@runCatching null
+                val response = kotlinx.coroutines.suspendCancellableCoroutine<okhttp3.Response> { continuation ->
+                    val call = okHttpClient.newCall(request)
+                    continuation.invokeOnCancellation {
+                        call.cancel()
+                    }
+                    call.enqueue(object : okhttp3.Callback {
+                        override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
+                            if (continuation.isActive) {
+                                continuation.resumeWithException(e)
+                            }
+                        }
+
+                        override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
+                            if (continuation.isActive) {
+                                continuation.resume(response)
+                            } else {
+                                response.close()
+                            }
+                        }
+                    })
                 }
 
-                val audioBase64 = JSONObject(conn.inputStream.bufferedReader().readText())
-                    .getString("audioContent")
-                val audioBytes = Base64.decode(audioBase64, Base64.DEFAULT)
+                response.use {
+                    if (!it.isSuccessful) {
+                        Log.w(TAG, "Google TTS API returned HTTP ${it.code}")
+                        return@runCatching null
+                    }
 
-                val file = File(context.cacheDir, "${UUID.randomUUID()}.mp3")
-                file.createNewFile()
-                file.writeBytes(audioBytes)
-                Log.d(TAG, "Saved pre-generated announcement to ${file.name} (${audioBytes.size} bytes)")
-                file
+                    val responseBodyString = it.body?.string() ?: return@runCatching null
+                    val audioBase64 = JSONObject(responseBodyString).getString("audioContent")
+                    val audioBytes = Base64.decode(audioBase64, Base64.DEFAULT)
+
+                    val file = File(context.cacheDir, "${UUID.randomUUID()}.mp3")
+                    file.createNewFile()
+                    file.writeBytes(audioBytes)
+                    Log.d(TAG, "Saved pre-generated announcement to ${file.name} (${audioBytes.size} bytes)")
+                    file
+                }
             }.getOrElse { e ->
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 Log.w(TAG, "Google TTS API call failed: ${e.message}")
                 null
             }
