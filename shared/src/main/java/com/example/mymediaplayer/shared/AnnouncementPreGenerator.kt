@@ -14,11 +14,21 @@ import kotlinx.coroutines.withTimeout
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
-import java.io.OutputStreamWriter
-import java.net.URL
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.suspendCancellableCoroutine
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
+import java.io.IOException
 import java.util.UUID
+import java.util.concurrent.TimeUnit
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 import java.util.concurrent.ConcurrentHashMap
-import javax.net.ssl.HttpsURLConnection
 
 /**
  * Pre-generates announcement audio for upcoming track intros and outros while the current
@@ -41,6 +51,17 @@ internal class AnnouncementPreGenerator(
         private const val KILO_ENDPOINT = "https://api.kilo.ai/api/gateway"
         private const val KILO_MODEL_ANON = "kilo/auto-free"
         private const val READY_TIMEOUT_MS = 5000L
+
+        @androidx.annotation.VisibleForTesting
+        internal var testInterceptor: okhttp3.Interceptor? = null
+
+        private val okHttpClient by lazy {
+            OkHttpClient.Builder()
+                .connectTimeout(15, TimeUnit.SECONDS)
+                .readTimeout(20, TimeUnit.SECONDS)
+                .addInterceptor { chain -> testInterceptor?.intercept(chain) ?: chain.proceed(chain.request()) }
+                .build()
+        }
     }
 
     private data class CacheKey(val uri: String, val isIntro: Boolean)
@@ -195,8 +216,7 @@ internal class AnnouncementPreGenerator(
         }
     }
 
-    @androidx.annotation.VisibleForTesting
-    internal suspend fun fetchKiloText(
+    private suspend fun fetchKiloText(
         title: String,
         artist: String?,
         isIntro: Boolean,
@@ -215,16 +235,7 @@ internal class AnnouncementPreGenerator(
         val model = if (isAnon) "kilo/auto-free" else "anthropic/claude-sonnet-4-6"
 
         try {
-            val conn = URL("$KILO_ENDPOINT/chat/completions")
-                .openConnection() as HttpsURLConnection
-            conn.connectTimeout = 15_000
-            conn.readTimeout = 20_000
-            conn.requestMethod = "POST"
-            conn.setRequestProperty("Authorization", authHeader)
-            conn.setRequestProperty("content-type", "application/json")
-            conn.doOutput = true
-
-            val body = JSONObject().apply {
+            val bodyString = JSONObject().apply {
                 put("model", model)
                 put("max_tokens", 150)
                 put("reasoning", JSONObject().apply {
@@ -238,19 +249,48 @@ internal class AnnouncementPreGenerator(
                 ))
             }.toString()
 
-            OutputStreamWriter(conn.outputStream).use { it.write(body) }
+            val requestBody = bodyString.toRequestBody("application/json; charset=utf-8".toMediaType())
 
-            val responseCode = conn.responseCode
-            if (responseCode != 200) {
-                Log.w(TAG, "Kilo HTTP $responseCode: API request failed")
-                return@withContext null
-            }
+            val request = Request.Builder()
+                .url("$KILO_ENDPOINT/chat/completions")
+                .header("Authorization", authHeader)
+                .post(requestBody)
+                .build()
 
-            val responseText = conn.inputStream.bufferedReader().readText()
-            if (responseText.isBlank()) {
-                Log.w(TAG, "Kilo response empty")
-                return@withContext null
-            }
+            val responseText = suspendCancellableCoroutine<String?> { continuation ->
+                val call = okHttpClient.newCall(request)
+                continuation.invokeOnCancellation {
+                    call.cancel()
+                }
+                call.enqueue(object : Callback {
+                    override fun onFailure(call: Call, e: IOException) {
+                        if (continuation.isActive) {
+                            continuation.resumeWithException(e)
+                        }
+                    }
+
+                    override fun onResponse(call: Call, response: Response) {
+                        try {
+                            response.use {
+                                if (!it.isSuccessful) {
+                                    Log.w(TAG, "Kilo HTTP ${it.code}: API request failed")
+                                    if (continuation.isActive) continuation.resume(null)
+                                    return
+                                }
+                                val text = it.body?.string()
+                                if (text.isNullOrBlank()) {
+                                    Log.w(TAG, "Kilo response empty")
+                                    if (continuation.isActive) continuation.resume(null)
+                                    return
+                                }
+                                if (continuation.isActive) continuation.resume(text)
+                            }
+                        } catch (e: Exception) {
+                            if (continuation.isActive) continuation.resumeWithException(e)
+                        }
+                    }
+                })
+            } ?: return@withContext null
 
             val responseJson = JSONObject(responseText)
             if (!responseJson.has("choices") || responseJson.getJSONArray("choices").length() == 0) {
@@ -265,6 +305,7 @@ internal class AnnouncementPreGenerator(
             }
             content.trim()
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Log.e(TAG, "Kilo API exception: ${e.message}", e)
             null
         }
@@ -273,15 +314,7 @@ internal class AnnouncementPreGenerator(
     private suspend fun fetchGoogleTtsAudio(text: String, apiKey: String): File? =
         withContext(Dispatchers.IO) {
             runCatching {
-                val conn = URL("https://texttospeech.googleapis.com/v1/text:synthesize?key=$apiKey")
-                    .openConnection() as HttpsURLConnection
-                conn.connectTimeout = 5_000
-                conn.readTimeout = 10_000
-                conn.requestMethod = "POST"
-                conn.setRequestProperty("content-type", "application/json")
-                conn.doOutput = true
-
-                val body = JSONObject().apply {
+                val bodyString = JSONObject().apply {
                     put("input", JSONObject().put("text", text))
                     put("voice", JSONObject().apply {
                         put("languageCode", "en-US")
@@ -296,15 +329,48 @@ internal class AnnouncementPreGenerator(
                     })
                 }.toString()
 
-                OutputStreamWriter(conn.outputStream).use { it.write(body) }
+                val requestBody = bodyString.toRequestBody("application/json; charset=utf-8".toMediaType())
 
-                if (conn.responseCode != 200) {
-                    Log.w(TAG, "Google TTS API returned HTTP ${conn.responseCode}")
-                    return@runCatching null
-                }
+                val request = Request.Builder()
+                    .url("https://texttospeech.googleapis.com/v1/text:synthesize?key=$apiKey")
+                    .post(requestBody)
+                    .build()
 
-                val audioBase64 = JSONObject(conn.inputStream.bufferedReader().readText())
-                    .getString("audioContent")
+                val audioBase64 = suspendCancellableCoroutine<String?> { continuation ->
+                    val call = okHttpClient.newCall(request)
+                    continuation.invokeOnCancellation {
+                        call.cancel()
+                    }
+                    call.enqueue(object : Callback {
+                        override fun onFailure(call: Call, e: IOException) {
+                            if (continuation.isActive) {
+                                continuation.resumeWithException(e)
+                            }
+                        }
+
+                        override fun onResponse(call: Call, response: Response) {
+                            try {
+                                response.use {
+                                    if (!it.isSuccessful) {
+                                        Log.w(TAG, "Google TTS API returned HTTP ${it.code}")
+                                        if (continuation.isActive) continuation.resume(null)
+                                        return
+                                    }
+                                    val responseBody = it.body?.string()
+                                    if (responseBody.isNullOrBlank()) {
+                                        if (continuation.isActive) continuation.resume(null)
+                                        return
+                                    }
+                                    val content = JSONObject(responseBody).getString("audioContent")
+                                    if (continuation.isActive) continuation.resume(content)
+                                }
+                            } catch (e: Exception) {
+                                if (continuation.isActive) continuation.resumeWithException(e)
+                            }
+                        }
+                    })
+                } ?: return@runCatching null
+
                 val audioBytes = Base64.decode(audioBase64, Base64.DEFAULT)
 
                 val file = File(context.cacheDir, "${UUID.randomUUID()}.mp3")
@@ -313,6 +379,7 @@ internal class AnnouncementPreGenerator(
                 Log.d(TAG, "Saved pre-generated announcement to ${file.name} (${audioBytes.size} bytes)")
                 file
             }.getOrElse { e ->
+                if (e is CancellationException) throw e
                 Log.w(TAG, "Google TTS API call failed: ${e.message}")
                 null
             }
