@@ -12,6 +12,7 @@ import org.json.JSONObject
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
+import javax.net.ssl.HttpsURLConnection
 
 /**
  * Secure storage for API keys used by [AnnouncementPreGenerator].
@@ -62,7 +63,7 @@ object ApiKeyStore {
     private suspend fun validateKiloKey(apiKey: String): ValidationResult = withContext(Dispatchers.IO) {
         runCatching {
             val conn = URL("${BuildConfig.KILO_ENDPOINT}/chat/completions")
-                .openConnection() as HttpURLConnection
+                .openConnection() as HttpsURLConnection
             conn.connectTimeout = 5_000
             conn.readTimeout = 8_000
             conn.requestMethod = "POST"
@@ -96,7 +97,7 @@ object ApiKeyStore {
     private suspend fun validateTtsKey(apiKey: String): ValidationResult = withContext(Dispatchers.IO) {
         runCatching {
             val conn = URL("https://texttospeech.googleapis.com/v1/text:synthesize?key=$apiKey")
-                .openConnection() as HttpURLConnection
+                .openConnection() as HttpsURLConnection
             conn.connectTimeout = 5_000
             conn.readTimeout = 8_000
             conn.requestMethod = "POST"

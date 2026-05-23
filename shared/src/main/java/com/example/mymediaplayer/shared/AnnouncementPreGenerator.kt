@@ -19,6 +19,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import javax.net.ssl.HttpsURLConnection
 
 /**
  * Pre-generates announcement audio for upcoming track intros and outros while the current
@@ -215,7 +216,7 @@ internal class AnnouncementPreGenerator(
 
         try {
             val conn = URL("$KILO_ENDPOINT/chat/completions")
-                .openConnection() as HttpURLConnection
+                .openConnection() as HttpsURLConnection
             conn.connectTimeout = 15_000
             conn.readTimeout = 20_000
             conn.requestMethod = "POST"
