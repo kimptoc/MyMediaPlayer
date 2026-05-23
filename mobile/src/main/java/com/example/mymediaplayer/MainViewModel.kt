@@ -952,13 +952,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
             val isSelectedPlaylist = current.playlist.isSelected(playlist)
 
+            val updatedPlaylist = current.playlist.copy(
+                playlistMessage = "Deleted ${playlist.displayName.removeSuffix(".m3u")}"
+            ).let {
+                if (isSelectedPlaylist) {
+                    it.copy(selectedPlaylist = null, playlistSongs = emptyList())
+                } else {
+                    it
+                }
+            }
+
             _uiState.value = current.copy(
                 scan = current.scan.copy(discoveredPlaylists = updatedPlaylists),
-                playlist = current.playlist.copy(
-                    selectedPlaylist = if (isSelectedPlaylist) null else current.playlist.selectedPlaylist,
-                    playlistSongs = if (isSelectedPlaylist) emptyList() else current.playlist.playlistSongs,
-                    playlistMessage = "Deleted ${playlist.displayName.removeSuffix(".m3u")}"
-                )
+                playlist = updatedPlaylist
             )
             treeUri?.let { tree ->
                 val limit = current.scan.lastScanLimit
