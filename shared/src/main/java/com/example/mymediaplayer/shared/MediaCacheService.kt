@@ -14,7 +14,10 @@ import kotlinx.coroutines.isActive
 import java.time.Instant
 import java.time.ZoneId
 import java.util.Locale
+import android.util.Log
 import kotlin.coroutines.coroutineContext
+
+private const val TAG = "MediaCacheService"
 
 data class PersistedCache(
     val files: List<MediaFileInfo>,
@@ -455,7 +458,7 @@ class MediaCacheService {
         val durationMs = metadata?.durationMs?.toLongOrNull()
         val resolvedTitle = metadata?.title ?: candidate.name.substringBeforeLast('.')
         if (metadata?.title == null) {
-            android.util.Log.w("MediaCacheService", "No metadata title for ${candidate.name} (uri=${candidate.uri}), using fallback: $resolvedTitle")
+            Log.w(TAG, "No metadata title for ${candidate.name} (uri=${candidate.uri}), using fallback: $resolvedTitle")
         }
         return MediaFileInfo(
             uriString = candidate.uri.toString(),
