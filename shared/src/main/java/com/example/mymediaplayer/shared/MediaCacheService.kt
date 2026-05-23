@@ -179,7 +179,7 @@ class MediaCacheService {
                 )
                 outIds.add(id)
                 songsFound = out.size
-                val ext = fileExtension(displayName)
+                val ext = displayName.fileExtension()
                 extensionCounts[ext] = (extensionCounts[ext] ?: 0) + 1
                 if (songsFound % 200 == 0 || songsFound == 1) {
                     onProgress?.invoke(songsFound, 0)
@@ -430,7 +430,7 @@ class MediaCacheService {
             for (result in accepted) {
                 processed += 1
                 songsFound = processed
-                val ext = fileExtension(result.displayName)
+                val ext = result.displayName.fileExtension()
                 extensionCounts[ext] = (extensionCounts[ext] ?: 0) + 1
                 scanContext.onProgress?.invoke(songsFound, foldersScanned)
             }
@@ -754,7 +754,7 @@ class MediaCacheService {
         }
         if (mime == "application/ogg" || mime == "application/x-ogg") return true
 
-        return SUPPORTED_AUDIO_EXTENSIONS.contains(fileExtension(nameLowercase))
+        return SUPPORTED_AUDIO_EXTENSIONS.contains(nameLowercase.fileExtension())
     }
 
     internal fun isSupportedPlaylistFile(nameLowercase: String, mimeType: String?): Boolean {
@@ -777,12 +777,6 @@ class MediaCacheService {
             !metadata.artist.isNullOrBlank() ||
             !metadata.album.isNullOrBlank() ||
             !metadata.genre.isNullOrBlank()
-    }
-
-    private fun fileExtension(displayName: String): String {
-        val dot = displayName.lastIndexOf('.')
-        if (dot < 0 || dot == displayName.lastIndex) return "(none)"
-        return displayName.substring(dot).lowercase(Locale.US)
     }
 
     @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
