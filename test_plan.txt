@@ -1,0 +1,25 @@
+I will add a new test to `shared/src/test/java/com/example/mymediaplayer/shared/PackageValidatorTest.kt` to cover the `PackageManager.NameNotFoundException` edge case.
+
+The `isCallerValid` function in `PackageValidator.kt` catches `Exception` when `getPackageUid` is called and returns `false`.
+```kotlin
+        val actualUidForPackage = try {
+            context.packageManager.getPackageUid(callerPackageName, 0)
+        } catch (e: Exception) {
+            Log.w("PackageValidator", "Caller package $callerPackageName not found")
+            return false
+        }
+```
+
+I need to add a test case in `PackageValidatorTest.kt` to simulate this.
+Robolectric's `ShadowPackageManager` allows testing this by default when a package is not installed.
+Currently `pm.installPackage(...)` is called for known packages. If a package isn't installed, `getPackageUid` throws `PackageManager.NameNotFoundException`.
+
+I will add:
+```kotlin
+    @Test
+    fun isCallerValid_returnsFalseWhenPackageNotFound() {
+        // We simulate a package that is not installed on the system
+        // getPackageUid will throw NameNotFoundException
+        assertFalse(validator.isCallerValid("com.nonexistent.package", 50000))
+    }
+```

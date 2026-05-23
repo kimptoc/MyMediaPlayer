@@ -66,4 +66,12 @@ class PackageValidatorTest {
         pm.setPackagesForUid(uid, "com.malicious.app")
         assertFalse(validator.isCallerValid("com.malicious.app", uid))
     }
+
+    @Test
+    fun isCallerValid_returnsFalseWhenPackageNotFound() {
+        // We simulate a package that is not installed on the system
+        // getPackageUid will throw NameNotFoundException
+        val uid = 50000
+        assertFalse(validator.isCallerValid("com.nonexistent.package", uid))
+    }
 }
