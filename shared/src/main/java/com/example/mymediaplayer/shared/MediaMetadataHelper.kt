@@ -22,9 +22,9 @@ object MediaMetadataHelper {
             val genre = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_GENRE)
             val year = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_YEAR)
             val durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
-            Log.d(TAG, "extractMetadata uri=$uriString title=$title artist=$artist album=$album genre=$genre")
+            Log.d(TAG, "extractMetadata completed")
             if (title == null && artist == null && album == null) {
-                Log.w(TAG, "No ID3 tags found for: $uriString")
+                Log.w(TAG, "No ID3 tags found for media")
             }
             val info = MediaMetadataInfo(
                 title = title,
@@ -37,7 +37,7 @@ object MediaMetadataHelper {
             metadataCache.put(uriString, info)
             info
         } catch (e: Exception) {
-            Log.e(TAG, "extractMetadata FAILED for $uriString: ${e.javaClass.simpleName}: ${e.message}")
+            Log.e(TAG, "extractMetadata FAILED: ${e.javaClass.simpleName}: ${e.message}")
             null
         } finally {
             try {
