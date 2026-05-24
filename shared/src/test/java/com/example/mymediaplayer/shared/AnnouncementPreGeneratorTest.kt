@@ -17,6 +17,8 @@ import java.util.concurrent.ConcurrentHashMap
 import org.robolectric.annotation.Config
 import org.junit.After
 import org.junit.Before
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.ResponseBody.Companion.toResponseBody
 
 @RunWith(RobolectricTestRunner::class)
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -32,7 +34,7 @@ class AnnouncementPreGeneratorTest {
                 .protocol(okhttp3.Protocol.HTTP_1_1)
                 .code(200)
                 .message("OK")
-                .body(okhttp3.ResponseBody.create(null, ""))
+                .body("".toResponseBody("application/json".toMediaTypeOrNull()))
                 .build()
         }
     }

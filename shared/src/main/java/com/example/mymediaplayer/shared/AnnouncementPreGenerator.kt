@@ -257,40 +257,13 @@ internal class AnnouncementPreGenerator(
                 .post(requestBody)
                 .build()
 
-            val responseText = suspendCancellableCoroutine<String?> { continuation ->
-                val call = okHttpClient.newCall(request)
-                continuation.invokeOnCancellation {
-                    call.cancel()
-                }
-                call.enqueue(object : Callback {
-                    override fun onFailure(call: Call, e: IOException) {
-                        if (continuation.isActive) {
-                            continuation.resumeWithException(e)
-                        }
-                    }
-
-                    override fun onResponse(call: Call, response: Response) {
-                        try {
-                            response.use {
-                                if (!it.isSuccessful) {
-                                    Log.w(TAG, "Kilo HTTP ${it.code}: API request failed")
-                                    if (continuation.isActive) continuation.resume(null)
-                                    return
-                                }
-                                val text = it.body?.string()
-                                if (text.isNullOrBlank()) {
-                                    Log.w(TAG, "Kilo response empty")
-                                    if (continuation.isActive) continuation.resume(null)
-                                    return
-                                }
-                                if (continuation.isActive) continuation.resume(text)
-                            }
-                        } catch (e: Exception) {
-                            if (continuation.isActive) continuation.resumeWithException(e)
-                        }
-                    }
-                })
-            } ?: return@withContext null
+            val responseText = okHttpClient.newCall(request).awaitStringOrNull {
+                Log.w(TAG, "Kilo HTTP ${it.code}: API request failed")
+            }
+            if (responseText.isNullOrBlank()) {
+                Log.w(TAG, "Kilo response empty")
+                return@withContext null
+            }
 
             val responseJson = JSONObject(responseText)
             if (!responseJson.has("choices") || responseJson.getJSONArray("choices").length() == 0) {
@@ -336,40 +309,18 @@ internal class AnnouncementPreGenerator(
                     .post(requestBody)
                     .build()
 
-                val audioBase64 = suspendCancellableCoroutine<String?> { continuation ->
-                    val call = okHttpClient.newCall(request)
-                    continuation.invokeOnCancellation {
-                        call.cancel()
-                    }
-                    call.enqueue(object : Callback {
-                        override fun onFailure(call: Call, e: IOException) {
-                            if (continuation.isActive) {
-                                continuation.resumeWithException(e)
-                            }
-                        }
+                val responseBody = okHttpClient.newCall(request).awaitStringOrNull {
+                    Log.w(TAG, "Google TTS API returned HTTP ${it.code}")
+                }
+                if (responseBody.isNullOrBlank()) {
+                    return@runCatching null
+                }
 
-                        override fun onResponse(call: Call, response: Response) {
-                            try {
-                                response.use {
-                                    if (!it.isSuccessful) {
-                                        Log.w(TAG, "Google TTS API returned HTTP ${it.code}")
-                                        if (continuation.isActive) continuation.resume(null)
-                                        return
-                                    }
-                                    val responseBody = it.body?.string()
-                                    if (responseBody.isNullOrBlank()) {
-                                        if (continuation.isActive) continuation.resume(null)
-                                        return
-                                    }
-                                    val content = JSONObject(responseBody).getString("audioContent")
-                                    if (continuation.isActive) continuation.resume(content)
-                                }
-                            } catch (e: Exception) {
-                                if (continuation.isActive) continuation.resumeWithException(e)
-                            }
-                        }
-                    })
-                } ?: return@runCatching null
+                val audioBase64 = try {
+                    JSONObject(responseBody).getString("audioContent")
+                } catch (e: Exception) {
+                    return@runCatching null
+                }
 
                 val audioBytes = Base64.decode(audioBase64, Base64.DEFAULT)
 
