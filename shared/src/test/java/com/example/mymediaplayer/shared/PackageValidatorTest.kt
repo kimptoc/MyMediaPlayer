@@ -12,8 +12,32 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.shadows.ShadowPackageManager
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.Implements
+import org.robolectric.annotation.Implementation
+import androidx.media.MediaSessionManager
+
+@Implements(MediaSessionManager::class)
+class ShadowMediaSessionManager {
+    @Implementation
+    fun isTrustedForMediaControl(info: MediaSessionManager.RemoteUserInfo): Boolean {
+        // Mock the trust logic for testing:
+        // Trust known packages unless it's a known attacker UID.
+        val trustedPackages = setOf(
+            "com.google.android.projection.gearhead",
+            "com.android.car",
+            "com.google.android.car",
+            "com.android.bluetooth",
+            "com.google.android.ext.services",
+            "android.os.cts",
+            "org.robolectric.default"
+        )
+        return info.packageName in trustedPackages && info.uid != 30000
+    }
+}
 
 @RunWith(RobolectricTestRunner::class)
+@Config(shadows = [ShadowMediaSessionManager::class])
 class PackageValidatorTest {
 
     private lateinit var context: Context
@@ -41,7 +65,7 @@ class PackageValidatorTest {
     }
 
     @Test
-    fun isCallerValid_allowsSystemPackages() {
+    fun isCallerValid_allowsSystemPackagesWithSignatureManager() {
         val uid1 = 10001
         pm.installPackage(PackageInfo().apply { packageName = "com.google.android.projection.gearhead" })
         pm.setPackagesForUid(uid1, "com.google.android.projection.gearhead")
