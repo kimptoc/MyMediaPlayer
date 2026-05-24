@@ -14,10 +14,36 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
+import org.robolectric.annotation.Config
+import org.junit.After
+import org.junit.Before
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.ResponseBody.Companion.toResponseBody
 
 @RunWith(RobolectricTestRunner::class)
 @OptIn(ExperimentalCoroutinesApi::class)
+@Config(sdk = [33])
 class AnnouncementPreGeneratorTest {
+
+    @Before
+    fun setup() {
+        AnnouncementPreGenerator.testInterceptor = okhttp3.Interceptor { chain ->
+            if (NetworkQualityCheckerTest.mockFailConnection) throw java.io.IOException("Mock connection failed")
+            okhttp3.Response.Builder()
+                .request(chain.request())
+                .protocol(okhttp3.Protocol.HTTP_1_1)
+                .code(200)
+                .message("OK")
+                .body("{\"audioContent\":\"mocked_audio_content\", \"choices\":[{\"message\":{\"content\":\"Mock Kilo Intro\"}}]}".toResponseBody("application/json".toMediaTypeOrNull()))
+                .build()
+        }
+    }
+
+    @After
+    fun teardown() {
+        NetworkQualityCheckerTest.mockFailConnection = false
+        AnnouncementPreGenerator.testInterceptor = null
+    }
 
     @Test
     fun getReadyAudio_timeout_returnsNull() = runTest {
@@ -61,9 +87,6 @@ class AnnouncementPreGeneratorTest {
 
     @Test
     fun getReadyAudio_fetchKiloTextException_returnsNull() = runTest {
-        // Since URLStreamHandlerFactory is set globally in this JVM by NetworkQualityCheckerTest,
-        // we can use its static mockFailConnection to simulate a network failure.
-        NetworkQualityCheckerTest.installMockFactory()
         NetworkQualityCheckerTest.mockFailConnection = true
 
         try {
