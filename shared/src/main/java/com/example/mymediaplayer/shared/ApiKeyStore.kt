@@ -10,7 +10,6 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.OutputStreamWriter
-import java.net.HttpURLConnection
 import java.net.URL
 import javax.net.ssl.HttpsURLConnection
 
@@ -90,7 +89,11 @@ object ApiKeyStore {
 
             ValidationResult.Success
         }.getOrElse { e ->
-            ValidationResult.Error("Connection failed: ${e.message}")
+            if (e is ClassCastException) {
+                ValidationResult.Error("Endpoint must use HTTPS")
+            } else {
+                ValidationResult.Error("Connection failed: ${e.message}")
+            }
         }
     }
 

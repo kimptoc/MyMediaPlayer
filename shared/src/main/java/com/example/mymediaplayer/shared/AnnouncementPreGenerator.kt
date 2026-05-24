@@ -15,7 +15,6 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.OutputStreamWriter
-import java.net.HttpURLConnection
 import java.net.URL
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -274,7 +273,7 @@ internal class AnnouncementPreGenerator(
         withContext(Dispatchers.IO) {
             runCatching {
                 val conn = URL("https://texttospeech.googleapis.com/v1/text:synthesize?key=$apiKey")
-                    .openConnection() as HttpURLConnection
+                    .openConnection() as HttpsURLConnection
                 conn.connectTimeout = 5_000
                 conn.readTimeout = 10_000
                 conn.requestMethod = "POST"
