@@ -22,8 +22,17 @@ class ShadowMediaSessionManager {
     @Implementation
     fun isTrustedForMediaControl(info: MediaSessionManager.RemoteUserInfo): Boolean {
         // Mock the trust logic for testing:
-        // Gearhead is trusted unless its UID is 30000 (attacker)
-        return info.packageName == "com.google.android.projection.gearhead" && info.uid != 30000
+        // Trust known packages unless it's a known attacker UID.
+        val trustedPackages = setOf(
+            "com.google.android.projection.gearhead",
+            "com.android.car",
+            "com.google.android.car",
+            "com.android.bluetooth",
+            "com.google.android.ext.services",
+            "android.os.cts",
+            "org.robolectric.default"
+        )
+        return info.packageName in trustedPackages && info.uid != 30000
     }
 }
 

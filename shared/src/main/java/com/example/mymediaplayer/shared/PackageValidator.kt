@@ -40,10 +40,15 @@ class PackageValidator(private val context: Context) {
             return true
         }
 
-        val manager = MediaSessionManager.getSessionManager(context)
-        val info = MediaSessionManager.RemoteUserInfo(callerPackageName, -1, callerUid)
-        if (manager.isTrustedForMediaControl(info)) {
-            return true
+        try {
+            val manager = MediaSessionManager.getSessionManager(context)
+            val pid = android.os.Binder.getCallingPid()
+            val info = MediaSessionManager.RemoteUserInfo(callerPackageName, pid, callerUid)
+            if (manager.isTrustedForMediaControl(info)) {
+                return true
+            }
+        } catch (e: Exception) {
+            Log.e("PackageValidator", "Failed to verify caller using MediaSessionManager", e)
         }
 
         Log.w("PackageValidator", "Caller $callerPackageName (uid $callerUid) is not allowed")
