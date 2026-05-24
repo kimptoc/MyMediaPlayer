@@ -97,12 +97,47 @@ class PlaylistServiceTest {
     }
 
     @Test
+    fun appendToPlaylist_returnsFalseOnSecurityException() {
+        val baseContext = ApplicationProvider.getApplicationContext<Context>()
+        val uri = Uri.parse("content://test/playlist.m3u")
+        val shadowResolver = Shadows.shadowOf(baseContext.contentResolver)
+        shadowResolver.registerOutputStreamSupplier(uri) {
+            object : java.io.OutputStream() {
+                override fun write(b: Int) {
+                    throw SecurityException("fail")
+                }
+            }
+        }
+        val service = PlaylistService()
+        val files = listOf(
+            MediaFileInfo(
+                uriString = "content://test/song1",
+                displayName = "Song One",
+                sizeBytes = 1L,
+                title = "Song One"
+            )
+        )
+
+        val result = service.appendToPlaylist(
+            baseContext,
+            uri,
+            files
+        )
+
+        assertFalse(result)
+    }
+
+    @Test
     fun appendToPlaylist_returnsFalseOnIOException() {
         val baseContext = ApplicationProvider.getApplicationContext<Context>()
         val uri = Uri.parse("content://test/playlist.m3u")
         val shadowResolver = Shadows.shadowOf(baseContext.contentResolver)
         shadowResolver.registerOutputStreamSupplier(uri) {
-            throw IOException("fail")
+            object : java.io.OutputStream() {
+                override fun write(b: Int) {
+                    throw IOException("fail")
+                }
+            }
         }
         val service = PlaylistService()
         val files = listOf(
@@ -156,7 +191,11 @@ class PlaylistServiceTest {
 
         val uri = Uri.parse("content://mock/playlist.m3u")
         shadowResolver.registerOutputStreamSupplier(uri) {
-            throw SecurityException("Mocked SecurityException")
+            object : java.io.OutputStream() {
+                override fun write(b: Int) {
+                    throw SecurityException("Mocked SecurityException")
+                }
+            }
         }
 
         val result = service.writePlaylistWithName(baseContext, Uri.parse("content://mock/tree"), files, "test_playlist")
@@ -174,7 +213,11 @@ class PlaylistServiceTest {
 
         val uri = Uri.parse("content://mock/playlist.m3u")
         shadowResolver.registerOutputStreamSupplier(uri) {
-            throw IOException("Mocked IOException")
+            object : java.io.OutputStream() {
+                override fun write(b: Int) {
+                    throw IOException("Mocked IOException")
+                }
+            }
         }
 
         val result = service.writePlaylistWithName(baseContext, Uri.parse("content://mock/tree"), files, "test_playlist")
@@ -236,7 +279,11 @@ class PlaylistServiceTest {
         val uri = Uri.parse("content://test/playlist.m3u")
         val shadowResolver = Shadows.shadowOf(baseContext.contentResolver)
         shadowResolver.registerOutputStreamSupplier(uri) {
-            throw IOException("fail")
+            object : java.io.OutputStream() {
+                override fun write(b: Int) {
+                    throw IOException("fail")
+                }
+            }
         }
         val service = PlaylistService()
         val files = listOf(
@@ -263,7 +310,11 @@ class PlaylistServiceTest {
         val uri = Uri.parse("content://test/playlist.m3u")
         val shadowResolver = Shadows.shadowOf(baseContext.contentResolver)
         shadowResolver.registerOutputStreamSupplier(uri) {
-            throw SecurityException("fail")
+            object : java.io.OutputStream() {
+                override fun write(b: Int) {
+                    throw SecurityException("fail")
+                }
+            }
         }
         val service = PlaylistService()
         val files = listOf(
