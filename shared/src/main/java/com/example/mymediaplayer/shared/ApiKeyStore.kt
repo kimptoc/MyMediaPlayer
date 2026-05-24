@@ -3,15 +3,13 @@ package com.example.mymediaplayer.shared
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.OutputStreamWriter
-import java.net.HttpURLConnection
 import java.net.URL
+import javax.net.ssl.HttpsURLConnection
 
 /**
  * Secure storage for API keys used by [AnnouncementPreGenerator].
@@ -62,7 +60,7 @@ object ApiKeyStore {
     private suspend fun validateKiloKey(apiKey: String): ValidationResult = withContext(Dispatchers.IO) {
         runCatching {
             val conn = URL("${BuildConfig.KILO_ENDPOINT}/chat/completions")
-                .openConnection() as HttpURLConnection
+                .openConnection() as HttpsURLConnection
             conn.connectTimeout = 5_000
             conn.readTimeout = 8_000
             conn.requestMethod = "POST"
@@ -89,14 +87,18 @@ object ApiKeyStore {
 
             ValidationResult.Success
         }.getOrElse { e ->
-            ValidationResult.Error("Connection failed: ${e.message}")
+            if (e is ClassCastException) {
+                ValidationResult.Error("Endpoint must use HTTPS")
+            } else {
+                ValidationResult.Error("Connection failed: ${e.message}")
+            }
         }
     }
 
     private suspend fun validateTtsKey(apiKey: String): ValidationResult = withContext(Dispatchers.IO) {
         runCatching {
             val conn = URL("https://texttospeech.googleapis.com/v1/text:synthesize?key=$apiKey")
-                .openConnection() as HttpURLConnection
+                .openConnection() as HttpsURLConnection
             conn.connectTimeout = 5_000
             conn.readTimeout = 8_000
             conn.requestMethod = "POST"
@@ -132,15 +134,9 @@ object ApiKeyStore {
      * null result as "no keys configured" and fall back to on-device TTS.
      */
     fun getPrefs(context: Context): SharedPreferences? = runCatching {
-        val masterKey = MasterKey.Builder(context)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build()
-        EncryptedSharedPreferences.create(
+        EncryptedPrefsManager.createOrGet(
             context,
-            ENCRYPTED_PREFS_NAME,
-            masterKey,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+            ENCRYPTED_PREFS_NAME
         )
     }.getOrElse { _ ->
         Log.e(TAG, "Failed to open encrypted prefs — API keys unavailable")

@@ -263,4 +263,38 @@ class MediaCacheDatabaseTest {
         val retrievedState = dao.getScanState()
         org.junit.Assert.assertEquals(newState, retrievedState)
     }
+
+    @org.junit.Test
+    fun replacePlaylists() {
+        val oldPlaylist = PlaylistEntity(
+            uriString = "content://old_playlist/1",
+            displayName = "Old Playlist"
+        )
+        dao.insertPlaylists(listOf(oldPlaylist))
+
+        val newPlaylist = PlaylistEntity(
+            uriString = "content://new_playlist/1",
+            displayName = "New Playlist"
+        )
+
+        dao.replacePlaylists(listOf(newPlaylist))
+
+        val playlists = dao.getAllPlaylists()
+        org.junit.Assert.assertEquals(1, playlists.size)
+        org.junit.Assert.assertEquals(newPlaylist, playlists[0])
+    }
+
+    @org.junit.Test
+    fun replacePlaylists_emptyLists() {
+        val oldPlaylist = PlaylistEntity(
+            uriString = "content://old_playlist/1",
+            displayName = "Old Playlist"
+        )
+        dao.insertPlaylists(listOf(oldPlaylist))
+
+        dao.replacePlaylists(emptyList())
+
+        val playlists = dao.getAllPlaylists()
+        org.junit.Assert.assertTrue(playlists.isEmpty())
+    }
 }
