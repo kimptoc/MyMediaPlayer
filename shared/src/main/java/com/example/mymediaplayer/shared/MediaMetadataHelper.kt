@@ -37,7 +37,7 @@ object MediaMetadataHelper {
             metadataCache.put(uriString, info)
             info
         } catch (e: Exception) {
-            Log.e(TAG, "extractMetadata FAILED: ${e.javaClass.simpleName}: ${e.message}")
+            Log.w(TAG, "Failed to read metadata: ${e.javaClass.simpleName}")
             null
         } finally {
             try {
