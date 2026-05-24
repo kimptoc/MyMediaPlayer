@@ -45,6 +45,16 @@ internal class AnnouncementPreGenerator(
         private const val KILO_ENDPOINT = "https://api.kilo.ai/api/gateway"
         private const val KILO_MODEL_ANON = "kilo/auto-free"
         private const val READY_TIMEOUT_MS = 5000L
+
+        private val sharedOkHttpClient by lazy {
+            okhttp3.OkHttpClient.Builder()
+                .connectTimeout(5_000L, java.util.concurrent.TimeUnit.MILLISECONDS)
+                .readTimeout(10_000L, java.util.concurrent.TimeUnit.MILLISECONDS)
+                .addInterceptor { chain ->
+                    NetworkQualityChecker.testInterceptor?.intercept(chain) ?: chain.proceed(chain.request())
+                }
+                .build()
+        }
     }
 
     private data class CacheKey(val uri: String, val isIntro: Boolean)
@@ -273,16 +283,6 @@ internal class AnnouncementPreGenerator(
         }
     }
 
-    private val okHttpClient by lazy {
-        okhttp3.OkHttpClient.Builder()
-            .connectTimeout(5_000L, java.util.concurrent.TimeUnit.MILLISECONDS)
-            .readTimeout(10_000L, java.util.concurrent.TimeUnit.MILLISECONDS)
-            .addInterceptor { chain ->
-                NetworkQualityChecker.testInterceptor?.intercept(chain) ?: chain.proceed(chain.request())
-            }
-            .build()
-    }
-
     private suspend fun fetchGoogleTtsAudio(text: String, apiKey: String): File? =
         withContext(Dispatchers.IO) {
             runCatching {
@@ -309,7 +309,7 @@ internal class AnnouncementPreGenerator(
                     .build()
 
                 val response = kotlinx.coroutines.suspendCancellableCoroutine<okhttp3.Response> { continuation ->
-                    val call = okHttpClient.newCall(request)
+                    val call = sharedOkHttpClient.newCall(request)
                     continuation.invokeOnCancellation {
                         call.cancel()
                     }
@@ -332,12 +332,18 @@ internal class AnnouncementPreGenerator(
 
                 response.use {
                     if (!it.isSuccessful) {
-                        Log.w(TAG, "Google TTS API returned HTTP ${it.code}")
+                        val errorBody = it.body?.string()
+                        Log.w(TAG, "Google TTS API returned HTTP ${it.code}: $errorBody")
                         return@runCatching null
                     }
 
                     val responseBodyString = it.body?.string() ?: return@runCatching null
-                    val audioBase64 = JSONObject(responseBodyString).getString("audioContent")
+                    val audioBase64 = try {
+                        JSONObject(responseBodyString).getString("audioContent")
+                    } catch (e: org.json.JSONException) {
+                        Log.w(TAG, "Failed to parse Google TTS API response: ${e.message}")
+                        return@runCatching null
+                    }
                     val audioBytes = Base64.decode(audioBase64, Base64.DEFAULT)
 
                     val file = File(context.cacheDir, "${UUID.randomUUID()}.mp3")

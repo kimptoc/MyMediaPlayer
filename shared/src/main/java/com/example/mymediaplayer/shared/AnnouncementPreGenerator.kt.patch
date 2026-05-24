@@ -1,0 +1,44 @@
+--- shared/src/main/java/com/example/mymediaplayer/shared/AnnouncementPreGenerator.kt
++++ shared/src/main/java/com/example/mymediaplayer/shared/AnnouncementPreGenerator.kt
+@@ -45,6 +45,15 @@
+         private const val KILO_ENDPOINT = "https://api.kilo.ai/api/gateway"
+         private const val KILO_MODEL_ANON = "kilo/auto-free"
+         private const val READY_TIMEOUT_MS = 5000L
++
++        // Shared OkHttpClient to avoid recreation and resource leak on every generator instantiation
++        private val sharedOkHttpClient by lazy {
++            okhttp3.OkHttpClient.Builder()
++                .connectTimeout(5_000L, java.util.concurrent.TimeUnit.MILLISECONDS)
++                .readTimeout(10_000L, java.util.concurrent.TimeUnit.MILLISECONDS)
++                .addInterceptor { chain -> NetworkQualityChecker.testInterceptor?.intercept(chain) ?: chain.proceed(chain.request()) }
++                .build()
++        }
+     }
+
+     private data class CacheKey(val uri: String, val isIntro: Boolean)
+@@ -276,15 +285,6 @@
+         }
+     }
+
+-    private val okHttpClient by lazy {
+-        okhttp3.OkHttpClient.Builder()
+-            .connectTimeout(5_000L, java.util.concurrent.TimeUnit.MILLISECONDS)
+-            .readTimeout(10_000L, java.util.concurrent.TimeUnit.MILLISECONDS)
+-            .addInterceptor { chain ->
+-                NetworkQualityChecker.testInterceptor?.intercept(chain) ?: chain.proceed(chain.request())
+-            }
+-            .build()
+-    }
+-
+     private suspend fun fetchGoogleTtsAudio(text: String, apiKey: String): File? =
+         withContext(Dispatchers.IO) {
+             runCatching {
+@@ -310,7 +310,7 @@
+                     .build()
+
+                 val response = kotlinx.coroutines.suspendCancellableCoroutine<okhttp3.Response> { continuation ->
+-                    val call = okHttpClient.newCall(request)
++                    val call = sharedOkHttpClient.newCall(request)
+                     continuation.invokeOnCancellation {
+                         call.cancel()
+                     }
