@@ -101,4 +101,32 @@ class AnnouncementPreGeneratorTest {
         }
     }
 
+    @Test
+    fun fetchKiloText_exception_returnsNull() = runTest {
+        NetworkQualityCheckerTest.installMockFactory()
+        NetworkQualityCheckerTest.mockFailConnection = true
+
+        try {
+            val context = ApplicationProvider.getApplicationContext<Context>()
+            val preGen = AnnouncementPreGenerator(context, TestScope(this.testScheduler))
+
+            var result: String? = "dummy"
+            val job = launch {
+                result = preGen.fetchKiloText(
+                    title = "Test Title",
+                    artist = "Test Artist",
+                    isIntro = true,
+                    apiKey = "fake_kilo_key"
+                )
+            }
+
+            testScheduler.advanceUntilIdle()
+            job.join()
+
+            assertNull("Text should be null due to simulated network exception", result)
+        } finally {
+            NetworkQualityCheckerTest.mockFailConnection = false
+        }
+    }
+
 }
