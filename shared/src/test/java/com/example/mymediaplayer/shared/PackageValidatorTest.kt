@@ -66,4 +66,42 @@ class PackageValidatorTest {
         pm.setPackagesForUid(uid, "com.malicious.app")
         assertFalse(validator.isCallerValid("com.malicious.app", uid))
     }
+
+    @Test
+    fun isCallerValid_packageNotFound_returnsFalse() {
+        assertFalse(validator.isCallerValid("com.not.found.package", 50000))
+    }
+
+    @Test
+    fun isCallerUidValid_allowsSameUid() {
+        assertTrue(validator.isCallerUidValid(Process.myUid()))
+    }
+
+    @Test
+    fun isCallerUidValid_allowsSystemUid() {
+        assertTrue(validator.isCallerUidValid(Process.SYSTEM_UID))
+        assertTrue(validator.isCallerUidValid(Process.ROOT_UID))
+    }
+
+    @Test
+    fun isCallerUidValid_returnsFalseWhenPackagesIsNull() {
+        val uid = 60000
+        assertFalse(validator.isCallerUidValid(uid))
+    }
+
+    @Test
+    fun isCallerUidValid_returnsTrueWhenValidPackageExistsForUid() {
+        val uid = 70000
+        pm.installPackage(PackageInfo().apply { packageName = "com.google.android.projection.gearhead" })
+        pm.setPackagesForUid(uid, "com.google.android.projection.gearhead")
+        assertTrue(validator.isCallerUidValid(uid))
+    }
+
+    @Test
+    fun isCallerUidValid_returnsFalseWhenOnlyInvalidPackagesExistForUid() {
+        val uid = 80000
+        pm.installPackage(PackageInfo().apply { packageName = "com.malicious.app" })
+        pm.setPackagesForUid(uid, "com.malicious.app")
+        assertFalse(validator.isCallerUidValid(uid))
+    }
 }
