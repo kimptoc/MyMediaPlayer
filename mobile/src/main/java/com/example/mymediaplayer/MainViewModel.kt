@@ -87,6 +87,9 @@ data class PlaylistMgmtState(
     val playlistMessage: String? = null
 )
 
+private fun PlaylistMgmtState.isSelected(playlist: PlaylistInfo) =
+    selectedPlaylist?.uriString == playlist.uriString
+
 data class MainUiState(
     val scan: ScanState = ScanState(),
     val playback: PlaybackState = PlaybackState(),
@@ -845,7 +848,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val success = playlistService.appendToPlaylist(getApplication(), uri, listOf(file))
         val current = _uiState.value
         if (success) {
-            val updatedSongs = if (current.playlist.selectedPlaylist?.uriString == playlist.uriString) {
+            val updatedSongs = if (current.playlist.isSelected(playlist)) {
                 current.playlist.playlistSongs + file
             } else {
                 current.playlist.playlistSongs
@@ -869,7 +872,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val success = playlistService.appendToPlaylist(getApplication(), uri, files)
         val current = _uiState.value
         if (success) {
-            val updatedSongs = if (current.playlist.selectedPlaylist?.uriString == playlist.uriString) {
+            val updatedSongs = if (current.playlist.isSelected(playlist)) {
                 val existingUris = current.playlist.playlistSongs.map { it.uriString }.toMutableSet()
                 val additions = files.filter { existingUris.add(it.uriString) }
                 current.playlist.playlistSongs + additions
@@ -903,7 +906,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (success) {
             _uiState.value = current.copy(
                 playlist = current.playlist.copy(
-                    playlistSongs = if (current.playlist.selectedPlaylist?.uriString == playlist.uriString) {
+                    playlistSongs = if (current.playlist.isSelected(playlist)) {
                         songs
                     } else {
                         current.playlist.playlistSongs
@@ -947,7 +950,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             mediaCacheService.removePlaylistByUri(playlist.uriString)
 
-            val isSelectedPlaylist = current.playlist.selectedPlaylist?.uriString == playlist.uriString
+            val isSelectedPlaylist = current.playlist.isSelected(playlist)
 
             val updatedPlaylist = current.playlist.copy(
                 playlistMessage = "Deleted ${playlist.displayName.removeSuffix(".m3u")}"
