@@ -279,7 +279,11 @@ class PlaylistServiceTest {
         val uri = Uri.parse("content://test/playlist.m3u")
         val shadowResolver = Shadows.shadowOf(baseContext.contentResolver)
         shadowResolver.registerOutputStreamSupplier(uri) {
-            throw IOException("fail")
+            object : java.io.OutputStream() {
+                override fun write(b: Int) {
+                    throw IOException("fail")
+                }
+            }
         }
         val service = PlaylistService()
         val files = listOf(
@@ -306,7 +310,11 @@ class PlaylistServiceTest {
         val uri = Uri.parse("content://test/playlist.m3u")
         val shadowResolver = Shadows.shadowOf(baseContext.contentResolver)
         shadowResolver.registerOutputStreamSupplier(uri) {
-            throw SecurityException("fail")
+            object : java.io.OutputStream() {
+                override fun write(b: Int) {
+                    throw SecurityException("fail")
+                }
+            }
         }
         val service = PlaylistService()
         val files = listOf(
