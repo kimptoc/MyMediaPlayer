@@ -15,10 +15,10 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.OutputStreamWriter
-import java.net.HttpURLConnection
 import java.net.URL
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import javax.net.ssl.HttpsURLConnection
 
 /**
  * Pre-generates announcement audio for upcoming track intros and outros while the current
@@ -195,7 +195,8 @@ internal class AnnouncementPreGenerator(
         }
     }
 
-    private suspend fun fetchKiloText(
+    @androidx.annotation.VisibleForTesting
+    internal suspend fun fetchKiloText(
         title: String,
         artist: String?,
         isIntro: Boolean,
@@ -215,7 +216,7 @@ internal class AnnouncementPreGenerator(
 
         try {
             val conn = URL("$KILO_ENDPOINT/chat/completions")
-                .openConnection() as HttpURLConnection
+                .openConnection() as HttpsURLConnection
             conn.connectTimeout = 15_000
             conn.readTimeout = 20_000
             conn.requestMethod = "POST"
@@ -273,7 +274,7 @@ internal class AnnouncementPreGenerator(
         withContext(Dispatchers.IO) {
             runCatching {
                 val conn = URL("https://texttospeech.googleapis.com/v1/text:synthesize?key=$apiKey")
-                    .openConnection() as HttpURLConnection
+                    .openConnection() as HttpsURLConnection
                 conn.connectTimeout = 5_000
                 conn.readTimeout = 10_000
                 conn.requestMethod = "POST"

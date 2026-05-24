@@ -3,6 +3,7 @@ package com.example.mymediaplayer.shared
 import android.content.Context
 import android.os.Process
 import android.util.Log
+import androidx.media.MediaSessionManager
 
 class PackageValidator(private val context: Context) {
     fun isCallerValid(callerPackageName: String, callerUid: Int): Boolean {
@@ -39,18 +40,15 @@ class PackageValidator(private val context: Context) {
             return true
         }
 
-        val allowedExactPackages = setOf(
-            "com.google.android.projection.gearhead",
-            "com.android.car",
-            "com.google.android.car",
-            "com.android.bluetooth",
-            "com.google.android.ext.services",
-            "android.os.cts",
-            "org.robolectric.default"
-        )
-
-        if (callerPackageName in allowedExactPackages) {
-            return true
+        try {
+            val manager = MediaSessionManager.getSessionManager(context)
+            val pid = android.os.Binder.getCallingPid()
+            val info = MediaSessionManager.RemoteUserInfo(callerPackageName, pid, callerUid)
+            if (manager.isTrustedForMediaControl(info)) {
+                return true
+            }
+        } catch (e: Exception) {
+            Log.e("PackageValidator", "Failed to verify caller using MediaSessionManager", e)
         }
 
         Log.w("PackageValidator", "Caller $callerPackageName (uid $callerUid) is not allowed")
