@@ -36,8 +36,6 @@ import androidx.media.MediaBrowserServiceCompat
 import android.graphics.BitmapFactory
 import androidx.core.content.ContextCompat
 import androidx.media.utils.MediaConstants
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job

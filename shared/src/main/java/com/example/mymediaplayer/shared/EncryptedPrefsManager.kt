@@ -15,11 +15,10 @@ object EncryptedPrefsManager {
     /**
      * Creates or retrieves an EncryptedSharedPreferences instance for the given file name.
      */
-    @Synchronized
     fun createOrGet(context: Context, fileName: String): SharedPreferences {
         // Look up first before doing any Keystore initialization to avoid failure
         // in tests where we are mimicking failure by overriding context.
-        return prefsInstances.getOrPut(fileName) {
+        return prefsInstances.computeIfAbsent(fileName) {
             val masterKey = MasterKey.Builder(context)
                 .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
                 .build()
@@ -33,7 +32,6 @@ object EncryptedPrefsManager {
         }
     }
 
-    @Synchronized
     fun clearCacheForTesting() {
         prefsInstances.clear()
     }
