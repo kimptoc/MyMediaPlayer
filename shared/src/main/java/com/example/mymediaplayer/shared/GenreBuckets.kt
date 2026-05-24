@@ -4,6 +4,8 @@ import java.util.Locale
 
 const val PODCAST_GENRE: String = "Podcasts"
 
+private val WHITESPACE_REGEX = Regex("\\s+")
+
 fun bucketGenre(raw: String?): String {
     val trimmed = raw?.trim().orEmpty()
     if (trimmed.isBlank()) return "Other"
@@ -16,7 +18,7 @@ fun bucketGenre(raw: String?): String {
     if (primary.isBlank()) return "Other"
 
     val normalized = primary
-        .replace(Regex("\\s+"), " ")
+        .replace(WHITESPACE_REGEX, " ")
         .trim()
         .lowercase(Locale.US)
 
