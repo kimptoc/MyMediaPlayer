@@ -29,6 +29,7 @@ import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import java.util.concurrent.ConcurrentHashMap
+import javax.net.ssl.HttpsURLConnection
 
 /**
  * Pre-generates announcement audio for upcoming track intros and outros while the current
@@ -216,7 +217,8 @@ internal class AnnouncementPreGenerator(
         }
     }
 
-    private suspend fun fetchKiloText(
+    @androidx.annotation.VisibleForTesting
+    internal suspend fun fetchKiloText(
         title: String,
         artist: String?,
         isIntro: Boolean,
