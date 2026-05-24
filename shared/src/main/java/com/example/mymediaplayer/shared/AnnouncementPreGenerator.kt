@@ -195,7 +195,8 @@ internal class AnnouncementPreGenerator(
         }
     }
 
-    private suspend fun fetchKiloText(
+    @androidx.annotation.VisibleForTesting
+    internal suspend fun fetchKiloText(
         title: String,
         artist: String?,
         isIntro: Boolean,
