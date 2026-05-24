@@ -30,6 +30,7 @@ class ApiKeyStoreTest {
         // Create a custom ContextWrapper that throws an exception when
         // SharedPreferences are requested, simulating a failure in
         // EncryptedSharedPreferences or Android Keystore.
+        EncryptedPrefsManager.clearCacheForTesting()
         val failingContext = object : ContextWrapper(baseContext) {
             override fun getApplicationContext(): Context {
                 return this
@@ -50,6 +51,7 @@ class ApiKeyStoreTest {
         val baseContext = ApplicationProvider.getApplicationContext<Context>()
 
         // Simulate failure in getting preferences
+        EncryptedPrefsManager.clearCacheForTesting()
         val failingContext = object : ContextWrapper(baseContext) {
             override fun getApplicationContext(): Context {
                 return this

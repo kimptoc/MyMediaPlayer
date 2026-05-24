@@ -3,8 +3,6 @@ package com.example.mymediaplayer.shared
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -136,15 +134,9 @@ object ApiKeyStore {
      * null result as "no keys configured" and fall back to on-device TTS.
      */
     fun getPrefs(context: Context): SharedPreferences? = runCatching {
-        val masterKey = MasterKey.Builder(context)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build()
-        EncryptedSharedPreferences.create(
+        EncryptedPrefsManager.createOrGet(
             context,
-            ENCRYPTED_PREFS_NAME,
-            masterKey,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+            ENCRYPTED_PREFS_NAME
         )
     }.getOrElse { _ ->
         Log.e(TAG, "Failed to open encrypted prefs — API keys unavailable")
