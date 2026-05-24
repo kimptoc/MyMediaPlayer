@@ -94,7 +94,7 @@ class MediaMetadataHelperTest {
 
         val logs = org.robolectric.shadows.ShadowLog.getLogsForTag("MediaMetadataHelper")
         logs.forEach { println("LOG: ${it.type} ${it.msg}") }
-        val warningLog = logs.find { it.type == android.util.Log.WARN && it.msg == "No ID3 tags found for: $uriString" }
+        val warningLog = logs.find { it.type == android.util.Log.WARN && it.msg == "No ID3 tags found for media" }
         org.junit.Assert.assertNotNull("Expected warning log for missing ID3 tags was not found", warningLog)
     }
 }

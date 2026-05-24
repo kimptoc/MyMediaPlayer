@@ -135,6 +135,17 @@ class NetworkQualityCheckerTest {
     }
 
     @Test
+    fun check_runCatchingException_returnsPoor() = runBlocking {
+        setupNetworkForPing()
+        NetworkQualityChecker.testInterceptor = okhttp3.Interceptor { chain ->
+            throw RuntimeException("Simulated unexpected error")
+        }
+
+        assertEquals(NetworkQualityChecker.Quality.POOR, checker.check())
+    }
+
+
+    @Test
     fun check_returnsCachedResult() = runBlocking {
         shadowConnectivityManager.setDefaultNetworkActive(false)
 
