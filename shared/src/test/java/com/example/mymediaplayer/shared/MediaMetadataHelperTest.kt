@@ -97,4 +97,21 @@ class MediaMetadataHelperTest {
         val warningLog = logs.find { it.type == android.util.Log.WARN && it.msg == "No ID3 tags found for media" }
         org.junit.Assert.assertNotNull("Expected warning log for missing ID3 tags was not found", warningLog)
     }
+
+    @Test
+    fun extractMetadata_whenRetrieverThrowsNullPointerException_returnsNull() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val uriString = "content://something/npe"
+        val uri = Uri.parse(uriString)
+
+        // Configure ShadowMediaMetadataRetriever to throw a NullPointerException
+        // to simulate an error occurring inside the try-catch block
+        val dataSource = DataSource.toDataSource(context, uri)
+        ShadowMediaMetadataRetriever.addException(dataSource, java.lang.NullPointerException("Simulated null object reference"))
+
+        val result = MediaMetadataHelper.extractMetadata(context, uriString)
+
+        // The exception caught block should catch NPE and return null
+        assertNull(result)
+    }
 }
