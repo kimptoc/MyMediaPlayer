@@ -306,7 +306,8 @@ internal class AnnouncementPreGenerator(
                 val requestBody = bodyString.toRequestBody("application/json; charset=utf-8".toMediaType())
 
                 val request = Request.Builder()
-                    .url("https://texttospeech.googleapis.com/v1/text:synthesize?key=$apiKey")
+                    .url("https://texttospeech.googleapis.com/v1/text:synthesize")
+                    .header("x-goog-api-key", apiKey)
                     .post(requestBody)
                     .build()
 
