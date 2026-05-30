@@ -98,7 +98,8 @@ data class MainUiState(
     val playlist: PlaylistMgmtState = PlaylistMgmtState(),
     val favoriteUris: Set<String> = emptySet(),
     val playCounts: Map<String, Int> = emptyMap(),
-    val lastPlayedAt: Map<String, Long> = emptyMap()
+    val lastPlayedAt: Map<String, Long> = emptyMap(),
+    val flaggedUris: Set<String> = emptySet()
 )
 
 enum class LibraryTab(val label: String) {
@@ -120,6 +121,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         private const val KEY_FAVORITE_URIS = "favorite_uris"
         private const val KEY_PLAY_COUNTS = "play_counts"
         private const val KEY_LAST_PLAYED_AT = "last_played_at"
+        private const val KEY_FLAGGED_URIS = "flagged_uris"
         const val SMART_PREFIX = "smart:"
         const val SMART_FAVORITES = "${SMART_PREFIX}favorites"
         const val SMART_RECENTLY_ADDED = "${SMART_PREFIX}recently_added"
@@ -144,10 +146,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val favorites = prefs.getStringSet(KEY_FAVORITE_URIS, emptySet())?.toSet() ?: emptySet()
         val playCounts = decodePlayCounts(prefs.getString(KEY_PLAY_COUNTS, null))
         val lastPlayedAt = decodeLastPlayedAt(prefs.getString(KEY_LAST_PLAYED_AT, null))
+        val flaggedUris = prefs.getStringSet(KEY_FLAGGED_URIS, emptySet())?.toSet() ?: emptySet()
         _uiState.value = _uiState.value.copy(
             favoriteUris = favorites,
             playCounts = playCounts,
-            lastPlayedAt = lastPlayedAt
+            lastPlayedAt = lastPlayedAt,
+            flaggedUris = flaggedUris
         )
     }
 
@@ -1078,6 +1082,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = current.copy(
             scan = current.scan.copy(scanMessage = null)
         )
+    }
+
+    fun toggleFlag(uriString: String) {
+        val current = _uiState.value
+        val updated = if (uriString in current.flaggedUris) {
+            current.flaggedUris - uriString
+        } else {
+            current.flaggedUris + uriString
+        }
+        _uiState.value = current.copy(flaggedUris = updated)
+        getApplication<Application>()
+            .getSharedPreferences(PREFS_NAME, Application.MODE_PRIVATE)
+            .edit { putStringSet(KEY_FLAGGED_URIS, updated) }
     }
 
     fun toggleFavorite(uriString: String) {
