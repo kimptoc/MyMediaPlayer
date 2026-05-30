@@ -16,6 +16,7 @@ import android.support.v4.media.session.PlaybackStateCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -142,13 +143,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val prefs = getApplication<Application>()
             .getSharedPreferences(PREFS_NAME, Application.MODE_PRIVATE)
         val favorites = prefs.getStringSet(KEY_FAVORITE_URIS, emptySet())?.toSet() ?: emptySet()
-        val playCounts = decodePlayCounts(prefs.getString(KEY_PLAY_COUNTS, null))
-        val lastPlayedAt = decodeLastPlayedAt(prefs.getString(KEY_LAST_PLAYED_AT, null))
-        _uiState.value = _uiState.value.copy(
-            favoriteUris = favorites,
-            playCounts = playCounts,
-            lastPlayedAt = lastPlayedAt
-        )
+        _uiState.value = _uiState.value.copy(favoriteUris = favorites)
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val playCountsStr = prefs.getString(KEY_PLAY_COUNTS, null)
+            val lastPlayedAtStr = prefs.getString(KEY_LAST_PLAYED_AT, null)
+            val playCounts = decodePlayCounts(playCountsStr)
+            val lastPlayedAt = decodeLastPlayedAt(lastPlayedAtStr)
+
+            _uiState.update { it.copy(
+                playCounts = playCounts,
+                lastPlayedAt = lastPlayedAt
+            ) }
+        }
     }
 
     override fun onCleared() {
