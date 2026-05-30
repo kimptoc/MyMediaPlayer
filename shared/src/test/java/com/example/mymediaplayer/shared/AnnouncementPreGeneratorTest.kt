@@ -126,7 +126,7 @@ class AnnouncementPreGeneratorTest {
 
     @Test
     fun fetchKiloText_exception_returnsNull() = runTest {
-        NetworkQualityCheckerTest.installMockFactory()
+
         NetworkQualityCheckerTest.mockFailConnection = true
 
         try {

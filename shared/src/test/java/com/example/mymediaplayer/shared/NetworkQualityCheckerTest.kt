@@ -34,35 +34,6 @@ class NetworkQualityCheckerTest {
     companion object {
         var mockLatencyMs: Long = 0
         var mockFailConnection = false
-        var factoryInstalled = false
-
-        fun installMockFactory() {
-            if (!factoryInstalled) {
-                try {
-                    URL.setURLStreamHandlerFactory { protocol ->
-                        if (protocol == "https") {
-                            object : URLStreamHandler() {
-                                override fun openConnection(u: URL): URLConnection {
-                                    return object : HttpURLConnection(u) {
-                                        override fun connect() {
-                                            if (mockFailConnection) throw java.io.IOException("Mock connection failed")
-                                            Thread.sleep(mockLatencyMs) // simulate latency
-                                        }
-                                        override fun disconnect() {}
-                                        override fun usingProxy(): Boolean = false
-                                    }
-                                }
-                            }
-                        } else {
-                            null
-                        }
-                    }
-                    factoryInstalled = true
-                } catch (e: Error) {
-                    // Factory already set
-                }
-            }
-        }
     }
 
     @Before
@@ -75,8 +46,6 @@ class NetworkQualityCheckerTest {
 
         mockLatencyMs = 0
         mockFailConnection = false
-
-        installMockFactory()
 
         NetworkQualityChecker.testInterceptor = okhttp3.Interceptor { chain ->
             val request = chain.request()

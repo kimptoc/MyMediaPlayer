@@ -45,7 +45,7 @@ class NetworkQualityBenchmarkTest {
         shadowOf(connectivityManager).setNetworkCapabilities(network, capabilities)
         checker.invalidate()
 
-        NetworkQualityCheckerTest.installMockFactory()
+
         NetworkQualityCheckerTest.mockLatencyMs = 5L // Use small latency to speed up local tests
         NetworkQualityCheckerTest.mockFailConnection = false
 
