@@ -158,25 +158,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
 
         viewModelScope.launch {
-            try {
-                val (playCounts, lastPlayedAt) = withContext(Dispatchers.IO) {
-                    decodePlayCounts(rawPlayCounts) to decodeLastPlayedAt(rawLastPlayedAt)
-                }
-                _uiState.update { currentState ->
-                    currentState.copy(
-                        playCounts = playCounts,
-                        lastPlayedAt = lastPlayedAt,
-                        isPreferencesLoading = false
-                    )
+            val (playCounts, lastPlayedAt) = try {
+                withContext(Dispatchers.IO) {
+                    val p = decodePlayCounts(rawPlayCounts)
+                    val l = decodeLastPlayedAt(rawLastPlayedAt)
+                    p to l
                 }
             } catch (e: Exception) {
-                _uiState.update { currentState ->
-                    currentState.copy(
-                        playCounts = emptyMap(),
-                        lastPlayedAt = emptyMap(),
-                        isPreferencesLoading = false
-                    )
-                }
+                emptyMap<String, Int>() to emptyMap<String, Long>()
+            }
+
+            _uiState.update { currentState ->
+                currentState.copy(
+                    playCounts = playCounts,
+                    lastPlayedAt = lastPlayedAt,
+                    isPreferencesLoading = false
+                )
             }
         }
     }
