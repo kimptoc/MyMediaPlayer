@@ -51,16 +51,20 @@ class EncryptedPrefsManagerTest {
 
         @Implementation
         fun build(): androidx.security.crypto.MasterKey {
-            // Because MasterKey is internal and we don't have mockito available,
-            // Unsafe is used to create a stub instance of MasterKey to bypass AndroidKeyStore exceptions during tests.
             val cls = androidx.security.crypto.MasterKey::class.java
-            val unsafeClass = Class.forName("sun.misc.Unsafe")
-            val theUnsafe = unsafeClass.getDeclaredField("theUnsafe")
-            theUnsafe.isAccessible = true
-            val unsafe = theUnsafe.get(null)
-            val allocateInstance = unsafeClass.getMethod("allocateInstance", Class::class.java)
+            val constructor = cls.declaredConstructors.first()
+            constructor.isAccessible = true
 
-            return allocateInstance.invoke(unsafe, cls) as androidx.security.crypto.MasterKey
+            val params = constructor.parameterTypes
+            val constructorArgs = params.map { type ->
+                when (type) {
+                    String::class.java -> "test_alias"
+                    Context::class.java -> ApplicationProvider.getApplicationContext<Context>()
+                    else -> null // KeyGenParameterSpec
+                }
+            }.toTypedArray()
+
+            return constructor.newInstance(*constructorArgs) as androidx.security.crypto.MasterKey
         }
     }
 
