@@ -143,6 +143,14 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+    // Accessed only on UI thread.
+    private var cachedTrustedBluetoothDevices: Map<String, String?>? = null
+    private val prefsListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key == KEY_BT_AUTOPLAY_DEVICES || key == KEY_BT_AUTOPLAY_ADDRESSES) {
+            cachedTrustedBluetoothDevices = null
+        }
+    }
+
     private val controllerCallback = object : MediaControllerCompat.Callback() {
         override fun onPlaybackStateChanged(state: PlaybackStateCompat?) {
             lastPlaybackState = state
@@ -268,6 +276,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         volumeControlStream = AudioManager.STREAM_MUSIC
+
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE).registerOnSharedPreferenceChangeListener(prefsListener)
 
         loadPreferences()
 
@@ -548,6 +558,9 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        runCatching {
+            getSharedPreferences(PREFS_NAME, MODE_PRIVATE).unregisterOnSharedPreferenceChangeListener(prefsListener)
+        }
         mediaController?.unregisterCallback(controllerCallback)
         mediaBrowser?.disconnect()
         super.onDestroy()
@@ -1067,6 +1080,7 @@ class MainActivity : ComponentActivity() {
     private fun readTrustedBluetoothDevices(
         prefs: android.content.SharedPreferences
     ): Map<String, String?> {
+        cachedTrustedBluetoothDevices?.let { return it }
         val raw = prefs.getString(KEY_BT_AUTOPLAY_DEVICES, null).orEmpty()
         val decoded = mutableMapOf<String, String?>()
         if (raw.isNotBlank()) {
@@ -1085,6 +1099,7 @@ class MainActivity : ComponentActivity() {
                 decoded[address] = null
             }
         }
+        cachedTrustedBluetoothDevices = decoded
         return decoded
     }
 
