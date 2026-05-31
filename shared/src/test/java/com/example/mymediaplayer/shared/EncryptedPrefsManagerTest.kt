@@ -38,7 +38,7 @@ class EncryptedPrefsManagerTest {
     @Implements(androidx.security.crypto.MasterKey.Builder::class)
     class ShadowMasterKeyBuilder {
         @org.robolectric.annotation.RealObject
-        lateinit var realObject: androidx.security.crypto.MasterKey.Builder
+        private lateinit var realObject: androidx.security.crypto.MasterKey.Builder
 
         @Implementation
         fun __constructor__(context: Context) {
@@ -52,7 +52,8 @@ class EncryptedPrefsManagerTest {
         @Implementation
         fun build(): androidx.security.crypto.MasterKey {
             val cls = androidx.security.crypto.MasterKey::class.java
-            val constructor = cls.declaredConstructors.first()
+            val constructor = cls.declaredConstructors.firstOrNull { it.parameterTypes.size == 3 }
+                 ?: cls.declaredConstructors.first()
             constructor.isAccessible = true
 
             val params = constructor.parameterTypes
@@ -70,7 +71,12 @@ class EncryptedPrefsManagerTest {
 
     @Before
     fun setup() {
-        EncryptedPrefsManager.clearCacheForTesting()
+        // Use reflection to clear the cache instead to ensure test isolation
+        // without relying on clearCacheForTesting.
+        val field = EncryptedPrefsManager::class.java.getDeclaredField("prefsInstances")
+        field.isAccessible = true
+        val map = field.get(EncryptedPrefsManager) as java.util.concurrent.ConcurrentHashMap<*, *>
+        map.clear()
     }
 
     @Test
