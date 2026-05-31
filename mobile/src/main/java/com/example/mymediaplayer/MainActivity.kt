@@ -10,8 +10,8 @@ import androidx.core.content.edit
 import androidx.core.net.toUri
 import android.os.Build
 import android.os.SystemClock
-import android.util.Log
 import android.Manifest
+import timber.log.Timber
 import android.app.SearchManager
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
@@ -833,7 +833,7 @@ class MainActivity : ComponentActivity() {
         val rawQuery = try {
             intent.getStringExtra(SearchManager.QUERY) ?: ""
         } catch (e: Exception) {
-            Log.w("MainActivity", "Failed to read voice search query extra", e)
+            Timber.w(e, "Failed to read voice search query extra")
             ""
         }
         val safeQuery = if (rawQuery.length > 500) rawQuery.substring(0, 500) else rawQuery
@@ -854,7 +854,7 @@ class MainActivity : ComponentActivity() {
                     safeExtras.putString(key, if (value.length > 500) value.substring(0, 500) else value)
                 }
             } catch (e: Exception) {
-                Log.w("MainActivity", "Failed to explicitly extract voice search extra", e)
+                Timber.w(e, "Failed to explicitly extract voice search extra")
             }
         }
 
