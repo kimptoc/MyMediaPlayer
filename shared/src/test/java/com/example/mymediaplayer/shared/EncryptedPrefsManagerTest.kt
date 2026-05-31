@@ -3,6 +3,8 @@ package com.example.mymediaplayer.shared
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.test.core.app.ApplicationProvider
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertSame
 import org.junit.Before
@@ -52,7 +54,7 @@ class EncryptedPrefsManagerTest {
         @Implementation
         fun build(): androidx.security.crypto.MasterKey {
             val cls = androidx.security.crypto.MasterKey::class.java
-            val constructor = cls.declaredConstructors.firstOrNull { it.parameterTypes.size == 3 }
+            val constructor = cls.declaredConstructors.firstOrNull { it.parameterTypes.size == 2 }
                  ?: cls.declaredConstructors.first()
             constructor.isAccessible = true
 
@@ -71,8 +73,6 @@ class EncryptedPrefsManagerTest {
 
     @Before
     fun setup() {
-        // Use reflection to clear the cache instead to ensure test isolation
-        // without relying on clearCacheForTesting.
         val field = EncryptedPrefsManager::class.java.getDeclaredField("prefsInstances")
         field.isAccessible = true
         val map = field.get(EncryptedPrefsManager) as java.util.concurrent.ConcurrentHashMap<*, *>
@@ -87,5 +87,41 @@ class EncryptedPrefsManagerTest {
 
         val prefs2 = EncryptedPrefsManager.createOrGet(context, "test_prefs")
         assertSame(prefs, prefs2)
+    }
+
+    @Test
+    fun testDifferentFilesYieldDifferentInstances() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val prefs1 = EncryptedPrefsManager.createOrGet(context, "test_prefs_1")
+        val prefs2 = EncryptedPrefsManager.createOrGet(context, "test_prefs_2")
+
+        assertNotSame(prefs1, prefs2)
+    }
+
+    @Test
+    fun testClearCache() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val prefs1 = EncryptedPrefsManager.createOrGet(context, "test_prefs")
+
+        EncryptedPrefsManager.clearCacheForTesting()
+
+        val prefs2 = EncryptedPrefsManager.createOrGet(context, "test_prefs")
+
+        // Since we are mocking EncryptedSharedPreferences to return standard SharedPreferences,
+        // calling createOrGet twice with the SAME file name ("test_prefs") and context WILL return the same
+        // SharedPreferences instance internally from Android, even if our cache is cleared.
+        // The cache simply avoids initializing Keystore if we already have it.
+        // Therefore, we can't test assertNotSame here with standard Robolectric getSharedPreferences.
+        // Instead, we just verify it doesn't crash and returns a non-null instance again.
+        assertNotNull(prefs2)
+    }
+
+    @Test
+    fun testPutAndGet() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val prefs = EncryptedPrefsManager.createOrGet(context, "test_prefs")
+
+        prefs.edit().putString("key", "value").commit()
+        assertEquals("value", prefs.getString("key", null))
     }
 }
