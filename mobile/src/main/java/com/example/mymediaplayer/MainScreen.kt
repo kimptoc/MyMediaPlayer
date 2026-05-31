@@ -127,6 +127,7 @@ fun MainScreen(
     onAddToExistingPlaylist: (PlaylistInfo, List<MediaFileInfo>) -> Unit,
     onCreatePlaylistFromSongs: (String, List<MediaFileInfo>) -> PlaylistInfo?,
     onToggleFavorite: (MediaFileInfo) -> Unit,
+    onToggleFlag: (String) -> Unit,
     nowPlayingArt: Bitmap?,
     showPlaylistSaveFolderPrompt: Boolean,
     onDismissPlaylistSaveFolderPrompt: () -> Unit,
@@ -773,13 +774,7 @@ fun MainScreen(
 
     if (showExpandedNowPlayingDialog && uiState.playback.currentTrackName != null) {
         val currentMediaId = uiState.playback.currentMediaId
-        val context = LocalContext.current
-        val flaggedUris = remember { mutableStateOf(emptySet<String>()) }
-        LaunchedEffect(currentMediaId) {
-            val prefs = context.getSharedPreferences("mymediaplayer_prefs", android.content.Context.MODE_PRIVATE)
-            flaggedUris.value = prefs.getStringSet("flagged_uris", emptySet())?.toSet() ?: emptySet()
-        }
-        val isFlagged = currentMediaId != null && currentMediaId in flaggedUris.value
+        val isFlagged = currentMediaId != null && currentMediaId in uiState.flaggedUris
         ExpandedNowPlayingDialog(
             trackName = uiState.playback.currentTrackName,
             artistName = uiState.playback.currentArtistName,
@@ -802,11 +797,7 @@ fun MainScreen(
             onNext = onNext,
             onToggleFlag = {
                 if (currentMediaId != null) {
-                    val prefs = context.getSharedPreferences("mymediaplayer_prefs", android.content.Context.MODE_PRIVATE)
-                    val current = prefs.getStringSet("flagged_uris", emptySet())?.toMutableSet() ?: mutableSetOf()
-                    if (currentMediaId in current) current.remove(currentMediaId) else current.add(currentMediaId)
-                    prefs.edit { putStringSet("flagged_uris", current) }
-                    flaggedUris.value = current.toSet()
+                    onToggleFlag(currentMediaId)
                 }
             },
             onDismiss = { setShowExpandedNowPlayingDialog(false) }
