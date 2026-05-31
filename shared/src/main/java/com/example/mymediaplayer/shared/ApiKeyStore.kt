@@ -97,12 +97,13 @@ object ApiKeyStore {
 
     private suspend fun validateTtsKey(apiKey: String): ValidationResult = withContext(Dispatchers.IO) {
         runCatching {
-            val conn = URL("https://texttospeech.googleapis.com/v1/text:synthesize?key=$apiKey")
+            val conn = URL("https://texttospeech.googleapis.com/v1/text:synthesize")
                 .openConnection() as HttpsURLConnection
             conn.connectTimeout = 5_000
             conn.readTimeout = 8_000
             conn.requestMethod = "POST"
             conn.setRequestProperty("content-type", "application/json")
+            conn.setRequestProperty("X-Goog-Api-Key", apiKey)
             conn.doOutput = true
 
             val body = JSONObject().apply {

@@ -401,6 +401,9 @@ class MainActivity : ComponentActivity() {
             onToggleFavorite = { file ->
                 viewModel.toggleFavorite(file.uriString)
             },
+            onToggleFlag = { uri ->
+                viewModel.toggleFlaggedUri(uri)
+            },
             nowPlayingArt = nowPlayingArt.value,
             showPlaylistSaveFolderPrompt = showPlaylistSaveFolderPrompt.value,
             onDismissPlaylistSaveFolderPrompt = {
