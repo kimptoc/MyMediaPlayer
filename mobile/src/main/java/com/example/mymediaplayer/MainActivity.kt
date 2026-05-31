@@ -143,7 +143,7 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-    @Volatile
+    // Accessed only on UI thread.
     private var cachedTrustedBluetoothDevices: Map<String, String?>? = null
     private val prefsListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         if (key == KEY_BT_AUTOPLAY_DEVICES || key == KEY_BT_AUTOPLAY_ADDRESSES) {
@@ -555,7 +555,9 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        getSharedPreferences(PREFS_NAME, MODE_PRIVATE).unregisterOnSharedPreferenceChangeListener(prefsListener)
+        runCatching {
+            getSharedPreferences(PREFS_NAME, MODE_PRIVATE).unregisterOnSharedPreferenceChangeListener(prefsListener)
+        }
         mediaController?.unregisterCallback(controllerCallback)
         mediaBrowser?.disconnect()
         super.onDestroy()
