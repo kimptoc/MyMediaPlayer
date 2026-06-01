@@ -17,11 +17,10 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.Implementation
 import org.robolectric.annotation.Implements
-import android.os.Build
 import java.util.concurrent.ConcurrentHashMap
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [Build.VERSION_CODES.O], shadows = [EncryptedPrefsManagerTest.ShadowEncryptedSharedPreferences::class, EncryptedPrefsManagerTest.ShadowMasterKeyBuilder::class])
+@Config(sdk = [34], shadows = [EncryptedPrefsManagerTest.ShadowEncryptedSharedPreferences::class, EncryptedPrefsManagerTest.ShadowMasterKeyBuilder::class])
 class EncryptedPrefsManagerTest {
 
     @Implements(androidx.security.crypto.EncryptedSharedPreferences::class)
