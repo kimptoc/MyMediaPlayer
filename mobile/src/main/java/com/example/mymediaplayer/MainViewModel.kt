@@ -16,7 +16,9 @@ import android.support.v4.media.session.PlaybackStateCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Locale
 
 data class ScanState(
@@ -99,6 +101,7 @@ data class MainUiState(
     val favoriteUris: Set<String> = emptySet(),
     val flaggedUris: Set<String> = emptySet(),
     val playCounts: Map<String, Int> = emptyMap(),
+    val isPreferencesLoading: Boolean = true,
     val lastPlayedAt: Map<String, Long> = emptyMap()
 )
 
@@ -145,14 +148,33 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             .getSharedPreferences(PREFS_NAME, Application.MODE_PRIVATE)
         val favorites = prefs.getStringSet(KEY_FAVORITE_URIS, emptySet())?.toSet() ?: emptySet()
         val flagged = prefs.getStringSet(KEY_FLAGGED_URIS, emptySet())?.toSet() ?: emptySet()
-        val playCounts = decodePlayCounts(prefs.getString(KEY_PLAY_COUNTS, null))
-        val lastPlayedAt = decodeLastPlayedAt(prefs.getString(KEY_LAST_PLAYED_AT, null))
+        val rawPlayCounts = prefs.getString(KEY_PLAY_COUNTS, null)
+        val rawLastPlayedAt = prefs.getString(KEY_LAST_PLAYED_AT, null)
+
         _uiState.value = _uiState.value.copy(
             favoriteUris = favorites,
-            flaggedUris = flagged,
-            playCounts = playCounts,
-            lastPlayedAt = lastPlayedAt
+            flaggedUris = flagged
         )
+
+        viewModelScope.launch {
+            val (playCounts, lastPlayedAt) = try {
+                withContext(Dispatchers.IO) {
+                    val p = decodePlayCounts(rawPlayCounts)
+                    val l = decodeLastPlayedAt(rawLastPlayedAt)
+                    p to l
+                }
+            } catch (e: Exception) {
+                emptyMap<String, Int>() to emptyMap<String, Long>()
+            }
+
+            _uiState.update { currentState ->
+                currentState.copy(
+                    playCounts = playCounts,
+                    lastPlayedAt = lastPlayedAt,
+                    isPreferencesLoading = false
+                )
+            }
+        }
     }
 
     override fun onCleared() {
@@ -1275,6 +1297,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun smartPlaylistSongs(smartId: String): List<MediaFileInfo> {
         val current = _uiState.value
+        if (current.isPreferencesLoading) return emptyList()
         val files = current.scan.scannedFiles
         return when (smartId) {
             SMART_FAVORITES -> getFavoriteSongs(files, current.favoriteUris)

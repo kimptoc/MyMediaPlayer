@@ -39,11 +39,11 @@ android {
 
     buildFeatures {
         compose = true
-        buildConfig = true
     }
 }
 
 dependencies {
+    implementation(libs.timber)
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.material3)
@@ -59,7 +59,6 @@ dependencies {
     implementation(libs.androidx.media)
     implementation(project(":shared"))
     implementation(libs.androidx.security.crypto)
-    implementation(libs.timber)
     testImplementation(libs.junit)
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.robolectric)
