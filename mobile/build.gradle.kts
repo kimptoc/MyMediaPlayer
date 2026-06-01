@@ -39,7 +39,6 @@ android {
 
     buildFeatures {
         compose = true
-        buildConfig = true
     }
 }
 
@@ -60,7 +59,6 @@ dependencies {
     implementation(libs.androidx.media)
     implementation(project(":shared"))
     implementation(libs.androidx.security.crypto)
-    implementation(libs.timber)
     testImplementation(libs.junit)
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.robolectric)

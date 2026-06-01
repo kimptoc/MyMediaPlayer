@@ -101,8 +101,8 @@ data class MainUiState(
     val favoriteUris: Set<String> = emptySet(),
     val flaggedUris: Set<String> = emptySet(),
     val playCounts: Map<String, Int> = emptyMap(),
-    val lastPlayedAt: Map<String, Long> = emptyMap(),
-    val isPreferencesLoading: Boolean = false
+    val isPreferencesLoading: Boolean = true,
+    val lastPlayedAt: Map<String, Long> = emptyMap()
 )
 
 enum class LibraryTab(val label: String) {
@@ -153,8 +153,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         _uiState.value = _uiState.value.copy(
             favoriteUris = favorites,
-            flaggedUris = flagged,
-            isPreferencesLoading = true
+            flaggedUris = flagged
         )
 
         viewModelScope.launch {

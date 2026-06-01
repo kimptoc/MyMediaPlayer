@@ -191,7 +191,8 @@ class MainViewModelTest {
             lastPlayedAt = mapOf(
                 "content://test/songB" to 10L,
                 "content://test/songC" to 20L
-            )
+            ),
+            isPreferencesLoading = false
         )
         seedUiState(viewModel, state)
 
