@@ -498,6 +498,9 @@ class MediaCacheService {
         if (state.treeUri != treeUri.toString() || state.scanLimit != maxFiles) {
             return null
         }
+        if (treeUri == MediaStore.Audio.Media.EXTERNAL_CONTENT_URI && isCacheStaleForWholeDevice(context, state.scannedAt)) {
+            return null
+        }
         val files = dao.getAllFiles().map {
             val decodedUri = Uri.decode(it.uriString)
             val genre = it.genre ?: normalizeGenre(inferGenreFromPath(decodedUri))
@@ -952,6 +955,26 @@ class MediaCacheService {
         if (year == null || year <= 0) return UNKNOWN_DECADE
         val decade = (year / 10) * 10
         return "${decade}s"
+    }
+
+    private fun isCacheStaleForWholeDevice(context: Context, scannedAt: Long): Boolean {
+        val projection = arrayOf(MediaStore.Audio.Media.DATE_ADDED)
+        context.contentResolver.query(
+            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+            projection,
+            "${MediaStore.Audio.Media.IS_MUSIC} != 0",
+            null,
+            "${MediaStore.Audio.Media.DATE_ADDED} DESC"
+        )?.use { cursor ->
+            if (cursor.moveToFirst() && !cursor.isNull(0)) {
+                val latestSeconds = cursor.getLong(0)
+                if (latestSeconds > 0) {
+                    val latestMs = latestSeconds * 1000L
+                    if (latestMs > scannedAt) return true
+                }
+            }
+        }
+        return false
     }
 
 }
