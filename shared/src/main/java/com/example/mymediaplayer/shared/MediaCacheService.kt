@@ -11,6 +11,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.runInterruptible
+import kotlinx.coroutines.withTimeoutOrNull
 import java.time.Instant
 import java.time.ZoneId
 import java.util.Locale
@@ -39,6 +41,9 @@ class MediaCacheService {
         private const val UNKNOWN_DECADE = "Unknown Decade"
         private const val METADATA_BATCH_SIZE = 50
         private const val METADATA_PARALLELISM = 4
+        // MediaMetadataRetriever.setDataSource can block indefinitely when MediaPlayer holds
+        // the hardware codec. This timeout lets the batch continue with filename fallback.
+        private const val METADATA_EXTRACT_TIMEOUT_MS = 2000L
         private val SUPPORTED_AUDIO_EXTENSIONS = setOf(
             ".mp3", ".m4a", ".aac", ".flac", ".ogg", ".opus", ".wav", ".m4b",
             ".aiff", ".aif", ".wma", ".alac", ".ape", ".amr", ".awb",
@@ -440,8 +445,12 @@ class MediaCacheService {
         return probedCandidates
     }
 
-    private fun extractCandidateMetadata(context: Context, candidate: FileCandidate): MediaFileInfo? {
-        val metadata = MediaMetadataHelper.extractMetadata(context, candidate.uri.toString())
+    private suspend fun extractCandidateMetadata(context: Context, candidate: FileCandidate): MediaFileInfo? {
+        val metadata = withTimeoutOrNull(METADATA_EXTRACT_TIMEOUT_MS) {
+            runInterruptible(Dispatchers.IO) {
+                MediaMetadataHelper.extractMetadata(context, candidate.uri.toString())
+            }
+        }
         if (candidate.requiresProbe) {
             if (!looksLikeAudioMetadata(metadata)) {
                 return null
