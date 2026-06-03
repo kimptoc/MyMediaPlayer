@@ -120,34 +120,43 @@ class MyMusicService : MediaBrowserServiceCompat() {
             if (existingPrefs != null) { return existingPrefs }
             val encryptedPrefs = EncryptedPrefsManager.createOrGet(context, "${PREFS_NAME}_encrypted")
             val standardPrefsFile = File(context.applicationInfo.dataDir, "shared_prefs/${PREFS_NAME}.xml")
-            if (standardPrefsFile.exists() && !encryptedPrefs.getBoolean("migration_completed", false)) {
-                val standardPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                val editor = encryptedPrefs.edit()
-                for ((key, value) in standardPrefs.all) {
-                    when (value) {
-                        is String -> editor.putString(key, value)
-                        is Int -> editor.putInt(key, value)
-                        is Boolean -> editor.putBoolean(key, value)
-                        is Long -> editor.putLong(key, value)
-                        is Float -> editor.putFloat(key, value)
-                        is Set<*> -> {
-                            @Suppress("UNCHECKED_CAST")
-                            editor.putStringSet(key, value as Set<String>)
+            val standardPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+            if (encryptedPrefs != null) {
+                if (standardPrefsFile.exists() && !encryptedPrefs.getBoolean("migration_completed", false)) {
+                    val editor = encryptedPrefs.edit()
+                    for ((key, value) in standardPrefs.all) {
+                        when (value) {
+                            is String -> editor.putString(key, value)
+                            is Int -> editor.putInt(key, value)
+                            is Boolean -> editor.putBoolean(key, value)
+                            is Long -> editor.putLong(key, value)
+                            is Float -> editor.putFloat(key, value)
+                            is Set<*> -> {
+                                @Suppress("UNCHECKED_CAST")
+                                editor.putStringSet(key, value as Set<String>)
+                            }
                         }
                     }
+                    try {
+                        @Suppress("ApplySharedPref")
+                        editor.putBoolean("migration_completed", true).commit()
+                        @Suppress("ApplySharedPref")
+                        standardPrefs.edit().clear().commit()
+                        standardPrefsFile.delete()
+                    } catch (e: Exception) {
+                        // Log error - migration will retry on next app launch
+                    }
                 }
-                try {
-                    @Suppress("ApplySharedPref")
-                    editor.putBoolean("migration_completed", true).commit()
-                    @Suppress("ApplySharedPref")
-                    standardPrefs.edit().clear().commit()
-                    standardPrefsFile.delete()
-                } catch (e: Exception) {
-                    // Log error - migration will retry on next app launch
-                }
+                prefsInstance = encryptedPrefs
+                return encryptedPrefs
             }
-            prefsInstance = encryptedPrefs
-            return encryptedPrefs
+
+            // Keystore unavailable — fall back to standard (unencrypted) preferences.
+            // If a migration was previously completed, the standard prefs will be empty;
+            // the user will just need to reconfigure settings.
+            prefsInstance = standardPrefs
+            return standardPrefs
         }
         private const val ACTION_MEDIA_PLAY_FROM_SEARCH = "android.media.action.MEDIA_PLAY_FROM_SEARCH"
 
