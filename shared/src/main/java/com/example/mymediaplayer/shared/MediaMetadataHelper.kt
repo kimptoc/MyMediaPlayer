@@ -5,14 +5,50 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.util.Log
 import android.util.LruCache
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 
 object MediaMetadataHelper {
 
     private const val TAG = "MediaMetadataHelper"
     private val metadataCache = LruCache<String, MediaMetadataInfo>(1024)
+    private const val METADATA_EXTRACTION_TIMEOUT_MS = 5000L
+    @Volatile
+    private var executor: ExecutorService? = null
+
+    private fun getExecutor(): ExecutorService {
+        var e = executor
+        if (e == null || e.isShutdown) {
+            synchronized(this) {
+                e = executor
+                if (e == null || e.isShutdown) {
+                    e = Executors.newSingleThreadExecutor()
+                    executor = e
+                }
+            }
+        }
+        return e
+    }
 
     fun extractMetadata(context: Context, uriString: String): MediaMetadataInfo? {
         metadataCache.get(uriString)?.let { return it }
+        return try {
+            val future = getExecutor().submit<MediaMetadataInfo?> {
+                doExtractMetadata(context, uriString)
+            }
+            future.get(METADATA_EXTRACTION_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+        } catch (e: TimeoutException) {
+            Log.w(TAG, "Metadata extraction timed out for $uriString (file may be in use by playback)")
+            null
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to read metadata: ${e.javaClass.simpleName}")
+            null
+        }
+    }
+
+    private fun doExtractMetadata(context: Context, uriString: String): MediaMetadataInfo? {
         val retriever = MediaMetadataRetriever()
         return try {
             retriever.setDataSource(context, Uri.parse(uriString))
