@@ -1166,10 +1166,12 @@ private fun ScanDialogContent(
                 onClick = {
                     if (isValid) {
                         onDismissRequest()
-                        if (scanWholeDriveMode) {
-                            onScanWholeDriveWithLimit(countValue!!)
-                        } else {
-                            onSelectFolderWithLimit(countValue!!, scanDeepMode)
+                        countValue?.let { count ->
+                            if (scanWholeDriveMode) {
+                                onScanWholeDriveWithLimit(count)
+                            } else {
+                                onSelectFolderWithLimit(count, scanDeepMode)
+                            }
                         }
                     }
                 },
