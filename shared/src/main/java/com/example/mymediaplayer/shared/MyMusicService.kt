@@ -1416,6 +1416,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                             notifyChildrenChanged(SONGS_ALL_ID)
                         }
                     }
+                    val scanStartedAt = System.currentTimeMillis()
                     if (wholeDriveMode) {
                         mediaCacheService.scanWholeDevice(this@MyMusicService, limit, progress)
                     } else {
@@ -1430,7 +1431,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                         mediaCacheService.enrichGenresFromMediaStore(this@MyMusicService)
                     }
                     mediaCacheService.buildAlbumArtistIndexesFromCache()
-                    mediaCacheService.persistCache(this@MyMusicService, uri, limit)
+                    mediaCacheService.persistCache(this@MyMusicService, uri, limit, scanStartedAt)
                 }
             } finally {
                 isScanning = false

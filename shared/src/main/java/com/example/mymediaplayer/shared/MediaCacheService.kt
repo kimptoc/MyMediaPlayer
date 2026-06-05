@@ -545,7 +545,7 @@ class MediaCacheService {
         dao.replacePlaylists(playlists)
     }
 
-    fun persistCache(context: Context, treeUri: Uri, maxFiles: Int) {
+    fun persistCache(context: Context, treeUri: Uri, maxFiles: Int, scannedAt: Long = System.currentTimeMillis()) {
         val db = MediaCacheDatabase.getInstance(context)
         val dao = db.cacheDao()
         val files = synchronized(cacheLock) { _cachedFiles.toList() }.map {
@@ -571,7 +571,7 @@ class MediaCacheService {
         val state = ScanStateEntity(
             treeUri = treeUri.toString(),
             scanLimit = maxFiles,
-            scannedAt = System.currentTimeMillis()
+            scannedAt = scannedAt
         )
         dao.replaceCache(files, playlists, state)
     }
@@ -966,8 +966,9 @@ class MediaCacheService {
             null,
             "${MediaStore.Audio.Media.DATE_ADDED} DESC"
         )?.use { cursor ->
-            if (cursor.moveToFirst() && !cursor.isNull(0)) {
-                val latestSeconds = cursor.getLong(0)
+            val col = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
+            if (cursor.moveToFirst() && !cursor.isNull(col)) {
+                val latestSeconds = cursor.getLong(col)
                 if (latestSeconds > 0) {
                     val latestMs = latestSeconds * 1000L
                     if (latestMs > scannedAt) return true
