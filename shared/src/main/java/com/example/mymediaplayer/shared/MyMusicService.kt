@@ -819,7 +819,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
             serviceScope.launch {
                 try {
                     ensureMetadataIndexes()
-                    result.sendResult(buildMediaItems(parentId))
+                    result.sendResult(buildMediaItems(parentId).toMutableList())
                 } catch (e: Exception) {
                     Log.e("MyMusicService", "Failed to build media items for $parentId", e)
                     result.sendResult(mutableListOf())
@@ -828,7 +828,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
             return
         }
 
-        result.sendResult(buildMediaItems(parentId))
+        result.sendResult(buildMediaItems(parentId).toMutableList())
     }
 
     override fun onSearch(query: String, extras: Bundle?, result: Result<MutableList<MediaItem>>) {
@@ -1465,7 +1465,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
             }
 
         for ((parentId, results) in pending) {
-            val items = buildMediaItems(parentId)
+            val items = buildMediaItems(parentId).toMutableList()
             for (result in results) {
                 result.sendResult(items)
             }
