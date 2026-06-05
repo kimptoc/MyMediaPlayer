@@ -104,7 +104,7 @@ class EncryptedPrefsManagerTest {
         // Verify the internal prefsInstances map is actually cleared
         val field = EncryptedPrefsManager::class.java.getDeclaredField("prefsInstances")
         field.isAccessible = true
-        val map = field.get(EncryptedPrefsManager) as ConcurrentHashMap<*, *>
+        val map = field.get(EncryptedPrefsManager) as Map<*, *>
 
         assertTrue(map.isEmpty())
     }
