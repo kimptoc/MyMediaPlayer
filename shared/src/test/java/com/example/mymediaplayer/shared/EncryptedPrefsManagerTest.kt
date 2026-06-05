@@ -116,7 +116,7 @@ class EncryptedPrefsManagerTest {
     @Test
     fun testPutAndGet() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        val prefs = EncryptedPrefsManager.createOrGet(context, "test_prefs")
+        val prefs = requireNotNull(EncryptedPrefsManager.createOrGet(context, "test_prefs"))
 
         prefs.edit().putString("key", "value").commit()
         assertEquals("value", prefs.getString("key", null))

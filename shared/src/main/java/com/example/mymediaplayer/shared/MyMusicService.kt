@@ -145,7 +145,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                         standardPrefs.edit().clear().commit()
                         standardPrefsFile.delete()
                     } catch (e: Exception) {
-                        // Log error - migration will retry on next app launch
+                        Log.e("MyMusicService", "Failed to commit prefs migration for $PREFS_NAME — will retry on next launch", e)
                     }
                 }
                 prefsInstance = encryptedPrefs

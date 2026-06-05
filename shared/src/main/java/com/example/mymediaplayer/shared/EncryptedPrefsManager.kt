@@ -5,6 +5,8 @@ import android.content.SharedPreferences
 import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import java.io.IOException
+import java.security.GeneralSecurityException
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -38,8 +40,12 @@ object EncryptedPrefsManager {
                     EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
                     EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
                 ).also { prefsInstances[fileName] = it }
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to create EncryptedSharedPreferences for $fileName — keystore unavailable", e)
+            } catch (e: GeneralSecurityException) {
+                Log.e(TAG, "Failed to create EncryptedSharedPreferences for $fileName", e)
+                prefsInstances[fileName] = null
+                null
+            } catch (e: IOException) {
+                Log.e(TAG, "Failed to create EncryptedSharedPreferences for $fileName", e)
                 prefsInstances[fileName] = null
                 null
             }
