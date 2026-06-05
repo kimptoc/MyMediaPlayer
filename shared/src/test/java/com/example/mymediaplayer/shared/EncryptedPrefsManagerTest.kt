@@ -17,7 +17,6 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.Implementation
 import org.robolectric.annotation.Implements
-import java.util.concurrent.ConcurrentHashMap
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], shadows = [EncryptedPrefsManagerTest.ShadowEncryptedSharedPreferences::class, EncryptedPrefsManagerTest.ShadowMasterKeyBuilder::class])
@@ -73,10 +72,7 @@ class EncryptedPrefsManagerTest {
 
     @Before
     fun setup() {
-        val field = EncryptedPrefsManager::class.java.getDeclaredField("prefsInstances")
-        field.isAccessible = true
-        val map = field.get(EncryptedPrefsManager) as ConcurrentHashMap<*, *>
-        map.clear()
+        EncryptedPrefsManager.clearCacheForTesting()
     }
 
     @Test
@@ -108,7 +104,7 @@ class EncryptedPrefsManagerTest {
         // Verify the internal prefsInstances map is actually cleared
         val field = EncryptedPrefsManager::class.java.getDeclaredField("prefsInstances")
         field.isAccessible = true
-        val map = field.get(EncryptedPrefsManager) as ConcurrentHashMap<*, *>
+        val map = field.get(EncryptedPrefsManager) as Map<*, *>
 
         assertTrue(map.isEmpty())
     }
@@ -116,7 +112,7 @@ class EncryptedPrefsManagerTest {
     @Test
     fun testPutAndGet() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        val prefs = EncryptedPrefsManager.createOrGet(context, "test_prefs")
+        val prefs = requireNotNull(EncryptedPrefsManager.createOrGet(context, "test_prefs"))
 
         prefs.edit().putString("key", "value").commit()
         assertEquals("value", prefs.getString("key", null))
