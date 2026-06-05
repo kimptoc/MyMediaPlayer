@@ -17,7 +17,6 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.Implementation
 import org.robolectric.annotation.Implements
-import java.util.concurrent.ConcurrentHashMap
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], shadows = [EncryptedPrefsManagerTest.ShadowEncryptedSharedPreferences::class, EncryptedPrefsManagerTest.ShadowMasterKeyBuilder::class])
@@ -73,10 +72,7 @@ class EncryptedPrefsManagerTest {
 
     @Before
     fun setup() {
-        val field = EncryptedPrefsManager::class.java.getDeclaredField("prefsInstances")
-        field.isAccessible = true
-        val map = field.get(EncryptedPrefsManager) as ConcurrentHashMap<*, *>
-        map.clear()
+        EncryptedPrefsManager.clearCacheForTesting()
     }
 
     @Test

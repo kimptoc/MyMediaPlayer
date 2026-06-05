@@ -7,6 +7,7 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import java.io.IOException
 import java.security.GeneralSecurityException
+import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -14,7 +15,9 @@ import java.util.concurrent.ConcurrentHashMap
  */
 object EncryptedPrefsManager {
     private const val TAG = "EncryptedPrefsManager"
-    private val prefsInstances = ConcurrentHashMap<String, SharedPreferences?>()
+    private val prefsInstances = ConcurrentHashMap<String, SharedPreferences>()
+    // ConcurrentHashMap does not support null values, so failures are tracked separately.
+    private val failedFileNames: MutableSet<String> = Collections.newSetFromMap(ConcurrentHashMap())
 
     /**
      * Creates or retrieves an EncryptedSharedPreferences instance for the given file name.
@@ -22,13 +25,11 @@ object EncryptedPrefsManager {
      * after OS updates or keystore corruption).
      */
     fun createOrGet(context: Context, fileName: String): SharedPreferences? {
-        val cached = prefsInstances[fileName]
-        if (cached != null) return cached
-        // Check if we already tried and failed (null value cached)
-        if (prefsInstances.containsKey(fileName)) return null
+        prefsInstances[fileName]?.let { return it }
+        if (failedFileNames.contains(fileName)) return null
         return synchronized(prefsInstances) {
-            val existing = prefsInstances[fileName]
-            if (existing != null) return@synchronized existing
+            prefsInstances[fileName]?.let { return@synchronized it }
+            if (failedFileNames.contains(fileName)) return@synchronized null
             try {
                 val masterKey = MasterKey.Builder(context)
                     .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
@@ -42,11 +43,11 @@ object EncryptedPrefsManager {
                 ).also { prefsInstances[fileName] = it }
             } catch (e: GeneralSecurityException) {
                 Log.e(TAG, "Failed to create EncryptedSharedPreferences for $fileName", e)
-                prefsInstances[fileName] = null
+                failedFileNames.add(fileName)
                 null
             } catch (e: IOException) {
                 Log.e(TAG, "Failed to create EncryptedSharedPreferences for $fileName", e)
-                prefsInstances[fileName] = null
+                failedFileNames.add(fileName)
                 null
             }
         }
@@ -54,5 +55,6 @@ object EncryptedPrefsManager {
 
     fun clearCacheForTesting() {
         prefsInstances.clear()
+        failedFileNames.clear()
     }
 }
