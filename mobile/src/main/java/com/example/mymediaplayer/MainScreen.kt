@@ -2579,10 +2579,12 @@ private fun SongsTabContent(
     onToggleFavorite: (MediaFileInfo) -> Unit,
     currentMediaId: String?
 ) {
-    val filteredByDecade = if (selectedDecade != null) {
-        scannedFiles.filter { decadeLabelForYear(it.year) == selectedDecade }
-    } else {
-        scannedFiles
+    val filteredByDecade = remember(scannedFiles, selectedDecade) {
+        if (selectedDecade != null) {
+            scannedFiles.filter { decadeLabelForYear(it.year) == selectedDecade }
+        } else {
+            scannedFiles
+        }
     }
     val songsForTab = if (songsFavoritesOnly) {
         filteredByDecade.filter { it.uriString in favoriteUris }
