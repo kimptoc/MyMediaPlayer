@@ -1905,8 +1905,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
         consecutivePlaybackErrors += 1
         if (!shouldRetryPlaybackError(consecutivePlaybackErrors, MAX_CONSECUTIVE_PLAYBACK_ERRORS)) {
             Log.w("MyMusicService", "Too many consecutive playback errors, stopping recovery")
-            teardownPlayer()
             updatePlaybackState(PlaybackStateCompat.STATE_ERROR, errorMessage = message)
+            teardownPlayer()
             consecutivePlaybackErrors = 0
             return
         }
@@ -1919,6 +1919,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         Log.w("MyMusicService", "Unable to recover playback error: $message")
         updatePlaybackState(PlaybackStateCompat.STATE_ERROR, errorMessage = message)
         teardownPlayer()
+        consecutivePlaybackErrors = 0
     }
 
     private fun peekNextQueueTrack(): MediaFileInfo? {

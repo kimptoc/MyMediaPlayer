@@ -64,7 +64,7 @@ class MyMusicServicePlaybackErrorTest {
 
         // The queue index advanced, proving the advance branch was taken (not error-state path)
         val queueIndex = getQueueIndex(service)
-        assertEquals(true, queueIndex >= 1)
+        assertEquals(1, queueIndex)
     }
 
     private fun setConsecutiveErrors(service: MyMusicService, count: Int) {
