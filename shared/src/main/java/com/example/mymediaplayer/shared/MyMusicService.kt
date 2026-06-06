@@ -1905,7 +1905,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
         consecutivePlaybackErrors += 1
         if (!shouldRetryPlaybackError(consecutivePlaybackErrors, MAX_CONSECUTIVE_PLAYBACK_ERRORS)) {
             Log.w("MyMusicService", "Too many consecutive playback errors, stopping recovery")
-            handleStop()
+            teardownPlayer()
+            updatePlaybackState(PlaybackStateCompat.STATE_ERROR, errorMessage = message)
             consecutivePlaybackErrors = 0
             return
         }
@@ -1917,7 +1918,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }
         Log.w("MyMusicService", "Unable to recover playback error: $message")
         updatePlaybackState(PlaybackStateCompat.STATE_ERROR, errorMessage = message)
-        handleStop()
+        teardownPlayer()
     }
 
     private fun peekNextQueueTrack(): MediaFileInfo? {
@@ -2633,14 +2634,18 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }
     }
 
-    private fun handleStop() {
+    private fun teardownPlayer() {
         resumeOnAudioFocusGain = false
         val lastPosition = currentPositionSafeMs()
         releaseMediaPlayer()
         abandonAudioFocus()
+        savePlaybackSnapshot(positionMsOverride = lastPosition)
+    }
+
+    private fun handleStop() {
+        teardownPlayer()
         updatePlaybackState(PlaybackStateCompat.STATE_STOPPED)
         consecutivePlaybackErrors = 0
-        savePlaybackSnapshot(positionMsOverride = lastPosition)
     }
 
     private fun updatePlaybackState(state: Int, errorMessage: String? = null) {
