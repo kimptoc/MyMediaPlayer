@@ -76,6 +76,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         private const val GENRE_LETTER_PREFIX = "genre_letter:"
         private const val SONG_LETTER_PREFIX = "song_letter:"
         private const val SONG_BUCKET_THRESHOLD = 500
+        private val SEARCH_INTENT_SANITIZE_REGEX = Regex("[<>]")
         private const val ACTION_PLAY_ALL_PREFIX = "action:play_all:"
         private const val ACTION_SHUFFLE_PREFIX = "action:shuffle:"
         private const val PREFS_NAME = "mymediaplayer_prefs"
@@ -732,9 +733,10 @@ class MyMusicService : MediaBrowserServiceCompat() {
             val rawQuery = try {
                 intent.getStringExtra(SearchManager.QUERY) ?: ""
             } catch (e: Exception) {
+                Log.w("MyMusicService", "Failed to read search query extra", e)
                 ""
             }
-            val sanitizedQuery = rawQuery.replace(Regex("[<>]"), "")
+            val sanitizedQuery = rawQuery.replace(SEARCH_INTENT_SANITIZE_REGEX, "")
             val query = if (sanitizedQuery.length > 500) {
                 sanitizedQuery.substring(0, 500)
             } else {
@@ -754,11 +756,11 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     try {
                         val value = intent.getStringExtra(key)
                         if (value != null) {
-                            val sanitizedValue = value.replace(Regex("[<>]"), "")
+                            val sanitizedValue = value.replace(SEARCH_INTENT_SANITIZE_REGEX, "")
                             putString(key, if (sanitizedValue.length > 500) sanitizedValue.substring(0, 500) else sanitizedValue)
                         }
                     } catch (e: Exception) {
-                        // Ignore
+                        Log.w("MyMusicService", "Failed to read search intent extra '$key'", e)
                     }
                 }
             }
