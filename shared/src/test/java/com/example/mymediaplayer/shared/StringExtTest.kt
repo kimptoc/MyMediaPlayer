@@ -30,5 +30,10 @@ class StringExtTest {
         assertEquals("(none)", "some.dir/file.".fileExtension())
         assertEquals(".txt", "some.dir/file.txt".fileExtension())
         assertEquals(".gz", "archive.tar.gz".fileExtension())
+
+        // Backslash paths (Windows-style)
+        assertEquals("(none)", "some.dir\\file".fileExtension())
+        assertEquals(".txt", "some.dir\\file.txt".fileExtension())
+        assertEquals(".mp3", "C:\\Music\\some.album\\track.mp3".fileExtension())
     }
 }

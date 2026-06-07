@@ -7,7 +7,7 @@ import java.util.Locale
  * including the dot (e.g., ".mp3"), or "(none)" if no extension is found.
  */
 fun String.fileExtension(): String {
-    val filename = this.substringAfterLast('/')
+    val filename = this.substringAfterLast('/').substringAfterLast('\\')
     val ext = filename.substringAfterLast('.', "")
     return if (ext.isNotEmpty()) ".$ext".lowercase(Locale.US) else "(none)"
 }
