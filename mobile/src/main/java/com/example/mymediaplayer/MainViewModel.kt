@@ -899,8 +899,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val current = _uiState.value
         if (success) {
             val updatedSongs = if (current.playlist.isSelected(playlist)) {
-                val existingUris = current.playlist.playlistSongs.map { it.uriString }.toMutableSet()
-                val additions = files.filter { existingUris.add(it.uriString) }
+                val existingUris = HashSet<String>(current.playlist.playlistSongs.size)
+                for (i in 0 until current.playlist.playlistSongs.size) {
+                    existingUris.add(current.playlist.playlistSongs[i].uriString)
+                }
+
+                val additions = ArrayList<MediaFileInfo>()
+                for (i in 0 until files.size) {
+                    val file = files[i]
+                    if (existingUris.add(file.uriString)) {
+                        additions.add(file)
+                    }
+                }
                 current.playlist.playlistSongs + additions
             } else {
                 current.playlist.playlistSongs
