@@ -2586,10 +2586,12 @@ private fun SongsTabContent(
             scannedFiles
         }
     }
-    val songsForTab = if (songsFavoritesOnly) {
-        filteredByDecade.filter { it.uriString in favoriteUris }
-    } else {
-        filteredByDecade
+    val songsForTab = remember(filteredByDecade, songsFavoritesOnly, favoriteUris) {
+        if (songsFavoritesOnly) {
+            filteredByDecade.filter { it.uriString in favoriteUris }
+        } else {
+            filteredByDecade
+        }
     }
 
     Row(
