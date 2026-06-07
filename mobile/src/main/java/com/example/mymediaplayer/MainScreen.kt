@@ -2037,45 +2037,20 @@ private fun PlaylistDetails(
                             } else {
                                 Modifier
                             }
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 4.dp),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.secondaryContainer
-                                )
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .padding(12.dp)
-                                        .graphicsLayer {
-                                            translationY = if (draggingIndex == sourceIndex) draggingOffsetY else 0f
-                                        }
-                                        .then(dragModifier),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Text(
-                                        text = file.cleanTitle,
-                                        modifier = Modifier.weight(1f),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    Text(
-                                        text = if (canDrag) "Drag" else "Filtered",
-                                        style = MaterialTheme.typography.labelMedium
-                                    )
-                                    TextButton(
-                                        onClick = {
-                                            if (sourceIndex in editableSongs.indices) {
-                                                val list = editableSongs.toMutableList()
-                                                list.removeAt(sourceIndex)
-                                                setEditableSongs(list)
-                                            }
-                                        }
-                                    ) { Text("Remove") }
+                            EditableSongCard(
+                                file = file,
+                                canDrag = canDrag,
+                                isDragging = draggingIndex == sourceIndex,
+                                draggingOffsetY = draggingOffsetY,
+                                dragModifier = dragModifier,
+                                onRemove = {
+                                    if (sourceIndex in editableSongs.indices) {
+                                        val list = editableSongs.toMutableList()
+                                        list.removeAt(sourceIndex)
+                                        setEditableSongs(list)
+                                    }
                                 }
-                            }
+                            )
                         }
                     }
                 }
@@ -2466,6 +2441,50 @@ fun PlaylistCard(
                     Text("Delete")
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun EditableSongCard(
+    file: MediaFileInfo,
+    canDrag: Boolean,
+    isDragging: Boolean,
+    draggingOffsetY: Float,
+    dragModifier: Modifier,
+    onRemove: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(12.dp)
+                .graphicsLayer {
+                    translationY = if (isDragging) draggingOffsetY else 0f
+                }
+                .then(dragModifier),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = file.cleanTitle,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = if (canDrag) "Drag" else "Filtered",
+                style = MaterialTheme.typography.labelMedium
+            )
+            TextButton(
+                onClick = onRemove
+            ) { Text("Remove") }
         }
     }
 }
