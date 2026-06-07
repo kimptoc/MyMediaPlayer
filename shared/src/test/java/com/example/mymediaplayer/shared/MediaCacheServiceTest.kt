@@ -145,4 +145,47 @@ class MediaCacheServiceTest {
             dao.clearPlaylists()
         }
     }
+
+    @Test
+    fun songsForDecade_returnsCorrectSongs() {
+        val service = MediaCacheService()
+
+        service.addFile(
+            MediaFileInfo(
+                uriString = "uri1",
+                displayName = "file1",
+                sizeBytes = 1000L,
+                year = 1995
+            )
+        )
+        service.addFile(
+            MediaFileInfo(
+                uriString = "uri2",
+                displayName = "file2",
+                sizeBytes = 1000L,
+                year = 1998
+            )
+        )
+        service.addFile(
+            MediaFileInfo(
+                uriString = "uri3",
+                displayName = "file3",
+                sizeBytes = 1000L,
+                year = 2005
+            )
+        )
+        service.buildAlbumArtistIndexesFromCache()
+
+        val songs90s = service.songsForDecade("1990s")
+        assertEquals(2, songs90s.size)
+        assertEquals("uri1", songs90s[0].uriString)
+        assertEquals("uri2", songs90s[1].uriString)
+
+        val songs2000s = service.songsForDecade("2000s")
+        assertEquals(1, songs2000s.size)
+        assertEquals("uri3", songs2000s[0].uriString)
+
+        val songsUnknown = service.songsForDecade("1980s")
+        assertTrue(songsUnknown.isEmpty())
+    }
 }
