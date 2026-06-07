@@ -150,27 +150,31 @@ class MediaCacheServiceTest {
     fun songsForDecade_returnsCorrectSongs() {
         val service = MediaCacheService()
 
-        val file1 = MediaFileInfo(
-            uriString = "uri1",
-            displayName = "file1",
-            sizeBytes = 1000L,
-            year = 1995
+        service.addFile(
+            MediaFileInfo(
+                uriString = "uri1",
+                displayName = "file1",
+                sizeBytes = 1000L,
+                year = 1995
+            )
         )
-
-        val file2 = MediaFileInfo(
-            uriString = "uri2",
-            displayName = "file2",
-            sizeBytes = 1000L,
-            year = 1998
+        service.addFile(
+            MediaFileInfo(
+                uriString = "uri2",
+                displayName = "file2",
+                sizeBytes = 1000L,
+                year = 1998
+            )
         )
-
-        val decadeIndexField = MediaCacheService::class.java.getDeclaredField("decadeIndex")
-        decadeIndexField.isAccessible = true
-        @Suppress("UNCHECKED_CAST")
-        val map = decadeIndexField.get(service) as MutableMap<String, MutableList<MediaFileInfo>>
-
-        map["1990s"] = mutableListOf(file1, file2)
-        map["2000s"] = mutableListOf()
+        service.addFile(
+            MediaFileInfo(
+                uriString = "uri3",
+                displayName = "file3",
+                sizeBytes = 1000L,
+                year = 2005
+            )
+        )
+        service.buildAlbumArtistIndexesFromCache()
 
         val songs90s = service.songsForDecade("1990s")
         assertEquals(2, songs90s.size)
@@ -178,7 +182,8 @@ class MediaCacheServiceTest {
         assertEquals("uri2", songs90s[1].uriString)
 
         val songs2000s = service.songsForDecade("2000s")
-        assertTrue(songs2000s.isEmpty())
+        assertEquals(1, songs2000s.size)
+        assertEquals("uri3", songs2000s[0].uriString)
 
         val songsUnknown = service.songsForDecade("1980s")
         assertTrue(songsUnknown.isEmpty())
