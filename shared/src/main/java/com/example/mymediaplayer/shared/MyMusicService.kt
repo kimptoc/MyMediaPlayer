@@ -76,6 +76,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         private const val GENRE_LETTER_PREFIX = "genre_letter:"
         private const val SONG_LETTER_PREFIX = "song_letter:"
         private const val SONG_BUCKET_THRESHOLD = 500
+        private val SEARCH_INTENT_SANITIZE_REGEX = Regex("[<>]")
         private const val ACTION_PLAY_ALL_PREFIX = "action:play_all:"
         private const val ACTION_SHUFFLE_PREFIX = "action:shuffle:"
         private const val PREFS_NAME = "mymediaplayer_prefs"
@@ -729,28 +730,37 @@ class MyMusicService : MediaBrowserServiceCompat() {
             return START_NOT_STICKY
         }
         if (intent?.action == ACTION_MEDIA_PLAY_FROM_SEARCH) {
-            val rawQuery = intent.getStringExtra(SearchManager.QUERY)
-            val query = if (rawQuery != null && rawQuery.length > 500) {
-                rawQuery.substring(0, 500)
+            val rawQuery = try {
+                intent.getStringExtra(SearchManager.QUERY) ?: ""
+            } catch (e: Exception) {
+                Log.w("MyMusicService", "Failed to read search query extra", e)
+                ""
+            }
+            val sanitizedQuery = rawQuery.replace(SEARCH_INTENT_SANITIZE_REGEX, "")
+            val query = if (sanitizedQuery.length > 500) {
+                sanitizedQuery.substring(0, 500)
             } else {
-                rawQuery
+                sanitizedQuery
             }
 
-            val extras = intent.extras?.let { originalExtras ->
-                Bundle().apply {
-                    val allowedKeys = setOf(
-                        "android.intent.extra.focus",
-                        "android.intent.extra.artist",
-                        "android.intent.extra.album",
-                        "android.intent.extra.genre",
-                        "android.intent.extra.title",
-                        "android.intent.extra.playlist"
-                    )
-                    for (key in allowedKeys) {
-                        val value = originalExtras.getString(key)
+            val extras = Bundle().apply {
+                val allowedKeys = setOf(
+                    "android.intent.extra.focus",
+                    "android.intent.extra.artist",
+                    "android.intent.extra.album",
+                    "android.intent.extra.genre",
+                    "android.intent.extra.title",
+                    "android.intent.extra.playlist"
+                )
+                for (key in allowedKeys) {
+                    try {
+                        val value = intent.getStringExtra(key)
                         if (value != null) {
-                            putString(key, if (value.length > 500) value.substring(0, 500) else value)
+                            val sanitizedValue = value.replace(SEARCH_INTENT_SANITIZE_REGEX, "")
+                            putString(key, if (sanitizedValue.length > 500) sanitizedValue.substring(0, 500) else sanitizedValue)
                         }
+                    } catch (e: Exception) {
+                        Log.w("MyMusicService", "Failed to read search intent extra '$key'", e)
                     }
                 }
             }
