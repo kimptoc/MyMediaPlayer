@@ -2653,7 +2653,7 @@ private fun SongsTabContent(
 }
 
 @Composable
-fun MainScreenTopBarActions(
+private fun MainScreenTopBarActions(
     isSearchExpanded: Boolean,
     searchQuery: String,
     menuExpanded: Boolean,
