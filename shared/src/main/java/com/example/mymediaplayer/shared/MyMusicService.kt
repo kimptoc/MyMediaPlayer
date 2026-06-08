@@ -36,11 +36,10 @@ import androidx.media.MediaBrowserServiceCompat
 import android.graphics.BitmapFactory
 import androidx.core.content.ContextCompat
 import androidx.media.utils.MediaConstants
-import androidx.media3.common.MediaItem
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.extractor.metadata.flac.PictureFrame
 import androidx.media3.extractor.metadata.id3.ApicFrame
-import androidx.media3.inspector.MetadataRetriever
+import androidx.media3.exoplayer.MetadataRetriever
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -2814,21 +2813,19 @@ class MyMusicService : MediaBrowserServiceCompat() {
     @OptIn(UnstableApi::class)
     private suspend fun extractArtworkFromMedia3(context: Context, uriString: String): ByteArray? {
         return try {
-            val mediaItem = MediaItem.fromUri(uriString)
-            MetadataRetriever.Builder(context, mediaItem).build().use { retriever ->
-                val trackGroups = retriever.retrieveTrackGroups().await()
-                for (i in 0 until trackGroups.length) {
-                    val trackGroup = trackGroups[i]
-                    for (j in 0 until trackGroup.length) {
-                        val metadata = trackGroup.getFormat(j).metadata
-                        if (metadata != null) {
-                            for (k in 0 until metadata.length()) {
-                                val entry = metadata[k]
-                                if (entry is ApicFrame) {
-                                    return entry.pictureData
-                                } else if (entry is PictureFrame) {
-                                    return entry.pictureData
-                                }
+            val mediaItem = androidx.media3.common.MediaItem.fromUri(uriString)
+            val trackGroups = MetadataRetriever.retrieveMetadata(context, mediaItem).await()
+            for (i in 0 until trackGroups.length) {
+                val trackGroup = trackGroups[i]
+                for (j in 0 until trackGroup.length) {
+                    val metadata = trackGroup.getFormat(j).metadata
+                    if (metadata != null) {
+                        for (k in 0 until metadata.length()) {
+                            val entry = metadata[k]
+                            if (entry is ApicFrame) {
+                                return entry.pictureData
+                            } else if (entry is PictureFrame) {
+                                return entry.pictureData
                             }
                         }
                     }
