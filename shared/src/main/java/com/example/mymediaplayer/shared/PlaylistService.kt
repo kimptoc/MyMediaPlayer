@@ -96,18 +96,19 @@ open class PlaylistService {
 
     suspend fun listPlaylistsInTree(context: Context, treeUri: Uri): List<PlaylistInfo> {
         val root = DocumentFile.fromTreeUri(context, treeUri) ?: return emptyList()
-        val out = java.util.Collections.synchronizedList(mutableListOf<PlaylistInfo>())
+        val out = mutableListOf<PlaylistInfo>()
 
-        kotlinx.coroutines.coroutineScope {
-            suspend fun traverse(node: DocumentFile) {
-                val children = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    runCatching { node.listFiles().toList() }.getOrNull()
-                } ?: return
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val stack = ArrayDeque<DocumentFile>()
+            stack.addLast(root)
 
-                val dirs = mutableListOf<DocumentFile>()
+            while (stack.isNotEmpty()) {
+                val node = stack.removeLast()
+                val children = runCatching { node.listFiles() }.getOrNull() ?: continue
+
                 for (child in children) {
                     if (child.isDirectory) {
-                        dirs.add(child)
+                        stack.addLast(child)
                     } else {
                         val name = child.name ?: continue
                         val lower = name.lowercase(Locale.US)
@@ -121,18 +122,11 @@ open class PlaylistService {
                         }
                     }
                 }
-
-                dirs.map { dir ->
-                    async(Dispatchers.IO) {
-                        traverse(dir)
-                    }
-                }.awaitAll()
             }
-
-            traverse(root)
         }
 
-        return out.sortedBy { it.displayName.lowercase(Locale.US) }
+        out.sortBy { it.displayName.lowercase(Locale.US) }
+        return out
     }
 
     fun appendToPlaylist(
