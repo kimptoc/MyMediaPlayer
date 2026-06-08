@@ -36,6 +36,10 @@ import androidx.media.MediaBrowserServiceCompat
 import android.graphics.BitmapFactory
 import androidx.core.content.ContextCompat
 import androidx.media.utils.MediaConstants
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.extractor.metadata.flac.PictureFrame
+import androidx.media3.extractor.metadata.id3.ApicFrame
+import androidx.media3.exoplayer.MetadataRetriever
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -44,6 +48,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.guava.await
 import java.io.File
 import java.util.concurrent.atomic.AtomicReference
 
@@ -1558,7 +1563,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     }
                     pendingResumePositionMs = null
                     unduckIfNeeded()
-                    updateMetadata(enrichedFileInfo)
+                    serviceScope.launch {
+                        updateMetadata(enrichedFileInfo)
+                    }
                     maybeSpeakTrackIntroThenStart(enrichedFileInfo, this)
                 }
                 setOnCompletionListener {
@@ -2750,7 +2757,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         return baseActions or queueActions or seekActions or repeatActions
     }
 
-    private fun updateMetadata(fileInfo: MediaFileInfo) {
+    private suspend fun updateMetadata(fileInfo: MediaFileInfo) {
         val runtimeMetadata = MediaMetadataHelper.extractMetadata(this, fileInfo.uriString)
         val title = runtimeMetadata?.title?.takeIf { it.isNotBlank() }
             ?: fileInfo.cleanTitle
@@ -2758,6 +2765,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         val album = runtimeMetadata?.album ?: fileInfo.album
         val duration = runtimeMetadata?.durationMs?.toLongOrNull() ?: fileInfo.durationMs ?: 0L
         val year = runtimeMetadata?.year?.toLongOrNull() ?: (fileInfo.year ?: 0).toLong()
+        
         val embeddedArtBitmap = runCatching {
             val retriever = MediaMetadataRetriever()
             try {
@@ -2772,7 +2780,15 @@ class MyMusicService : MediaBrowserServiceCompat() {
             }
         }.getOrNull()
 
-        val albumArtBitmap = embeddedArtBitmap ?: loadPlaceholderArt()
+        val albumArtBitmap = if (embeddedArtBitmap != null) {
+            embeddedArtBitmap
+        } else {
+            runCatching {
+                extractArtworkFromMedia3(this@MyMusicService, fileInfo.uriString)?.let { artBytes ->
+                    BitmapFactory.decodeByteArray(artBytes, 0, artBytes.size)
+                }
+            }.getOrNull() ?: loadPlaceholderArt()
+        }
 
         val genre = runtimeMetadata?.genre ?: fileInfo.genre
         val builder = MediaMetadataCompat.Builder()
@@ -2792,6 +2808,35 @@ class MyMusicService : MediaBrowserServiceCompat() {
         lastMetadata = metadata
         session.setMetadata(metadata)
         updateNowPlayingNotification(lastPlaybackState()?.state ?: PlaybackStateCompat.STATE_NONE)
+    }
+
+    @OptIn(UnstableApi::class)
+    private suspend fun extractArtworkFromMedia3(context: Context, uriString: String): ByteArray? {
+        return try {
+            val mediaItem = androidx.media3.common.MediaItem.fromUri(uriString)
+            MetadataRetriever.Builder(context, mediaItem).build().use { retriever ->
+                val trackGroups = retriever.retrieveTrackGroups().await()
+                for (i in 0 until trackGroups.length) {
+                    val trackGroup = trackGroups[i]
+                    for (j in 0 until trackGroup.length) {
+                        val metadata = trackGroup.getFormat(j).metadata
+                        if (metadata != null) {
+                            for (k in 0 until metadata.length()) {
+                                val entry = metadata[k]
+                                if (entry is ApicFrame) {
+                                    return@use entry.pictureData
+                                } else if (entry is PictureFrame) {
+                                    return@use entry.pictureData
+                                }
+                            }
+                        }
+                    }
+                }
+                null
+            }
+        } catch (e: Exception) {
+            null
+        }
     }
 
     @Volatile
