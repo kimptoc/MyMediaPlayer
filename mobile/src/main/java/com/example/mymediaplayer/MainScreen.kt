@@ -260,44 +260,24 @@ fun MainScreen(
                             }
                         },
                         actions = {
-                            if (!isSearchExpanded) {
-                                TextButton(onClick = { setIsSearchExpanded(true) }) { Text("Search") }
-                                TextButton(onClick = { setMenuExpanded(true) }) {
-                                    Text("Menu")
-                                }
-                                DropdownMenu(
-                                    expanded = menuExpanded,
-                                    onDismissRequest = { setMenuExpanded(false) }
-                                ) {
-                                    DropdownMenuItem(
-                                        text = { Text("Select Folder") },
-                                        onClick = {
-                                            setMenuExpanded(false)
-                                            setScanCountText(uiState.scan.lastScanLimit.toString())
-                                            setScanDeepMode(uiState.scan.deepScanEnabled)
-                                            setShowScanDialog(true)
-                                        }
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("Create Random Playlist") },
-                                        onClick = {
-                                            setMenuExpanded(false)
-                                            setPlaylistCountText(uiState.playlist.lastPlaylistCount.toString())
-                                            setShowPlaylistDialog(true)
-                                        },
-                                        enabled = uiState.scan.scannedFiles.isNotEmpty()
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("Settings") },
-                                        onClick = {
-                                            setMenuExpanded(false)
-                                            onOpenSettings()
-                                        }
-                                    )
-                                }
-                            } else if (uiState.search.searchQuery.isNotEmpty()) {
-                                TextButton(onClick = onClearSearch) { Text("Clear") }
-                            }
+                            MainScreenTopBarActions(
+                                isSearchExpanded = isSearchExpanded,
+                                searchQuery = uiState.search.searchQuery,
+                                menuExpanded = menuExpanded,
+                                setMenuExpanded = setMenuExpanded,
+                                setIsSearchExpanded = setIsSearchExpanded,
+                                setScanCountText = setScanCountText,
+                                setScanDeepMode = setScanDeepMode,
+                                setShowScanDialog = setShowScanDialog,
+                                setPlaylistCountText = setPlaylistCountText,
+                                setShowPlaylistDialog = setShowPlaylistDialog,
+                                onOpenSettings = onOpenSettings,
+                                onClearSearch = onClearSearch,
+                                lastScanLimit = uiState.scan.lastScanLimit,
+                                deepScanEnabled = uiState.scan.deepScanEnabled,
+                                lastPlaylistCount = uiState.playlist.lastPlaylistCount,
+                                hasScannedFiles = uiState.scan.scannedFiles.isNotEmpty()
+                            )
                         }
                     )
                     Box(
@@ -2670,4 +2650,63 @@ private fun SongsTabContent(
         onToggleFavorite = onToggleFavorite,
         currentMediaId = currentMediaId
     )
+}
+
+@Composable
+private fun MainScreenTopBarActions(
+    isSearchExpanded: Boolean,
+    searchQuery: String,
+    menuExpanded: Boolean,
+    setMenuExpanded: (Boolean) -> Unit,
+    setIsSearchExpanded: (Boolean) -> Unit,
+    setScanCountText: (String) -> Unit,
+    setScanDeepMode: (Boolean) -> Unit,
+    setShowScanDialog: (Boolean) -> Unit,
+    setPlaylistCountText: (String) -> Unit,
+    setShowPlaylistDialog: (Boolean) -> Unit,
+    onOpenSettings: () -> Unit,
+    onClearSearch: () -> Unit,
+    lastScanLimit: Int,
+    deepScanEnabled: Boolean,
+    lastPlaylistCount: Int,
+    hasScannedFiles: Boolean
+) {
+    if (!isSearchExpanded) {
+        TextButton(onClick = { setIsSearchExpanded(true) }) { Text("Search") }
+        TextButton(onClick = { setMenuExpanded(true) }) {
+            Text("Menu")
+        }
+        DropdownMenu(
+            expanded = menuExpanded,
+            onDismissRequest = { setMenuExpanded(false) }
+        ) {
+            DropdownMenuItem(
+                text = { Text("Select Folder") },
+                onClick = {
+                    setMenuExpanded(false)
+                    setScanCountText(lastScanLimit.toString())
+                    setScanDeepMode(deepScanEnabled)
+                    setShowScanDialog(true)
+                }
+            )
+            DropdownMenuItem(
+                text = { Text("Create Random Playlist") },
+                onClick = {
+                    setMenuExpanded(false)
+                    setPlaylistCountText(lastPlaylistCount.toString())
+                    setShowPlaylistDialog(true)
+                },
+                enabled = hasScannedFiles
+            )
+            DropdownMenuItem(
+                text = { Text("Settings") },
+                onClick = {
+                    setMenuExpanded(false)
+                    onOpenSettings()
+                }
+            )
+        }
+    } else if (searchQuery.isNotEmpty()) {
+        TextButton(onClick = onClearSearch) { Text("Clear") }
+    }
 }
