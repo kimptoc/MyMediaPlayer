@@ -76,6 +76,7 @@ class MediaCacheService {
         synchronized(cacheLock) {
             _cachedFiles.clear()
             _cachedFiles.addAll(out)
+            _cachedMusicFiles = null
             _cachedFilesByUri.clear()
             _cachedFilesByUri.putAll(out.associateBy { it.uriString })
             _discoveredPlaylists.clear()
@@ -316,6 +317,7 @@ class MediaCacheService {
         if (genreUpdates.isEmpty()) return
 
         synchronized(cacheLock) {
+            var updated = false
             for (i in _cachedFiles.indices) {
                 val file = _cachedFiles[i]
                 if (!file.genre.isNullOrBlank()) continue // prefer ID3 tag genre
@@ -327,15 +329,27 @@ class MediaCacheService {
                         isPodcastMedia(rawGenre, file.uriString)
                 )
                 _cachedFilesByUri[file.uriString] = _cachedFiles[i]
+                updated = true
+            }
+            if (updated) {
+                _cachedMusicFiles = null
             }
         }
     }
 
     private val _cachedFiles = mutableListOf<MediaFileInfo>()
+    private var _cachedMusicFiles: List<MediaFileInfo>? = null
     val cachedFiles: List<MediaFileInfo>
         get() = synchronized(cacheLock) { _cachedFiles.toList() }
     val cachedMusicFiles: List<MediaFileInfo>
-        get() = synchronized(cacheLock) { _cachedFiles.filter { !it.isPodcast } }
+        get() = synchronized(cacheLock) {
+            var result = _cachedMusicFiles
+            if (result == null) {
+                result = _cachedFiles.filter { !it.isPodcast }
+                _cachedMusicFiles = result
+            }
+            result
+        }
 
     private val _cachedFilesByUri = mutableMapOf<String, MediaFileInfo>()
     fun getFileIndexByUri(): Map<String, MediaFileInfo> = synchronized(cacheLock) { _cachedFilesByUri.toMap() }
@@ -430,6 +444,9 @@ class MediaCacheService {
             }
             synchronized(cacheLock) {
                 _cachedFiles.addAll(accepted)
+                if (accepted.isNotEmpty()) {
+                    _cachedMusicFiles = null
+                }
                 _cachedFilesByUri.putAll(accepted.associateBy { it.uriString })
                 albumArtistIndexed = false
             }
@@ -527,6 +544,7 @@ class MediaCacheService {
         synchronized(cacheLock) {
             _cachedFiles.clear()
             _cachedFiles.addAll(files)
+            _cachedMusicFiles = null
             _cachedFilesByUri.clear()
             _cachedFilesByUri.putAll(files.associateBy { it.uriString })
             _discoveredPlaylists.clear()
@@ -581,6 +599,7 @@ class MediaCacheService {
         synchronized(cacheLock) {
             if (_cachedFiles.size < MAX_CACHE_SIZE) {
                 _cachedFiles.add(fileInfo)
+                _cachedMusicFiles = null
                 _cachedFilesByUri[fileInfo.uriString] = fileInfo
                 albumArtistIndexed = false
             }
@@ -594,6 +613,9 @@ class MediaCacheService {
             if (spaceLeft <= 0) return
             val toAdd = if (files.size > spaceLeft) files.take(spaceLeft) else files
             _cachedFiles.addAll(toAdd)
+            if (toAdd.isNotEmpty()) {
+                _cachedMusicFiles = null
+            }
             _cachedFilesByUri.putAll(toAdd.associateBy { it.uriString })
             albumArtistIndexed = false
         }
@@ -796,6 +818,7 @@ class MediaCacheService {
     fun clearFiles() {
         synchronized(cacheLock) {
             _cachedFiles.clear()
+            _cachedMusicFiles = null
             _cachedFilesByUri.clear()
             clearMetadataIndexes()
         }
@@ -810,6 +833,7 @@ class MediaCacheService {
     fun clearCache() {
         synchronized(cacheLock) {
             _cachedFiles.clear()
+            _cachedMusicFiles = null
             _cachedFilesByUri.clear()
             _discoveredPlaylists.clear()
             clearMetadataIndexes()
