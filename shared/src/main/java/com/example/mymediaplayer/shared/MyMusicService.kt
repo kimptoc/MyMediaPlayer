@@ -2814,24 +2814,26 @@ class MyMusicService : MediaBrowserServiceCompat() {
     private suspend fun extractArtworkFromMedia3(context: Context, uriString: String): ByteArray? {
         return try {
             val mediaItem = androidx.media3.common.MediaItem.fromUri(uriString)
-            val trackGroups = MetadataRetriever.retrieveMetadata(context, mediaItem).await()
-            for (i in 0 until trackGroups.length) {
-                val trackGroup = trackGroups[i]
-                for (j in 0 until trackGroup.length) {
-                    val metadata = trackGroup.getFormat(j).metadata
-                    if (metadata != null) {
-                        for (k in 0 until metadata.length()) {
-                            val entry = metadata[k]
-                            if (entry is ApicFrame) {
-                                return entry.pictureData
-                            } else if (entry is PictureFrame) {
-                                return entry.pictureData
+            MetadataRetriever.Builder(context, mediaItem).build().use { retriever ->
+                val trackGroups = retriever.retrieveTrackGroups().await()
+                for (i in 0 until trackGroups.length) {
+                    val trackGroup = trackGroups[i]
+                    for (j in 0 until trackGroup.length) {
+                        val metadata = trackGroup.getFormat(j).metadata
+                        if (metadata != null) {
+                            for (k in 0 until metadata.length()) {
+                                val entry = metadata[k]
+                                if (entry is ApicFrame) {
+                                    return@use entry.pictureData
+                                } else if (entry is PictureFrame) {
+                                    return@use entry.pictureData
+                                }
                             }
                         }
                     }
                 }
+                null
             }
-            null
         } catch (e: Exception) {
             null
         }
