@@ -49,7 +49,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.guava.await
+import timber.log.Timber
 import java.io.File
+import java.io.InputStream
 import java.util.concurrent.atomic.AtomicReference
 
 class MyMusicService : MediaBrowserServiceCompat() {
@@ -481,10 +483,10 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 )
             }
             serviceScope.launch {
-                val prefs = getPrefs(this@MyMusicService)
-                val treeUriStr = prefs.getString(KEY_TREE_URI, null)
+                val standardPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                val treeUriStr = standardPrefs.getString(KEY_TREE_URI, null)
                 if (treeUriStr != null) {
-                    val limit = prefs.getInt(KEY_SCAN_LIMIT, MediaCacheService.MAX_CACHE_SIZE)
+                    val limit = standardPrefs.getInt(KEY_SCAN_LIMIT, MediaCacheService.MAX_CACHE_SIZE)
                     mediaCacheService.persistCache(this@MyMusicService, Uri.parse(treeUriStr), limit)
                 }
             }
@@ -1405,13 +1407,15 @@ class MyMusicService : MediaBrowserServiceCompat() {
     private fun loadCachedTreeIfAvailable() {
         if (isScanning) return
         if (mediaCacheService.cachedFiles.isNotEmpty()) return
-        val prefs = getPrefs(this@MyMusicService)
-        val limit = prefs.getInt(KEY_SCAN_LIMIT, MediaCacheService.MAX_CACHE_SIZE)
-        val wholeDriveMode = prefs.getBoolean(KEY_SCAN_WHOLE_DRIVE, false)
+        // Read scan settings from standard prefs — the activity always writes to standard prefs,
+        // but getPrefs() may return encrypted prefs (which can be stale after settings changes).
+        val standardPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val limit = standardPrefs.getInt(KEY_SCAN_LIMIT, MediaCacheService.MAX_CACHE_SIZE)
+        val wholeDriveMode = standardPrefs.getBoolean(KEY_SCAN_WHOLE_DRIVE, false)
         val uri = if (wholeDriveMode) {
             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
         } else {
-            val uriString = prefs.getString(KEY_TREE_URI, null) ?: return
+            val uriString = standardPrefs.getString(KEY_TREE_URI, null) ?: return
             val parsed = Uri.parse(uriString)
             val hasPermission = contentResolver.persistedUriPermissions.any {
                 it.uri == parsed && it.isReadPermission
@@ -2511,7 +2515,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
     private suspend fun ensureCacheReadyForSearch() {
         if (mediaCacheService.cachedFiles.isNotEmpty()) return
-        val prefs = getPrefs(this@MyMusicService)
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val uriString = prefs.getString(KEY_TREE_URI, null) ?: return
         val limit = prefs.getInt(KEY_SCAN_LIMIT, MediaCacheService.MAX_CACHE_SIZE)
         val uri = Uri.parse(uriString)
@@ -2770,24 +2774,25 @@ class MyMusicService : MediaBrowserServiceCompat() {
             val retriever = MediaMetadataRetriever()
             try {
                 retriever.setDataSource(this, Uri.parse(fileInfo.uriString))
-                val artBytes = retriever.embeddedPicture ?: return@runCatching null
-                BitmapFactory.decodeByteArray(artBytes, 0, artBytes.size)
+                retriever.embeddedPicture?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
             } finally {
-                try {
-                    retriever.release()
-                } catch (_: Exception) {
-                }
+                try { retriever.release() } catch (_: Exception) { }
             }
-        }.getOrNull()
+        }.onFailure { Timber.w(it, "Failed to read embedded art via MMR") }.getOrNull()
 
         val albumArtBitmap = if (embeddedArtBitmap != null) {
             embeddedArtBitmap
         } else {
-            runCatching {
+            val media3Art = runCatching {
                 extractArtworkFromMedia3(this@MyMusicService, fileInfo.uriString)?.let { artBytes ->
                     BitmapFactory.decodeByteArray(artBytes, 0, artBytes.size)
                 }
-            }.getOrNull() ?: loadPlaceholderArt()
+            }.onFailure { Timber.w(it, "Failed to read embedded art via media3") }.getOrNull()
+            media3Art ?: runCatching {
+                extractCoverArtFromMp4Atoms(this@MyMusicService, fileInfo.uriString)?.let { artBytes ->
+                    BitmapFactory.decodeByteArray(artBytes, 0, artBytes.size)
+                }
+            }.onFailure { Timber.w(it, "Failed to read art from MP4 atoms") }.getOrNull() ?: loadPlaceholderArt()
         }
 
         val genre = runtimeMetadata?.genre ?: fileInfo.genre
@@ -2819,15 +2824,11 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 for (i in 0 until trackGroups.length) {
                     val trackGroup = trackGroups[i]
                     for (j in 0 until trackGroup.length) {
-                        val metadata = trackGroup.getFormat(j).metadata
-                        if (metadata != null) {
-                            for (k in 0 until metadata.length()) {
-                                val entry = metadata[k]
-                                if (entry is ApicFrame) {
-                                    return@use entry.pictureData
-                                } else if (entry is PictureFrame) {
-                                    return@use entry.pictureData
-                                }
+                        val metadata = trackGroup.getFormat(j).metadata ?: continue
+                        for (k in 0 until metadata.length()) {
+                            when (val entry = metadata[k]) {
+                                is ApicFrame -> return@use entry.pictureData
+                                is PictureFrame -> return@use entry.pictureData
                             }
                         }
                     }
@@ -2837,6 +2838,108 @@ class MyMusicService : MediaBrowserServiceCompat() {
         } catch (e: Exception) {
             null
         }
+    }
+
+    // Walks the MP4 atom tree to extract cover art from the iTunes 'covr' box.
+    // Handles both moov/meta/ilst and moov/udta/meta/ilst structures.
+    private fun extractCoverArtFromMp4Atoms(context: Context, uriString: String): ByteArray? {
+        context.contentResolver.openInputStream(Uri.parse(uriString))?.use { input ->
+            val moovSize = mp4FindAtom(input, Long.MAX_VALUE / 2, "moov") .takeIf { it >= 0 } ?: return null
+            var remaining = moovSize
+            while (remaining >= 8) {
+                val hdr = mp4ReadHeader(input) ?: return null
+                remaining -= 8
+                val bodySize = hdr.first - 8
+                if (bodySize < 0) return null
+                remaining -= bodySize
+                when (hdr.second) {
+                    "meta" -> {
+                        mp4SkipExact(input, 4) // full-box version+flags
+                        return mp4CoverArtInIlst(input, bodySize - 4)
+                    }
+                    "udta" -> {
+                        val metaSize = mp4FindAtom(input, bodySize, "meta")
+                        if (metaSize >= 0) {
+                            mp4SkipExact(input, 4)
+                            return mp4CoverArtInIlst(input, metaSize - 4)
+                        }
+                        return null
+                    }
+                    else -> mp4SkipExact(input, bodySize)
+                }
+            }
+        }
+        return null
+    }
+
+    private fun mp4CoverArtInIlst(stream: InputStream, searchSize: Long): ByteArray? {
+        val ilstSize = mp4FindAtom(stream, searchSize, "ilst").takeIf { it >= 0 } ?: return null
+        var remaining = ilstSize
+        while (remaining >= 8) {
+            val hdr = mp4ReadHeader(stream) ?: break
+            remaining -= 8
+            val bodySize = hdr.first - 8
+            if (bodySize < 0) break
+            if (hdr.second == "covr") {
+                val dataSize = mp4FindAtom(stream, bodySize, "data").takeIf { it >= 0 } ?: return null
+                mp4SkipExact(stream, 8) // 4-byte type indicator + 4-byte locale
+                val imageSize = (dataSize - 8).toInt()
+                if (imageSize <= 0) return null
+                return mp4ReadExact(stream, imageSize)
+            }
+            if (bodySize > remaining) break
+            mp4SkipExact(stream, bodySize)
+            remaining -= bodySize
+        }
+        return null
+    }
+
+    private fun mp4FindAtom(stream: InputStream, containerSize: Long, target: String): Long {
+        var remaining = containerSize
+        while (remaining >= 8) {
+            val hdr = mp4ReadHeader(stream) ?: return -1
+            remaining -= 8
+            val bodySize = hdr.first - 8
+            if (bodySize < 0) return -1
+            if (hdr.second == target) return bodySize
+            if (bodySize > remaining) return -1
+            mp4SkipExact(stream, bodySize)
+            remaining -= bodySize
+        }
+        return -1
+    }
+
+    private fun mp4ReadHeader(stream: InputStream): Pair<Long, String>? {
+        val buf = mp4ReadExact(stream, 8) ?: return null
+        val size = ((buf[0].toLong() and 0xFF) shl 24) or
+                   ((buf[1].toLong() and 0xFF) shl 16) or
+                   ((buf[2].toLong() and 0xFF) shl 8) or
+                   (buf[3].toLong() and 0xFF)
+        val type = String(buf, 4, 4, Charsets.ISO_8859_1)
+        return size to type
+    }
+
+    // Uses read() rather than skip() for reliability on SAF-backed streams where skip() may return 0.
+    private fun mp4SkipExact(stream: InputStream, n: Long) {
+        var remaining = n
+        val buf = ByteArray(8192)
+        while (remaining > 0) {
+            val toRead = minOf(buf.size.toLong(), remaining).toInt()
+            val read = stream.read(buf, 0, toRead)
+            if (read < 0) return
+            remaining -= read
+        }
+    }
+
+    private fun mp4ReadExact(stream: InputStream, n: Int): ByteArray? {
+        val buf = ByteArray(n)
+        var offset = 0
+        while (offset < n) {
+            val read = stream.read(buf, offset, n - offset)
+            if (read < 0) return null
+            offset += read
+        }
+        return buf
     }
 
     @Volatile
