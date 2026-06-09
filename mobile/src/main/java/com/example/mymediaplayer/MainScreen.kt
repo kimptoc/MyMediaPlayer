@@ -881,6 +881,27 @@ private fun RenamePlaylistDialogContent(
 }
 
 @Composable
+private fun QueueItem(
+    item: QueueEntry,
+    activeQueueId: Long,
+    onQueueItemSelected: (Long) -> Unit
+) {
+    val isActive = item.queueId == activeQueueId
+    TextButton(
+        onClick = {
+            onQueueItemSelected(item.queueId)
+        },
+        enabled = !isActive
+    ) {
+        Text(
+            text = if (isActive) "▶ ${item.title}" else item.title,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
 private fun QueueDialogContent(
     queueTitle: String?,
     queueItems: List<QueueEntry>,
@@ -899,19 +920,11 @@ private fun QueueDialogContent(
             } else {
                 LazyColumn {
                     items(queueItems) { item ->
-                        val isActive = item.queueId == activeQueueId
-                        TextButton(
-                            onClick = {
-                                onQueueItemSelected(item.queueId)
-                            },
-                            enabled = !isActive
-                        ) {
-                            Text(
-                                text = if (isActive) "▶ ${item.title}" else item.title,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
+                        QueueItem(
+                            item = item,
+                            activeQueueId = activeQueueId,
+                            onQueueItemSelected = onQueueItemSelected
+                        )
                     }
                 }
             }
