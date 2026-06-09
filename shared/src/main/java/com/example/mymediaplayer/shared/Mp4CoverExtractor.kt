@@ -3,6 +3,7 @@ package com.example.mymediaplayer.shared
 import android.content.Context
 import android.net.Uri
 import androidx.annotation.VisibleForTesting
+import java.io.IOException
 import java.io.InputStream
 import java.nio.charset.StandardCharsets
 
@@ -22,7 +23,7 @@ object Mp4CoverExtractor {
         return try {
             val bytes = inputStream.readBytes()
             findCoverArt(bytes, 0, bytes.size, SearchState.Root)
-        } catch (_: Exception) {
+        } catch (_: IOException) {
             null
         }
     }
