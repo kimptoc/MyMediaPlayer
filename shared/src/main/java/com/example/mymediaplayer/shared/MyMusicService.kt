@@ -17,10 +17,12 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
+import android.util.LruCache
 import android.app.SearchManager
 import android.widget.Toast
 import androidx.annotation.VisibleForTesting
@@ -109,6 +111,12 @@ class MyMusicService : MediaBrowserServiceCompat() {
         private const val KEY_FLAGGED_URIS = "flagged_uris"
         private const val SMART_PLAYLIST_FLAGGED = "flagged"
         private const val CUSTOM_ACTION_FLAG = "FLAG_TRACK"
+
+        private val FOLDER_ART_CANDIDATES = listOf(
+            "cover.jpg", "folder.jpg", "front.jpg",
+            "Cover.jpg", "Folder.jpg", "Front.jpg",
+            "cover.png", "folder.png", "front.png"
+        )
 
         private const val ACTION_SET_MEDIA_FILES = "SET_MEDIA_FILES"
         private const val ACTION_REFRESH_LIBRARY = "REFRESH_LIBRARY"
@@ -1423,6 +1431,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
             if (!hasPermission) return
             parsed
         }
+
+        folderArtCache.evictAll()
+        folderArtNotFound.clear()
 
         // Set isScanning BEFORE launching the coroutine so that any onLoadChildren
         // calls during the loading window are queued in pendingResults and delivered
@@ -2792,7 +2803,11 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 Mp4CoverExtractor.extractCoverArt(this@MyMusicService, fileInfo.uriString)?.let { artBytes ->
                     BitmapFactory.decodeByteArray(artBytes, 0, artBytes.size)
                 }
-            }.onFailure { Timber.w(it, "Failed to read art from MP4 atoms") }.getOrNull() ?: loadPlaceholderArt()
+            }.onFailure { Timber.w(it, "Failed to read art from MP4 atoms") }.getOrNull()
+            ?: runCatching {
+                extractFolderArt(this@MyMusicService, Uri.parse(fileInfo.uriString))
+            }.onFailure { Timber.w(it, "Failed to read folder art") }.getOrNull()
+            ?: loadPlaceholderArt()
         }
 
         val genre = runtimeMetadata?.genre ?: fileInfo.genre
@@ -2840,6 +2855,11 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }
     }
 
+    // LruCache for found folder-art bitmaps; separate set tracks folders with no art
+    // to avoid repeated SAF lookups. Both are cleared when the library is rescanned.
+    private val folderArtCache = LruCache<String, Bitmap>(32)
+    private val folderArtNotFound = mutableSetOf<String>()
+
     @Volatile
     private var cachedPlaceholderArt: Bitmap? = null
 
@@ -2854,6 +2874,34 @@ class MyMusicService : MediaBrowserServiceCompat() {
         drawable.draw(canvas)
         cachedPlaceholderArt = bitmap
         return bitmap
+    }
+
+    private fun extractFolderArt(context: Context, trackUri: Uri): Bitmap? {
+        val docId = try { DocumentsContract.getDocumentId(trackUri) } catch (_: Exception) { return null }
+        val parentDocId = docId.substringBeforeLast('/')
+        if (parentDocId == docId) return null // track is at tree root, no parent folder
+
+        if (folderArtNotFound.contains(parentDocId)) return null
+        folderArtCache[parentDocId]?.let { return it }
+
+        for (name in FOLDER_ART_CANDIDATES) {
+            val siblingUri = try {
+                DocumentsContract.buildDocumentUriUsingTree(trackUri, "$parentDocId/$name")
+            } catch (_: Exception) { continue }
+            val bitmap = try {
+                context.contentResolver.openInputStream(siblingUri)?.use { BitmapFactory.decodeStream(it) }
+            } catch (e: Exception) {
+                Timber.w(e, "Failed to open folder art: $siblingUri")
+                null
+            }
+            if (bitmap != null) {
+                folderArtCache.put(parentDocId, bitmap)
+                return bitmap
+            }
+        }
+
+        folderArtNotFound.add(parentDocId)
+        return null
     }
 
     private fun ensureNotificationChannel() {
