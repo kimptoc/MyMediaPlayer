@@ -49,7 +49,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.guava.await
+import timber.log.Timber
 import java.io.File
+import java.io.InputStream
 import java.util.concurrent.atomic.AtomicReference
 
 class MyMusicService : MediaBrowserServiceCompat() {
@@ -481,10 +483,10 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 )
             }
             serviceScope.launch {
-                val prefs = getPrefs(this@MyMusicService)
-                val treeUriStr = prefs.getString(KEY_TREE_URI, null)
+                val standardPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                val treeUriStr = standardPrefs.getString(KEY_TREE_URI, null)
                 if (treeUriStr != null) {
-                    val limit = prefs.getInt(KEY_SCAN_LIMIT, MediaCacheService.MAX_CACHE_SIZE)
+                    val limit = standardPrefs.getInt(KEY_SCAN_LIMIT, MediaCacheService.MAX_CACHE_SIZE)
                     mediaCacheService.persistCache(this@MyMusicService, Uri.parse(treeUriStr), limit)
                 }
             }
@@ -1405,13 +1407,15 @@ class MyMusicService : MediaBrowserServiceCompat() {
     private fun loadCachedTreeIfAvailable() {
         if (isScanning) return
         if (mediaCacheService.cachedFiles.isNotEmpty()) return
-        val prefs = getPrefs(this@MyMusicService)
-        val limit = prefs.getInt(KEY_SCAN_LIMIT, MediaCacheService.MAX_CACHE_SIZE)
-        val wholeDriveMode = prefs.getBoolean(KEY_SCAN_WHOLE_DRIVE, false)
+        // Read scan settings from standard prefs — the activity always writes to standard prefs,
+        // but getPrefs() may return encrypted prefs (which can be stale after settings changes).
+        val standardPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val limit = standardPrefs.getInt(KEY_SCAN_LIMIT, MediaCacheService.MAX_CACHE_SIZE)
+        val wholeDriveMode = standardPrefs.getBoolean(KEY_SCAN_WHOLE_DRIVE, false)
         val uri = if (wholeDriveMode) {
             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
         } else {
-            val uriString = prefs.getString(KEY_TREE_URI, null) ?: return
+            val uriString = standardPrefs.getString(KEY_TREE_URI, null) ?: return
             val parsed = Uri.parse(uriString)
             val hasPermission = contentResolver.persistedUriPermissions.any {
                 it.uri == parsed && it.isReadPermission
@@ -2511,7 +2515,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
     private suspend fun ensureCacheReadyForSearch() {
         if (mediaCacheService.cachedFiles.isNotEmpty()) return
-        val prefs = getPrefs(this@MyMusicService)
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val uriString = prefs.getString(KEY_TREE_URI, null) ?: return
         val limit = prefs.getInt(KEY_SCAN_LIMIT, MediaCacheService.MAX_CACHE_SIZE)
         val uri = Uri.parse(uriString)
@@ -2770,24 +2774,25 @@ class MyMusicService : MediaBrowserServiceCompat() {
             val retriever = MediaMetadataRetriever()
             try {
                 retriever.setDataSource(this, Uri.parse(fileInfo.uriString))
-                val artBytes = retriever.embeddedPicture ?: return@runCatching null
-                BitmapFactory.decodeByteArray(artBytes, 0, artBytes.size)
+                retriever.embeddedPicture?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
             } finally {
-                try {
-                    retriever.release()
-                } catch (_: Exception) {
-                }
+                try { retriever.release() } catch (_: Exception) { }
             }
-        }.getOrNull()
+        }.onFailure { Timber.w(it, "Failed to read embedded art via MMR") }.getOrNull()
 
         val albumArtBitmap = if (embeddedArtBitmap != null) {
             embeddedArtBitmap
         } else {
-            runCatching {
+            val media3Art = runCatching {
                 extractArtworkFromMedia3(this@MyMusicService, fileInfo.uriString)?.let { artBytes ->
                     BitmapFactory.decodeByteArray(artBytes, 0, artBytes.size)
                 }
-            }.getOrNull() ?: loadPlaceholderArt()
+            }.onFailure { Timber.w(it, "Failed to read embedded art via media3") }.getOrNull()
+            media3Art ?: runCatching {
+                Mp4CoverExtractor.extractCoverArt(this@MyMusicService, fileInfo.uriString)?.let { artBytes ->
+                    BitmapFactory.decodeByteArray(artBytes, 0, artBytes.size)
+                }
+            }.onFailure { Timber.w(it, "Failed to read art from MP4 atoms") }.getOrNull() ?: loadPlaceholderArt()
         }
 
         val genre = runtimeMetadata?.genre ?: fileInfo.genre
@@ -2819,15 +2824,11 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 for (i in 0 until trackGroups.length) {
                     val trackGroup = trackGroups[i]
                     for (j in 0 until trackGroup.length) {
-                        val metadata = trackGroup.getFormat(j).metadata
-                        if (metadata != null) {
-                            for (k in 0 until metadata.length()) {
-                                val entry = metadata[k]
-                                if (entry is ApicFrame) {
-                                    return@use entry.pictureData
-                                } else if (entry is PictureFrame) {
-                                    return@use entry.pictureData
-                                }
+                        val metadata = trackGroup.getFormat(j).metadata ?: continue
+                        for (k in 0 until metadata.length()) {
+                            when (val entry = metadata[k]) {
+                                is ApicFrame -> return@use entry.pictureData
+                                is PictureFrame -> return@use entry.pictureData
                             }
                         }
                     }
