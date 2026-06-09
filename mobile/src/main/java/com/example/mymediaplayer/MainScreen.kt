@@ -1482,6 +1482,21 @@ private fun decadeLabelForYear(year: Int?): String {
 private fun albumLabel(file: MediaFileInfo): String =
     file.album?.ifBlank { null } ?: "Unknown Album"
 
+private fun toggleAlbumFavorite(
+    songs: List<MediaFileInfo>,
+    favoriteUris: Set<String>,
+    allFavorited: Boolean,
+    onToggleFavorite: (MediaFileInfo) -> Unit
+) {
+    val targetFavorite = !allFavorited
+    songs.forEach { song ->
+        val currentlyFavorite = song.uriString in favoriteUris
+        if (currentlyFavorite != targetFavorite) {
+            onToggleFavorite(song)
+        }
+    }
+}
+
 @Composable
 private fun AlbumSearchResultsSection(
     query: String,
@@ -1530,13 +1545,7 @@ private fun AlbumSearchResultsSection(
                         }
                         TextButton(
                             onClick = {
-                                val targetFavorite = !allFavorited
-                                hit.songs.forEach { song ->
-                                    val currentlyFavorite = song.uriString in favoriteUris
-                                    if (currentlyFavorite != targetFavorite) {
-                                        onToggleFavorite(song)
-                                    }
-                                }
+                                toggleAlbumFavorite(hit.songs, favoriteUris, allFavorited, onToggleFavorite)
                             },
                             enabled = hit.songs.isNotEmpty()
                         ) {
