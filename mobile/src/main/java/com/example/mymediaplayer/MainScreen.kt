@@ -882,7 +882,12 @@ private fun RenamePlaylistDialogContent(
 
 @Composable
 private fun QueueItem(
+private fun QueueItem(
     item: QueueEntry,
+    activeQueueId: Long,
+    onQueueItemSelected: (Long) -> Unit,
+    modifier: Modifier = Modifier
+)
     activeQueueId: Long,
     onQueueItemSelected: (Long) -> Unit
 ) {
