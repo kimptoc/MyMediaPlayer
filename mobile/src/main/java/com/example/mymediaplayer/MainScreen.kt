@@ -1126,7 +1126,7 @@ private fun ScanDialogContent(
                             checked = scanDeepMode,
                             onCheckedChange = onScanDeepModeChange
                         )
-                        Text("Deep scan (slower, tries unknown file types)")
+                        Text("Deep scan (slower, tries unknown file types — disables startup cache, rescans every open)")
                     }
                 }
                 Spacer(modifier = Modifier.height(4.dp))
@@ -1482,6 +1482,21 @@ private fun decadeLabelForYear(year: Int?): String {
 private fun albumLabel(file: MediaFileInfo): String =
     file.album?.ifBlank { null } ?: "Unknown Album"
 
+private fun toggleAlbumFavorite(
+    songs: List<MediaFileInfo>,
+    favoriteUris: Set<String>,
+    allFavorited: Boolean,
+    onToggleFavorite: (MediaFileInfo) -> Unit
+) {
+    val targetFavorite = !allFavorited
+    songs.forEach { song ->
+        val currentlyFavorite = song.uriString in favoriteUris
+        if (currentlyFavorite != targetFavorite) {
+            onToggleFavorite(song)
+        }
+    }
+}
+
 @Composable
 private fun AlbumSearchResultsSection(
     query: String,
@@ -1502,53 +1517,64 @@ private fun AlbumSearchResultsSection(
     Spacer(modifier = Modifier.height(8.dp))
     LazyColumn {
         items(albumHits) { hit ->
-            val allFavorited = hit.songs.isNotEmpty() &&
-                hit.songs.all { it.uriString in favoriteUris }
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer
-                )
-            ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Text(
-                        text = hit.album,
-                        style = MaterialTheme.typography.titleSmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = "${hit.matchedCount} matched • ${hit.songs.size} track(s)",
-                        style = MaterialTheme.typography.labelSmall
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TextButton(onClick = { onOpenAlbum(hit.album) }) {
-                            Text("Open")
-                        }
-                        TextButton(
-                            onClick = {
-                                val targetFavorite = !allFavorited
-                                hit.songs.forEach { song ->
-                                    val currentlyFavorite = song.uriString in favoriteUris
-                                    if (currentlyFavorite != targetFavorite) {
-                                        onToggleFavorite(song)
-                                    }
-                                }
-                            },
-                            enabled = hit.songs.isNotEmpty()
-                        ) {
-                            Text(if (allFavorited) "Unfavorite album" else "Favorite album")
-                        }
-                        TextButton(
-                            onClick = { onAddAlbumToPlaylist(hit.songs) },
-                            enabled = hit.songs.isNotEmpty()
-                        ) {
-                            Text("Add album")
-                        }
-                    }
+            AlbumSearchHitCard(
+                hit = hit,
+                favoriteUris = favoriteUris,
+                onOpenAlbum = onOpenAlbum,
+                onAddAlbumToPlaylist = onAddAlbumToPlaylist,
+                onToggleFavorite = onToggleFavorite
+            )
+        }
+    }
+}
+
+@Composable
+private fun AlbumSearchHitCard(
+    hit: AlbumSearchHit,
+    favoriteUris: Set<String>,
+    onOpenAlbum: (String) -> Unit,
+    onAddAlbumToPlaylist: (List<MediaFileInfo>) -> Unit,
+    onToggleFavorite: (MediaFileInfo) -> Unit
+) {
+    val allFavorited = hit.songs.isNotEmpty() &&
+        hit.songs.all { it.uriString in favoriteUris }
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer
+        )
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(
+                text = hit.album,
+                style = MaterialTheme.typography.titleSmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = "${hit.matchedCount} matched • ${hit.songs.size} track(s)",
+                style = MaterialTheme.typography.labelSmall
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = { onOpenAlbum(hit.album) }) {
+                    Text("Open")
+                }
+                TextButton(
+                    onClick = {
+                        toggleAlbumFavorite(hit.songs, favoriteUris, allFavorited, onToggleFavorite)
+                    },
+                    enabled = hit.songs.isNotEmpty()
+                ) {
+                    Text(if (allFavorited) "Unfavorite album" else "Favorite album")
+                }
+                TextButton(
+                    onClick = { onAddAlbumToPlaylist(hit.songs) },
+                    enabled = hit.songs.isNotEmpty()
+                ) {
+                    Text("Add album")
                 }
             }
         }

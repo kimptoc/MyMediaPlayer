@@ -17,10 +17,12 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
+import android.util.LruCache
 import android.app.SearchManager
 import android.widget.Toast
 import androidx.annotation.VisibleForTesting
@@ -49,7 +51,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.guava.await
+import timber.log.Timber
 import java.io.File
+import java.io.InputStream
 import java.util.concurrent.atomic.AtomicReference
 
 class MyMusicService : MediaBrowserServiceCompat() {
@@ -107,6 +111,12 @@ class MyMusicService : MediaBrowserServiceCompat() {
         private const val KEY_FLAGGED_URIS = "flagged_uris"
         private const val SMART_PLAYLIST_FLAGGED = "flagged"
         private const val CUSTOM_ACTION_FLAG = "FLAG_TRACK"
+
+        private val FOLDER_ART_CANDIDATES = listOf(
+            "cover.jpg", "folder.jpg", "front.jpg",
+            "Cover.jpg", "Folder.jpg", "Front.jpg",
+            "cover.png", "folder.png", "front.png"
+        )
 
         private const val ACTION_SET_MEDIA_FILES = "SET_MEDIA_FILES"
         private const val ACTION_REFRESH_LIBRARY = "REFRESH_LIBRARY"
@@ -481,10 +491,10 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 )
             }
             serviceScope.launch {
-                val prefs = getPrefs(this@MyMusicService)
-                val treeUriStr = prefs.getString(KEY_TREE_URI, null)
+                val standardPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                val treeUriStr = standardPrefs.getString(KEY_TREE_URI, null)
                 if (treeUriStr != null) {
-                    val limit = prefs.getInt(KEY_SCAN_LIMIT, MediaCacheService.MAX_CACHE_SIZE)
+                    val limit = standardPrefs.getInt(KEY_SCAN_LIMIT, MediaCacheService.MAX_CACHE_SIZE)
                     mediaCacheService.persistCache(this@MyMusicService, Uri.parse(treeUriStr), limit)
                 }
             }
@@ -1405,13 +1415,15 @@ class MyMusicService : MediaBrowserServiceCompat() {
     private fun loadCachedTreeIfAvailable() {
         if (isScanning) return
         if (mediaCacheService.cachedFiles.isNotEmpty()) return
-        val prefs = getPrefs(this@MyMusicService)
-        val limit = prefs.getInt(KEY_SCAN_LIMIT, MediaCacheService.MAX_CACHE_SIZE)
-        val wholeDriveMode = prefs.getBoolean(KEY_SCAN_WHOLE_DRIVE, false)
+        // Read scan settings from standard prefs — the activity always writes to standard prefs,
+        // but getPrefs() may return encrypted prefs (which can be stale after settings changes).
+        val standardPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val limit = standardPrefs.getInt(KEY_SCAN_LIMIT, MediaCacheService.MAX_CACHE_SIZE)
+        val wholeDriveMode = standardPrefs.getBoolean(KEY_SCAN_WHOLE_DRIVE, false)
         val uri = if (wholeDriveMode) {
             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
         } else {
-            val uriString = prefs.getString(KEY_TREE_URI, null) ?: return
+            val uriString = standardPrefs.getString(KEY_TREE_URI, null) ?: return
             val parsed = Uri.parse(uriString)
             val hasPermission = contentResolver.persistedUriPermissions.any {
                 it.uri == parsed && it.isReadPermission
@@ -1419,6 +1431,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
             if (!hasPermission) return
             parsed
         }
+
+        folderArtCache.evictAll()
+        folderArtNotFound.clear()
 
         // Set isScanning BEFORE launching the coroutine so that any onLoadChildren
         // calls during the loading window are queued in pendingResults and delivered
@@ -2511,7 +2526,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
     private suspend fun ensureCacheReadyForSearch() {
         if (mediaCacheService.cachedFiles.isNotEmpty()) return
-        val prefs = getPrefs(this@MyMusicService)
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val uriString = prefs.getString(KEY_TREE_URI, null) ?: return
         val limit = prefs.getInt(KEY_SCAN_LIMIT, MediaCacheService.MAX_CACHE_SIZE)
         val uri = Uri.parse(uriString)
@@ -2770,24 +2785,29 @@ class MyMusicService : MediaBrowserServiceCompat() {
             val retriever = MediaMetadataRetriever()
             try {
                 retriever.setDataSource(this, Uri.parse(fileInfo.uriString))
-                val artBytes = retriever.embeddedPicture ?: return@runCatching null
-                BitmapFactory.decodeByteArray(artBytes, 0, artBytes.size)
+                retriever.embeddedPicture?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
             } finally {
-                try {
-                    retriever.release()
-                } catch (_: Exception) {
-                }
+                try { retriever.release() } catch (_: Exception) { }
             }
-        }.getOrNull()
+        }.onFailure { Timber.w(it, "Failed to read embedded art via MMR") }.getOrNull()
 
         val albumArtBitmap = if (embeddedArtBitmap != null) {
             embeddedArtBitmap
         } else {
-            runCatching {
+            val media3Art = runCatching {
                 extractArtworkFromMedia3(this@MyMusicService, fileInfo.uriString)?.let { artBytes ->
                     BitmapFactory.decodeByteArray(artBytes, 0, artBytes.size)
                 }
-            }.getOrNull() ?: loadPlaceholderArt()
+            }.onFailure { Timber.w(it, "Failed to read embedded art via media3") }.getOrNull()
+            media3Art ?: runCatching {
+                Mp4CoverExtractor.extractCoverArt(this@MyMusicService, fileInfo.uriString)?.let { artBytes ->
+                    BitmapFactory.decodeByteArray(artBytes, 0, artBytes.size)
+                }
+            }.onFailure { Timber.w(it, "Failed to read art from MP4 atoms") }.getOrNull()
+            ?: runCatching {
+                extractFolderArt(this@MyMusicService, Uri.parse(fileInfo.uriString))
+            }.onFailure { Timber.w(it, "Failed to read folder art") }.getOrNull()
+            ?: loadPlaceholderArt()
         }
 
         val genre = runtimeMetadata?.genre ?: fileInfo.genre
@@ -2819,15 +2839,11 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 for (i in 0 until trackGroups.length) {
                     val trackGroup = trackGroups[i]
                     for (j in 0 until trackGroup.length) {
-                        val metadata = trackGroup.getFormat(j).metadata
-                        if (metadata != null) {
-                            for (k in 0 until metadata.length()) {
-                                val entry = metadata[k]
-                                if (entry is ApicFrame) {
-                                    return@use entry.pictureData
-                                } else if (entry is PictureFrame) {
-                                    return@use entry.pictureData
-                                }
+                        val metadata = trackGroup.getFormat(j).metadata ?: continue
+                        for (k in 0 until metadata.length()) {
+                            when (val entry = metadata[k]) {
+                                is ApicFrame -> return@use entry.pictureData
+                                is PictureFrame -> return@use entry.pictureData
                             }
                         }
                     }
@@ -2838,6 +2854,11 @@ class MyMusicService : MediaBrowserServiceCompat() {
             null
         }
     }
+
+    // LruCache for found folder-art bitmaps; separate set tracks folders with no art
+    // to avoid repeated SAF lookups. Both are cleared when the library is rescanned.
+    private val folderArtCache = LruCache<String, Bitmap>(32)
+    private val folderArtNotFound = mutableSetOf<String>()
 
     @Volatile
     private var cachedPlaceholderArt: Bitmap? = null
@@ -2853,6 +2874,34 @@ class MyMusicService : MediaBrowserServiceCompat() {
         drawable.draw(canvas)
         cachedPlaceholderArt = bitmap
         return bitmap
+    }
+
+    private fun extractFolderArt(context: Context, trackUri: Uri): Bitmap? {
+        val docId = try { DocumentsContract.getDocumentId(trackUri) } catch (_: Exception) { return null }
+        val parentDocId = docId.substringBeforeLast('/')
+        if (parentDocId == docId) return null // track is at tree root, no parent folder
+
+        if (folderArtNotFound.contains(parentDocId)) return null
+        folderArtCache[parentDocId]?.let { return it }
+
+        for (name in FOLDER_ART_CANDIDATES) {
+            val siblingUri = try {
+                DocumentsContract.buildDocumentUriUsingTree(trackUri, "$parentDocId/$name")
+            } catch (_: Exception) { continue }
+            val bitmap = try {
+                context.contentResolver.openInputStream(siblingUri)?.use { BitmapFactory.decodeStream(it) }
+            } catch (e: Exception) {
+                Timber.w(e, "Failed to open folder art: $siblingUri")
+                null
+            }
+            if (bitmap != null) {
+                folderArtCache.put(parentDocId, bitmap)
+                return bitmap
+            }
+        }
+
+        folderArtNotFound.add(parentDocId)
+        return null
     }
 
     private fun ensureNotificationChannel() {

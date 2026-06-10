@@ -3,171 +3,117 @@ package com.example.mymediaplayer.shared
 import android.content.Context
 import android.net.Uri
 import androidx.annotation.VisibleForTesting
-import java.io.IOException
 import java.io.InputStream
-import java.nio.charset.StandardCharsets
 
-object Mp4CoverExtractor {
+internal object Mp4CoverExtractor {
+
+    // Upper bound when searching for 'moov' at the file level where the total size is unknown;
+    // any real MP4 file is orders of magnitude smaller than this.
+    private const val MAX_FILE_SEARCH_BYTES = Long.MAX_VALUE / 2
+
+    // Walks the MP4 atom tree to extract cover art from the iTunes 'covr' box.
+    // Handles both moov/meta/ilst and moov/udta/meta/ilst structures.
     fun extractCoverArt(context: Context, uriString: String): ByteArray? {
-        return try {
-            context.contentResolver.openInputStream(Uri.parse(uriString))?.use { inputStream ->
-                extractCoverArt(inputStream)
-            }
-        } catch (_: Exception) {
-            null
-        }
+        val input = context.contentResolver.openInputStream(Uri.parse(uriString)) ?: return null
+        return input.use { extractCoverArt(it) }
     }
 
     @VisibleForTesting
-    internal fun extractCoverArt(inputStream: InputStream): ByteArray? {
-        return try {
-            val bytes = inputStream.readBytes()
-            findCoverArt(bytes, 0, bytes.size, SearchState.Root)
-        } catch (_: IOException) {
-            null
-        }
-    }
-
-    private enum class SearchState {
-        Root,
-        Moov,
-        Udta,
-        Meta,
-        Ilst,
-        Covr
-    }
-
-    private data class Atom(
-        val type: String,
-        val bodyStart: Int,
-        val bodyEnd: Int
-    )
-
-    private fun findCoverArt(
-        bytes: ByteArray,
-        start: Int,
-        end: Int,
-        state: SearchState
-    ): ByteArray? {
-        if (start < 0 || end > bytes.size || start > end) return null
-        var offset = start
-        while (offset < end) {
-            val atom = readAtom(bytes, offset, end) ?: return null
-            val result = when (state) {
-                SearchState.Root -> {
-                    if (atom.type == "moov") {
-                        findCoverArt(bytes, atom.bodyStart, atom.bodyEnd, SearchState.Moov)
-                    } else {
-                        null
-                    }
+    internal fun extractCoverArt(input: InputStream): ByteArray? {
+        val moovSize = mp4FindAtom(input, MAX_FILE_SEARCH_BYTES, "moov").takeIf { it >= 0 } ?: return null
+        var remaining = moovSize
+        while (remaining >= 8) {
+            val hdr = mp4ReadHeader(input) ?: return null
+            remaining -= 8
+            val bodySize = hdr.first - 8
+            if (bodySize < 0) return null
+            remaining -= bodySize
+            when (hdr.second) {
+                "meta" -> {
+                    mp4SkipExact(input, 4) // full-box version+flags
+                    return mp4CoverArtInIlst(input, bodySize - 4)
                 }
-                SearchState.Moov -> {
-                    when (atom.type) {
-                        "meta" -> findCoverArtInMeta(bytes, atom)
-                        "udta" -> findCoverArt(bytes, atom.bodyStart, atom.bodyEnd, SearchState.Udta)
-                        else -> null
+                "udta" -> {
+                    val metaSize = mp4FindAtom(input, bodySize, "meta")
+                    if (metaSize >= 0) {
+                        mp4SkipExact(input, 4)
+                        return mp4CoverArtInIlst(input, metaSize - 4)
                     }
+                    return null
                 }
-                SearchState.Udta -> {
-                    if (atom.type == "meta") {
-                        findCoverArtInMeta(bytes, atom)
-                    } else {
-                        null
-                    }
-                }
-                SearchState.Meta -> {
-                    if (atom.type == "ilst") {
-                        findCoverArt(bytes, atom.bodyStart, atom.bodyEnd, SearchState.Ilst)
-                    } else {
-                        null
-                    }
-                }
-                SearchState.Ilst -> {
-                    if (atom.type == "covr") {
-                        findCoverArt(bytes, atom.bodyStart, atom.bodyEnd, SearchState.Covr)
-                    } else {
-                        null
-                    }
-                }
-                SearchState.Covr -> {
-                    if (atom.type == "data") {
-                        extractImageData(bytes, atom)
-                    } else {
-                        null
-                    }
-                }
+                else -> mp4SkipExact(input, bodySize)
             }
-            if (result != null) return result
-            offset = atom.bodyEnd
         }
         return null
     }
 
-    private fun findCoverArtInMeta(bytes: ByteArray, atom: Atom): ByteArray? {
-        val childrenStart = atom.bodyStart + META_FULL_BOX_HEADER_SIZE
-        if (childrenStart > atom.bodyEnd) return null
-        return findCoverArt(bytes, childrenStart, atom.bodyEnd, SearchState.Meta)
-    }
-
-    private fun extractImageData(bytes: ByteArray, atom: Atom): ByteArray? {
-        val imageStart = atom.bodyStart + DATA_HEADER_SIZE
-        if (imageStart > atom.bodyEnd) return null
-        val imageSize = atom.bodyEnd - imageStart
-        if (imageSize <= 0) return null
-        return bytes.copyOfRange(imageStart, atom.bodyEnd)
-    }
-
-    private fun readAtom(bytes: ByteArray, offset: Int, parentEnd: Int): Atom? {
-        if (offset + ATOM_HEADER_SIZE > parentEnd) return null
-        val size = readUInt32(bytes, offset) ?: return null
-        val type = String(bytes, offset + 4, 4, StandardCharsets.US_ASCII)
-        val headerSize: Int
-        val atomSize: Long
-        if (size == EXTENDED_SIZE_MARKER) {
-            if (offset + EXTENDED_ATOM_HEADER_SIZE > parentEnd) return null
-            atomSize = readUInt64(bytes, offset + ATOM_HEADER_SIZE) ?: return null
-            headerSize = EXTENDED_ATOM_HEADER_SIZE
-        } else if (size == TO_END_SIZE_MARKER) {
-            atomSize = (parentEnd - offset).toLong()
-            headerSize = ATOM_HEADER_SIZE
-        } else {
-            atomSize = size
-            headerSize = ATOM_HEADER_SIZE
+    private fun mp4CoverArtInIlst(stream: InputStream, searchSize: Long): ByteArray? {
+        val ilstSize = mp4FindAtom(stream, searchSize, "ilst").takeIf { it >= 0 } ?: return null
+        var remaining = ilstSize
+        while (remaining >= 8) {
+            val hdr = mp4ReadHeader(stream) ?: break
+            remaining -= 8
+            val bodySize = hdr.first - 8
+            if (bodySize < 0) break
+            if (hdr.second == "covr") {
+                val dataSize = mp4FindAtom(stream, bodySize, "data").takeIf { it >= 0 } ?: return null
+                mp4SkipExact(stream, 8) // 4-byte type indicator + 4-byte locale
+                val imageSize = (dataSize - 8).toInt()
+                if (imageSize <= 0) return null
+                return mp4ReadExact(stream, imageSize)
+            }
+            if (bodySize > remaining) break
+            mp4SkipExact(stream, bodySize)
+            remaining -= bodySize
         }
-        val bodySize = atomSize - headerSize
-        if (bodySize < 0) return null
-        if (atomSize > Int.MAX_VALUE.toLong()) return null
-        if (atomSize > (parentEnd - offset).toLong()) return null
-        val atomEnd = offset + atomSize.toInt()
-        return Atom(
-            type = type,
-            bodyStart = offset + headerSize,
-            bodyEnd = atomEnd
-        )
+        return null
     }
 
-    private fun readUInt32(bytes: ByteArray, offset: Int): Long? {
-        if (offset + 4 > bytes.size) return null
-        return ((bytes[offset].toLong() and BYTE_MASK) shl 24) or
-            ((bytes[offset + 1].toLong() and BYTE_MASK) shl 16) or
-            ((bytes[offset + 2].toLong() and BYTE_MASK) shl 8) or
-            (bytes[offset + 3].toLong() and BYTE_MASK)
-    }
-
-    private fun readUInt64(bytes: ByteArray, offset: Int): Long? {
-        if (offset + 8 > bytes.size) return null
-        var value = 0L
-        for (i in 0 until 8) {
-            value = (value shl 8) or (bytes[offset + i].toLong() and BYTE_MASK)
+    private fun mp4FindAtom(stream: InputStream, containerSize: Long, target: String): Long {
+        var remaining = containerSize
+        while (remaining >= 8) {
+            val hdr = mp4ReadHeader(stream) ?: return -1
+            remaining -= 8
+            val bodySize = hdr.first - 8
+            if (bodySize < 0) return -1
+            if (hdr.second == target) return bodySize
+            if (bodySize > remaining) return -1
+            mp4SkipExact(stream, bodySize)
+            remaining -= bodySize
         }
-        return value.takeIf { it >= 0 }
+        return -1
     }
 
-    private const val ATOM_HEADER_SIZE = 8
-    private const val EXTENDED_ATOM_HEADER_SIZE = 16
-    private const val META_FULL_BOX_HEADER_SIZE = 4
-    private const val DATA_HEADER_SIZE = 8
-    private const val EXTENDED_SIZE_MARKER = 1L
-    private const val TO_END_SIZE_MARKER = 0L
-    private const val BYTE_MASK = 0xffL
+    private fun mp4ReadHeader(stream: InputStream): Pair<Long, String>? {
+        val buf = mp4ReadExact(stream, 8) ?: return null
+        val size = ((buf[0].toLong() and 0xFF) shl 24) or
+                   ((buf[1].toLong() and 0xFF) shl 16) or
+                   ((buf[2].toLong() and 0xFF) shl 8) or
+                   (buf[3].toLong() and 0xFF)
+        val type = String(buf, 4, 4, Charsets.US_ASCII)
+        return size to type
+    }
+
+    // Uses read() rather than skip() for reliability on SAF-backed streams where skip() may return 0.
+    private fun mp4SkipExact(stream: InputStream, n: Long) {
+        var remaining = n
+        val buf = ByteArray(8192)
+        while (remaining > 0) {
+            val toRead = minOf(buf.size.toLong(), remaining).toInt()
+            val read = stream.read(buf, 0, toRead)
+            if (read < 0) return
+            remaining -= read
+        }
+    }
+
+    private fun mp4ReadExact(stream: InputStream, n: Int): ByteArray? {
+        val buf = ByteArray(n)
+        var offset = 0
+        while (offset < n) {
+            val read = stream.read(buf, offset, n - offset)
+            if (read < 0) return null
+            offset += read
+        }
+        return buf
+    }
 }
