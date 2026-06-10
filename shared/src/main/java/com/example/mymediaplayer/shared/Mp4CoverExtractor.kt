@@ -2,6 +2,7 @@ package com.example.mymediaplayer.shared
 
 import android.content.Context
 import android.net.Uri
+import androidx.annotation.VisibleForTesting
 import java.io.InputStream
 
 internal object Mp4CoverExtractor {
@@ -13,30 +14,34 @@ internal object Mp4CoverExtractor {
     // Walks the MP4 atom tree to extract cover art from the iTunes 'covr' box.
     // Handles both moov/meta/ilst and moov/udta/meta/ilst structures.
     fun extractCoverArt(context: Context, uriString: String): ByteArray? {
-        context.contentResolver.openInputStream(Uri.parse(uriString))?.use { input ->
-            val moovSize = mp4FindAtom(input, MAX_FILE_SEARCH_BYTES, "moov").takeIf { it >= 0 } ?: return null
-            var remaining = moovSize
-            while (remaining >= 8) {
-                val hdr = mp4ReadHeader(input) ?: return null
-                remaining -= 8
-                val bodySize = hdr.first - 8
-                if (bodySize < 0) return null
-                remaining -= bodySize
-                when (hdr.second) {
-                    "meta" -> {
-                        mp4SkipExact(input, 4) // full-box version+flags
-                        return mp4CoverArtInIlst(input, bodySize - 4)
-                    }
-                    "udta" -> {
-                        val metaSize = mp4FindAtom(input, bodySize, "meta")
-                        if (metaSize >= 0) {
-                            mp4SkipExact(input, 4)
-                            return mp4CoverArtInIlst(input, metaSize - 4)
-                        }
-                        return null
-                    }
-                    else -> mp4SkipExact(input, bodySize)
+        val input = context.contentResolver.openInputStream(Uri.parse(uriString)) ?: return null
+        return input.use { extractCoverArt(it) }
+    }
+
+    @VisibleForTesting
+    internal fun extractCoverArt(input: InputStream): ByteArray? {
+        val moovSize = mp4FindAtom(input, MAX_FILE_SEARCH_BYTES, "moov").takeIf { it >= 0 } ?: return null
+        var remaining = moovSize
+        while (remaining >= 8) {
+            val hdr = mp4ReadHeader(input) ?: return null
+            remaining -= 8
+            val bodySize = hdr.first - 8
+            if (bodySize < 0) return null
+            remaining -= bodySize
+            when (hdr.second) {
+                "meta" -> {
+                    mp4SkipExact(input, 4) // full-box version+flags
+                    return mp4CoverArtInIlst(input, bodySize - 4)
                 }
+                "udta" -> {
+                    val metaSize = mp4FindAtom(input, bodySize, "meta")
+                    if (metaSize >= 0) {
+                        mp4SkipExact(input, 4)
+                        return mp4CoverArtInIlst(input, metaSize - 4)
+                    }
+                    return null
+                }
+                else -> mp4SkipExact(input, bodySize)
             }
         }
         return null
