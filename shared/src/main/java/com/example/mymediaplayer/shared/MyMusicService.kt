@@ -200,6 +200,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
         private const val MAX_CONSECUTIVE_PLAYBACK_ERRORS = 3
         private const val TTS_SPEECH_RATE = 0.93f
         private const val TTS_PITCH = 1.04f
+        internal const val ALBUM_ART_TARGET_SIZE_PX = 512
+        private const val FOLDER_ART_CACHE_MAX_KB = 8 * 1024
 
         private const val NOW_PLAYING_CHANNEL_ID = "now_playing"
         private const val NOW_PLAYING_NOTIFICATION_ID = 1001
@@ -2785,7 +2787,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
             val retriever = MediaMetadataRetriever()
             try {
                 retriever.setDataSource(this, Uri.parse(fileInfo.uriString))
-                retriever.embeddedPicture?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
+                retriever.embeddedPicture?.let { decodeSampledBitmapFromBytes(it) }
             } finally {
                 try { retriever.release() } catch (_: Exception) { }
             }
@@ -2796,12 +2798,12 @@ class MyMusicService : MediaBrowserServiceCompat() {
         } else {
             val media3Art = runCatching {
                 extractArtworkFromMedia3(this@MyMusicService, fileInfo.uriString)?.let { artBytes ->
-                    BitmapFactory.decodeByteArray(artBytes, 0, artBytes.size)
+                    decodeSampledBitmapFromBytes(artBytes)
                 }
             }.onFailure { Timber.w(it, "Failed to read embedded art via media3") }.getOrNull()
             media3Art ?: runCatching {
                 Mp4CoverExtractor.extractCoverArt(this@MyMusicService, fileInfo.uriString)?.let { artBytes ->
-                    BitmapFactory.decodeByteArray(artBytes, 0, artBytes.size)
+                    decodeSampledBitmapFromBytes(artBytes)
                 }
             }.onFailure { Timber.w(it, "Failed to read art from MP4 atoms") }.getOrNull()
             ?: runCatching {
@@ -2855,9 +2857,51 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }
     }
 
+    @VisibleForTesting
+    internal fun calculateAlbumArtInSampleSize(
+        options: BitmapFactory.Options,
+        reqWidth: Int = ALBUM_ART_TARGET_SIZE_PX,
+        reqHeight: Int = ALBUM_ART_TARGET_SIZE_PX
+    ): Int {
+        val height = options.outHeight
+        val width = options.outWidth
+        var inSampleSize = 1
+
+        if (height > reqHeight || width > reqWidth) {
+            while (height / (inSampleSize * 2) >= reqHeight || width / (inSampleSize * 2) >= reqWidth) {
+                inSampleSize *= 2
+            }
+        }
+
+        return inSampleSize.coerceAtLeast(1)
+    }
+
+    private fun decodeSampledBitmapFromBytes(bytes: ByteArray): Bitmap? {
+        if (bytes.isEmpty()) return null
+        val boundsOptions = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, boundsOptions)
+        val decodeOptions = BitmapFactory.Options().apply {
+            inSampleSize = calculateAlbumArtInSampleSize(boundsOptions)
+        }
+        return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, decodeOptions)
+    }
+
+    private fun decodeSampledBitmapFromStream(openInputStream: () -> InputStream?): Bitmap? {
+        val boundsOptions = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        openInputStream()?.use { BitmapFactory.decodeStream(it, null, boundsOptions) } ?: return null
+
+        val decodeOptions = BitmapFactory.Options().apply {
+            inSampleSize = calculateAlbumArtInSampleSize(boundsOptions)
+        }
+        return openInputStream()?.use { BitmapFactory.decodeStream(it, null, decodeOptions) }
+    }
+
     // LruCache for found folder-art bitmaps; separate set tracks folders with no art
     // to avoid repeated SAF lookups. Both are cleared when the library is rescanned.
-    private val folderArtCache = LruCache<String, Bitmap>(32)
+    private val folderArtCache = object : LruCache<String, Bitmap>(FOLDER_ART_CACHE_MAX_KB) {
+        override fun sizeOf(key: String, value: Bitmap): Int =
+            (value.byteCount / 1024).coerceAtLeast(1)
+    }
     private val folderArtNotFound = mutableSetOf<String>()
 
     @Volatile
@@ -2889,7 +2933,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 DocumentsContract.buildDocumentUriUsingTree(trackUri, "$parentDocId/$name")
             } catch (_: Exception) { continue }
             val bitmap = try {
-                context.contentResolver.openInputStream(siblingUri)?.use { BitmapFactory.decodeStream(it) }
+                decodeSampledBitmapFromStream {
+                    context.contentResolver.openInputStream(siblingUri)
+                }
             } catch (e: Exception) {
                 Timber.w(e, "Failed to open folder art: $siblingUri")
                 null

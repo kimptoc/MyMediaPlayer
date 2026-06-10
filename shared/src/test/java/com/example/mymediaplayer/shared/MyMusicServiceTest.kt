@@ -1,5 +1,6 @@
 package com.example.mymediaplayer.shared
 
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.support.v4.media.session.PlaybackStateCompat
 import org.junit.Assert.assertEquals
@@ -189,6 +190,32 @@ class MyMusicServiceTest {
 
         assertFalse(service.shouldBucketSongs(500))
         assertTrue(service.shouldBucketSongs(501))
+    }
+
+    @Test
+    fun calculateAlbumArtInSampleSize_downsamplesLargeArtwork() {
+        val service = MyMusicService()
+        val options = BitmapFactory.Options().apply {
+            outWidth = 4096
+            outHeight = 4096
+        }
+
+        val sampleSize = service.calculateAlbumArtInSampleSize(options)
+
+        assertEquals(8, sampleSize)
+    }
+
+    @Test
+    fun calculateAlbumArtInSampleSize_keepsSmallArtworkAtFullSize() {
+        val service = MyMusicService()
+        val options = BitmapFactory.Options().apply {
+            outWidth = 320
+            outHeight = 320
+        }
+
+        val sampleSize = service.calculateAlbumArtInSampleSize(options)
+
+        assertEquals(1, sampleSize)
     }
 
     @Test
