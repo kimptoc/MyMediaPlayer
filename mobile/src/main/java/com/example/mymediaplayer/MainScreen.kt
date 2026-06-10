@@ -884,16 +884,14 @@ private fun RenamePlaylistDialogContent(
 private fun QueueItem(
     item: QueueEntry,
     activeQueueId: Long,
-    onQueueItemSelected: (Long) -> Unit,
-    modifier: Modifier = Modifier
+    onQueueItemSelected: (Long) -> Unit
 ) {
     val isActive = item.queueId == activeQueueId
     TextButton(
         onClick = {
             onQueueItemSelected(item.queueId)
         },
-        enabled = !isActive,
-        modifier = modifier
+        enabled = !isActive
     ) {
         Text(
             text = if (isActive) "▶ ${item.title}" else item.title,
