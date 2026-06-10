@@ -882,21 +882,18 @@ private fun RenamePlaylistDialogContent(
 
 @Composable
 private fun QueueItem(
-private fun QueueItem(
     item: QueueEntry,
     activeQueueId: Long,
     onQueueItemSelected: (Long) -> Unit,
     modifier: Modifier = Modifier
-)
-    activeQueueId: Long,
-    onQueueItemSelected: (Long) -> Unit
 ) {
     val isActive = item.queueId == activeQueueId
     TextButton(
         onClick = {
             onQueueItemSelected(item.queueId)
         },
-        enabled = !isActive
+        enabled = !isActive,
+        modifier = modifier
     ) {
         Text(
             text = if (isActive) "▶ ${item.title}" else item.title,
