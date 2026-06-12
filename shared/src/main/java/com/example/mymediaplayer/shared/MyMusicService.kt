@@ -206,6 +206,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
         private const val NOW_PLAYING_CHANNEL_ID = "now_playing"
         private const val NOW_PLAYING_NOTIFICATION_ID = 1001
 
+        private const val ANDROID_AUTO_PACKAGE_NAME = "com.google.android.projection.gearhead"
+
         private const val EXTRA_MEDIA_FOCUS_KEY = "android.intent.extra.focus"
         private const val EXTRA_MEDIA_ARTIST_KEY = "android.intent.extra.artist"
         private const val EXTRA_MEDIA_ALBUM_KEY = "android.intent.extra.album"
@@ -257,6 +259,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
     private var consecutivePlaybackErrors: Int = 0
     @Volatile
     private var isScanning: Boolean = false
+    private var isForegroundPromoted: Boolean = false
     private val pendingResults =
         mutableMapOf<String, MutableList<MediaBrowserServiceCompat.Result<MutableList<MediaItem>>>>()
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -669,17 +672,16 @@ class MyMusicService : MediaBrowserServiceCompat() {
         mark("restorePlaybackSnapshot done")
         loadCachedTreeIfAvailable()
         mark("loadCachedTreeIfAvailable returned (isScanning=$isScanning, cachedFiles=${mediaCacheService.cachedFiles.size})")
-        startForegroundReady()
-        mark("startForegroundReady done")
         mark("exit")
     }
 
-    // Promote the service to a foreground service the moment AA binds, so Android
-    // (and Samsung's "Freecess" aggressive freezer in particular) cannot freeze
-    // the process before the user's first play command arrives. Without this,
-    // gearhead's binder transactions to our MediaSession fail with error -32
-    // ("sent binder to frozen apps"), and AA's spinner ("getting your selection")
-    // hangs forever.
+    // Promote the service to a foreground service so Android (and Samsung's
+    // "Freecess" aggressive freezer in particular) cannot freeze the process
+    // before the user's first play command arrives. Without this, gearhead's
+    // binder transactions to our MediaSession fail with error -32 ("sent binder
+    // to frozen apps"), and AA's spinner ("getting your selection") hangs
+    // forever. Only called for AA connections (see onGetRoot) so phone-only
+    // sessions don't show a persistent "now playing" notification.
     private fun startForegroundReady() {
         runCatching {
             val notification = buildNowPlayingNotification(PlaybackStateCompat.STATE_NONE)
@@ -799,6 +801,11 @@ class MyMusicService : MediaBrowserServiceCompat() {
         rootHints: Bundle?
     ): MediaBrowserServiceCompat.BrowserRoot? {
         Log.d("MyMusicService", "onGetRoot from $clientPackageName uid=$clientUid")
+
+        if (clientPackageName == ANDROID_AUTO_PACKAGE_NAME && !isForegroundPromoted) {
+            startForegroundReady()
+            isForegroundPromoted = true
+        }
 
         val validator = PackageValidator(this)
         if (!validator.isCallerValid(clientPackageName, clientUid)) {
