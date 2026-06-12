@@ -2886,9 +2886,11 @@ class MyMusicService : MediaBrowserServiceCompat() {
         return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, decodeOptions)
     }
 
-    private fun decodeSampledBitmapFromStream(openInputStream: () -> InputStream?): Bitmap? {
+    @VisibleForTesting
+    internal fun decodeSampledBitmapFromStream(openInputStream: () -> InputStream?): Bitmap? {
         val boundsOptions = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        openInputStream()?.use { BitmapFactory.decodeStream(it, null, boundsOptions) } ?: return null
+        val boundsStream = openInputStream() ?: return null
+        boundsStream.use { BitmapFactory.decodeStream(it, null, boundsOptions) }
 
         val decodeOptions = BitmapFactory.Options().apply {
             inSampleSize = calculateAlbumArtInSampleSize(boundsOptions)
