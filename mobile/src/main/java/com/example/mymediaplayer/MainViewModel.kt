@@ -236,7 +236,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         viewModelScope.launch(Dispatchers.IO) {
-            if (!forceRescan && !deepScan) {
+            if (!forceRescan) {
                 val persisted =
                     mediaCacheService.loadPersistedCache(getApplication(), treeUri, maxFiles)
                 if (persisted != null && persisted.files.isNotEmpty()) {
@@ -245,7 +245,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         persisted.files,
                         persisted.playlists,
                         maxFiles,
-                        deepScan = false
+                        deepScan = deepScan
                     )
                     reimportPlaylistsFromSaveFolderIfNeeded()
                     metadataKey = null
@@ -290,9 +290,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val files = mediaCacheService.cachedFiles
             val playlists = mediaCacheService.discoveredPlaylists
             scanCache[key] = files to playlists
-            if (!deepScan) {
-                mediaCacheService.persistCache(getApplication(), treeUri, maxFiles)
-            }
+            mediaCacheService.persistCache(getApplication(), treeUri, maxFiles)
             val message = formatDirectoryScanMessage(stats)
             _uiState.value = resetAfterScan(
                 files,

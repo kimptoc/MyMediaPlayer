@@ -1139,7 +1139,7 @@ private fun ScanDialogContent(
                             checked = scanDeepMode,
                             onCheckedChange = onScanDeepModeChange
                         )
-                        Text("Deep scan (slower, tries unknown file types — disables startup cache, rescans every open)")
+                        Text("Deep scan (slower, tries unknown file types — result is cached for fast startups)")
                     }
                 }
                 Spacer(modifier = Modifier.height(4.dp))
