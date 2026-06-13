@@ -4,7 +4,6 @@ import android.content.ComponentName
 import android.os.Process
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
-import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -26,9 +25,8 @@ import org.robolectric.annotation.Config
 @Config(sdk = [33])
 class MyMusicServiceBindContractTest {
 
-    @Before
-    fun setup() {
-        EncryptedPrefsManager.clearCacheForTesting()
+    companion object {
+        private const val GEARHEAD_PACKAGE = "com.google.android.projection.gearhead"
     }
 
     /**
@@ -60,17 +58,18 @@ class MyMusicServiceBindContractTest {
      * error -32 ("sent binder to frozen apps"). See PR #243.
      */
     @Test
-    fun myMusicService_isPromotedToForegroundInOnCreate() {
+    fun myMusicService_isPromotedToForegroundOnGetRoot() {
         val service = Robolectric.buildService(MyMusicService::class.java).create().get()
 
         // Simulate the Android Auto (gearhead) package connecting via MediaBrowser.
         // onGetRoot() is where the foreground promotion is triggered.
-        service.onGetRoot("com.google.android.projection.gearhead", Process.myUid(), null)
+        service.onGetRoot(GEARHEAD_PACKAGE, Process.myUid(), null)
 
         val shadow = shadowOf(service)
         assertNotNull(
-            "MyMusicService must call startForeground() before onCreate returns — Samsung Freecess " +
-                "freezes the service between sessions and AA's first binder transaction fails. See PR #243.",
+            "MyMusicService must call startForeground() when onGetRoot() is called by the " +
+                "gearhead package — Samsung Freecess freezes the service between sessions and " +
+                "AA's first binder transaction fails. See PR #243.",
             shadow.lastForegroundNotification
         )
     }
