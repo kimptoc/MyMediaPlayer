@@ -1,6 +1,7 @@
 package com.example.mymediaplayer.shared
 
 import android.content.Context
+import android.net.Uri
 import android.provider.DocumentsContract
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.Dispatchers
@@ -10,6 +11,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -143,6 +145,58 @@ class MediaCacheServiceTest {
 
         withContext(Dispatchers.IO) {
             dao.clearPlaylists()
+        }
+    }
+
+    @Test
+    fun loadPersistedCache_rebuildsCacheFromDatabase() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val db = MediaCacheDatabase.getInstance(context)
+        val dao = db.cacheDao()
+        val treeUri = Uri.parse("content://test/tree")
+        val trackUri = "content://test/tree/primary%3AMusic%2Frap%2Ftrack.mp3"
+
+        withContext(Dispatchers.IO) {
+            dao.replaceCache(
+                files = listOf(
+                    MediaFileEntity(
+                        uriString = trackUri,
+                        displayName = "track.mp3",
+                        sizeBytes = 1_000L,
+                        title = "Track",
+                        artist = "Artist",
+                        album = "Album",
+                        genre = null,
+                        durationMs = 10_000L,
+                        year = 1999,
+                        addedAtMs = 1_234L
+                    )
+                ),
+                playlists = listOf(PlaylistEntity("content://test/playlist", "Playlist")),
+                state = ScanStateEntity(
+                    treeUri = treeUri.toString(),
+                    scanLimit = 10,
+                    scannedAt = 42L
+                )
+            )
+        }
+
+        val service = MediaCacheService()
+        val persisted = withContext(Dispatchers.IO) {
+            service.loadPersistedCache(context, treeUri, maxFiles = 10)
+        }
+
+        assertNotNull(persisted)
+        assertEquals(42L, persisted!!.scannedAt)
+        assertEquals(1, persisted.files.size)
+        assertEquals("Hip-Hop", persisted.files.single().genre)
+        assertEquals(persisted.files.single(), service.getFileByUri(trackUri))
+        assertEquals(listOf(PlaylistInfo("content://test/playlist", "Playlist")), service.discoveredPlaylists)
+
+        withContext(Dispatchers.IO) {
+            dao.clearFiles()
+            dao.clearPlaylists()
+            dao.clearScanState()
         }
     }
 

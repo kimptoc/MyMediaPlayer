@@ -78,7 +78,7 @@ class MediaCacheService {
             _cachedFiles.addAll(out)
             _cachedMusicFiles = null
             _cachedFilesByUri.clear()
-            _cachedFilesByUri.putAll(out.associateBy { it.uriString })
+            putFilesByUri(out)
             _discoveredPlaylists.clear()
             albumArtistIndexed = false
         }
@@ -447,7 +447,7 @@ class MediaCacheService {
                 if (accepted.isNotEmpty()) {
                     _cachedMusicFiles = null
                 }
-                _cachedFilesByUri.putAll(accepted.associateBy { it.uriString })
+                putFilesByUri(accepted)
                 albumArtistIndexed = false
             }
             for (result in accepted) {
@@ -518,35 +518,32 @@ class MediaCacheService {
         if (treeUri == MediaStore.Audio.Media.EXTERNAL_CONTENT_URI && isCacheStaleForWholeDevice(context, state.scannedAt)) {
             return null
         }
-        val files = dao.getAllFiles().map {
-            val decodedUri = Uri.decode(it.uriString)
-            val genre = it.genre ?: normalizeGenre(inferGenreFromPath(decodedUri))
-            MediaFileInfo(
-                uriString = it.uriString,
-                displayName = it.displayName,
-                sizeBytes = it.sizeBytes,
-                title = it.title,
-                artist = it.artist,
-                album = it.album,
-                genre = genre,
-                durationMs = it.durationMs,
-                year = it.year,
-                addedAtMs = it.addedAtMs,
-                isPodcast = isPodcastMedia(it.genre, decodedUri)
-            )
+        val files = dao.getAllFiles().let { fileEntities ->
+            val loadedFiles = ArrayList<MediaFileInfo>(fileEntities.size)
+            for (entity in fileEntities) {
+                loadedFiles.add(mediaFileFromEntity(entity))
+            }
+            loadedFiles
         }
-        val playlists = dao.getAllPlaylists().map {
-            PlaylistInfo(
-                uriString = it.uriString,
-                displayName = it.displayName
-            )
+
+        val playlists = dao.getAllPlaylists().let { playlistEntities ->
+            val loadedPlaylists = ArrayList<PlaylistInfo>(playlistEntities.size)
+            for (entity in playlistEntities) {
+                loadedPlaylists.add(
+                    PlaylistInfo(
+                        uriString = entity.uriString,
+                        displayName = entity.displayName
+                    )
+                )
+            }
+            loadedPlaylists
         }
         synchronized(cacheLock) {
             _cachedFiles.clear()
             _cachedFiles.addAll(files)
             _cachedMusicFiles = null
             _cachedFilesByUri.clear()
-            _cachedFilesByUri.putAll(files.associateBy { it.uriString })
+            putFilesByUri(files)
             _discoveredPlaylists.clear()
             _discoveredPlaylists.addAll(playlists)
             albumArtistIndexed = false
@@ -616,7 +613,7 @@ class MediaCacheService {
             if (toAdd.isNotEmpty()) {
                 _cachedMusicFiles = null
             }
-            _cachedFilesByUri.putAll(toAdd.associateBy { it.uriString })
+            putFilesByUri(toAdd)
             albumArtistIndexed = false
         }
     }
@@ -843,23 +840,13 @@ class MediaCacheService {
     fun hasAlbumArtistIndexes(): Boolean = albumArtistIndexed
 
     fun buildAlbumArtistIndexesFromCache() {
-        clearMetadataIndexes()
-        val snapshot = synchronized(cacheLock) { _cachedFiles.toList() }
-        for (file in snapshot) {
-            if (file.isPodcast) {
-                genreIndex.getOrPut(PODCAST_GENRE) { mutableListOf() }.add(file)
-                continue
+        synchronized(cacheLock) {
+            clearMetadataIndexes()
+            for (file in _cachedFiles) {
+                indexMetadataFile(file)
             }
-            val album = file.album?.ifBlank { null } ?: "Unknown Album"
-            val artist = file.artist?.ifBlank { null } ?: "Unknown Artist"
-            val genre = bucketGenre(file.genre)
-            val decade = decadeLabel(file.year)
-            albumIndex.getOrPut(album) { mutableListOf() }.add(file)
-            artistIndex.getOrPut(artist) { mutableListOf() }.add(file)
-            genreIndex.getOrPut(genre) { mutableListOf() }.add(file)
-            decadeIndex.getOrPut(decade) { mutableListOf() }.add(file)
+            albumArtistIndexed = true
         }
-        albumArtistIndexed = true
     }
 
     fun albums(): List<String> = albumIndex.keys.sorted()
@@ -932,6 +919,57 @@ class MediaCacheService {
         artistIndex.clear()
         decadeIndex.clear()
         albumArtistIndexed = false
+    }
+
+    private fun putFilesByUri(files: Iterable<MediaFileInfo>) {
+        for (file in files) {
+            _cachedFilesByUri[file.uriString] = file
+        }
+    }
+
+    private fun mediaFileFromEntity(entity: MediaFileEntity): MediaFileInfo {
+        var decodedUri: String? = null
+        fun decodedUriValue(): String {
+            val current = decodedUri
+            if (current != null) return current
+            return Uri.decode(entity.uriString).also { decodedUri = it }
+        }
+
+        val genre = entity.genre ?: normalizeGenre(
+            inferGenreFromPath(entity.uriString) ?: inferGenreFromPath(decodedUriValue())
+        )
+        val decodedPath = decodedUri
+        val isPodcast = isPodcastMedia(entity.genre, entity.uriString) ||
+            (decodedPath != null && isPodcastMedia(entity.genre, decodedPath))
+
+        return MediaFileInfo(
+            uriString = entity.uriString,
+            displayName = entity.displayName,
+            sizeBytes = entity.sizeBytes,
+            title = entity.title,
+            artist = entity.artist,
+            album = entity.album,
+            genre = genre,
+            durationMs = entity.durationMs,
+            year = entity.year,
+            addedAtMs = entity.addedAtMs,
+            isPodcast = isPodcast
+        )
+    }
+
+    private fun indexMetadataFile(file: MediaFileInfo) {
+        if (file.isPodcast) {
+            genreIndex.getOrPut(PODCAST_GENRE) { mutableListOf() }.add(file)
+            return
+        }
+        val album = file.album?.ifBlank { null } ?: "Unknown Album"
+        val artist = file.artist?.ifBlank { null } ?: "Unknown Artist"
+        val genre = bucketGenre(file.genre)
+        val decade = decadeLabel(file.year)
+        albumIndex.getOrPut(album) { mutableListOf() }.add(file)
+        artistIndex.getOrPut(artist) { mutableListOf() }.add(file)
+        genreIndex.getOrPut(genre) { mutableListOf() }.add(file)
+        decadeIndex.getOrPut(decade) { mutableListOf() }.add(file)
     }
 
     private fun normalizeGenre(raw: String?): String {
