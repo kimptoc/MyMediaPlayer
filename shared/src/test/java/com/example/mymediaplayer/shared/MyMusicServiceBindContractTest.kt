@@ -53,12 +53,13 @@ class MyMusicServiceBindContractTest {
         val serviceElements = manifest.getElementsByTagName("service")
         val myMusicService = (0 until serviceElements.length)
             .map { serviceElements.item(it) as Element }
-            .first { it.getAttributeNS(androidNamespace, "name") == MyMusicService::class.java.name }
+            .firstOrNull { it.getAttributeNS(androidNamespace, "name") == MyMusicService::class.java.name }
 
+        assertNotNull("MyMusicService must be declared in the manifest. See PR #243.", myMusicService)
         assertFalse(
             "MyMusicService must not declare a permission requirement — gearhead can't hold " +
                 "signature-level perms like BIND_MEDIA_BROWSER_SERVICE. See PR #243.",
-            myMusicService.hasAttributeNS(androidNamespace, "permission")
+            myMusicService!!.hasAttributeNS(androidNamespace, "permission")
         )
     }
 
