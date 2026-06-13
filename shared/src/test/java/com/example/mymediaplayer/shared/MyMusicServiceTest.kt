@@ -1,5 +1,6 @@
 package com.example.mymediaplayer.shared
 
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.support.v4.media.session.PlaybackStateCompat
 import org.junit.Assert.assertEquals
@@ -189,6 +190,57 @@ class MyMusicServiceTest {
 
         assertFalse(service.shouldBucketSongs(500))
         assertTrue(service.shouldBucketSongs(501))
+    }
+
+    @Test
+    fun calculateAlbumArtInSampleSize_downsamplesLargeArtwork() {
+        val service = MyMusicService()
+        val options = BitmapFactory.Options().apply {
+            outWidth = 4096
+            outHeight = 4096
+        }
+
+        val sampleSize = service.calculateAlbumArtInSampleSize(options)
+
+        assertEquals(8, sampleSize)
+    }
+
+    @Test
+    fun calculateAlbumArtInSampleSize_keepsSmallArtworkAtFullSize() {
+        val service = MyMusicService()
+        val options = BitmapFactory.Options().apply {
+            outWidth = 320
+            outHeight = 320
+        }
+
+        val sampleSize = service.calculateAlbumArtInSampleSize(options)
+
+        assertEquals(1, sampleSize)
+    }
+
+    @Test
+    fun decodeSampledBitmapFromStream_decodesAndDownsamplesImage() {
+        val service = MyMusicService()
+        val source = android.graphics.Bitmap.createBitmap(2048, 2048, android.graphics.Bitmap.Config.ARGB_8888)
+        val bytes = java.io.ByteArrayOutputStream().use { out ->
+            source.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
+            out.toByteArray()
+        }
+
+        val bitmap = service.decodeSampledBitmapFromStream { java.io.ByteArrayInputStream(bytes) }
+
+        assertNotNull(bitmap)
+        assertEquals(512, bitmap!!.width)
+        assertEquals(512, bitmap.height)
+    }
+
+    @Test
+    fun decodeSampledBitmapFromStream_returnsNullWhenStreamUnavailable() {
+        val service = MyMusicService()
+
+        val bitmap = service.decodeSampledBitmapFromStream { null }
+
+        assertNull(bitmap)
     }
 
     @Test
