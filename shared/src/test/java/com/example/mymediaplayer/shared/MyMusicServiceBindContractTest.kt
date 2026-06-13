@@ -1,16 +1,17 @@
 package com.example.mymediaplayer.shared
 
-import android.content.ComponentName
 import android.os.Process
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.w3c.dom.Element
+import java.io.File
+import javax.xml.parsers.DocumentBuilderFactory
 
 /**
  * Regression tests for the Android Auto bind path (issue #247 / PR #243).
@@ -35,19 +36,29 @@ class MyMusicServiceBindContractTest {
      * gearhead (com.google.android.projection.gearhead) cannot hold
      * BIND_MEDIA_BROWSER_SERVICE because it is a signature-level permission.
      * Declaring it on the service element silently prevents the bind. See PR #243.
+     *
+     * Parses the manifest directly rather than going through Robolectric's
+     * PackageManager — resolving MyMusicService as a component there requires
+     * `includeAndroidResources` and a matching `@Config(sdk = ...)`/targetSdk,
+     * which conflicts with the sdk levels used by other tests in this module.
      */
     @Test
     fun myMusicService_doesNotRequireBindPermission() {
-        val context = RuntimeEnvironment.getApplication()
-        val pm = context.packageManager
-        val componentName = ComponentName(context, MyMusicService::class.java.name)
-        @Suppress("DEPRECATION")
-        val serviceInfo = pm.getServiceInfo(componentName, 0)
+        val androidNamespace = "http://schemas.android.com/apk/res/android"
+        val manifest = DocumentBuilderFactory.newInstance()
+            .apply { isNamespaceAware = true }
+            .newDocumentBuilder()
+            .parse(File("src/main/AndroidManifest.xml"))
 
-        assertNull(
+        val serviceElements = manifest.getElementsByTagName("service")
+        val myMusicService = (0 until serviceElements.length)
+            .map { serviceElements.item(it) as Element }
+            .first { it.getAttributeNS(androidNamespace, "name") == MyMusicService::class.java.name }
+
+        assertFalse(
             "MyMusicService must not declare a permission requirement — gearhead can't hold " +
                 "signature-level perms like BIND_MEDIA_BROWSER_SERVICE. See PR #243.",
-            serviceInfo.permission
+            myMusicService.hasAttributeNS(androidNamespace, "permission")
         )
     }
 

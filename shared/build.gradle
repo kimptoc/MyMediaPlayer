@@ -31,11 +31,6 @@ android {
     kotlinOptions {
         jvmTarget = "11"
     }
-    testOptions {
-        unitTests {
-            includeAndroidResources = true
-        }
-    }
 }
 dependencies {
     implementation libs.okhttp
