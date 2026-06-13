@@ -36,6 +36,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.media.session.MediaButtonReceiver
 import androidx.media.MediaBrowserServiceCompat
 import android.graphics.BitmapFactory
+import androidx.annotation.OptIn
 import androidx.core.content.ContextCompat
 import androidx.media.utils.MediaConstants
 import androidx.media3.common.util.UnstableApi
@@ -2839,7 +2840,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         updateNowPlayingNotification(lastPlaybackState()?.state ?: PlaybackStateCompat.STATE_NONE)
     }
 
-    @OptIn(UnstableApi::class)
+    @OptIn(markerClass = [UnstableApi::class])
     private suspend fun extractArtworkFromMedia3(context: Context, uriString: String): ByteArray? {
         return try {
             val mediaItem = androidx.media3.common.MediaItem.fromUri(uriString)
