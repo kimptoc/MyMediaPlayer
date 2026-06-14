@@ -25,6 +25,9 @@ class EncryptedPrefsManagerTest {
     @Implements(androidx.security.crypto.EncryptedSharedPreferences::class)
     class ShadowEncryptedSharedPreferences {
         companion object {
+            var throwGeneralSecurityException = false
+            var throwIOException = false
+
             @Implementation
             @JvmStatic
             fun create(
@@ -34,6 +37,12 @@ class EncryptedPrefsManagerTest {
                 prefKeyEncryptionScheme: androidx.security.crypto.EncryptedSharedPreferences.PrefKeyEncryptionScheme,
                 prefValueEncryptionScheme: androidx.security.crypto.EncryptedSharedPreferences.PrefValueEncryptionScheme
             ): SharedPreferences {
+                if (throwGeneralSecurityException) {
+                    throw java.security.GeneralSecurityException("Mocked GeneralSecurityException")
+                }
+                if (throwIOException) {
+                    throw java.io.IOException("Mocked IOException")
+                }
                 return context.getSharedPreferences(fileName + java.util.UUID.randomUUID().toString(), Context.MODE_PRIVATE)
             }
         }
@@ -73,6 +82,41 @@ class EncryptedPrefsManagerTest {
     @Before
     fun setup() {
         EncryptedPrefsManager.clearCacheForTesting()
+        ShadowEncryptedSharedPreferences.throwGeneralSecurityException = false
+        ShadowEncryptedSharedPreferences.throwIOException = false
+    }
+
+    @Test
+    fun testCreateOrGet_throwsGeneralSecurityException() {
+        ShadowEncryptedSharedPreferences.throwGeneralSecurityException = true
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val prefs = EncryptedPrefsManager.createOrGet(context, "test_prefs_sec_fail")
+        org.junit.Assert.assertNull(prefs)
+    }
+
+    @Test
+    fun testCreateOrGet_throwsIOException() {
+        ShadowEncryptedSharedPreferences.throwIOException = true
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val prefs = EncryptedPrefsManager.createOrGet(context, "test_prefs_io_fail")
+        org.junit.Assert.assertNull(prefs)
+    }
+
+    @Test
+    fun testCreateOrGet_cachesFailures() {
+        ShadowEncryptedSharedPreferences.throwIOException = true
+        val context = ApplicationProvider.getApplicationContext<Context>()
+
+        // First attempt fails and caches the failure
+        var prefs = EncryptedPrefsManager.createOrGet(context, "test_prefs_cache_fail")
+        org.junit.Assert.assertNull(prefs)
+
+        // Reset the flag so create() would succeed if called
+        ShadowEncryptedSharedPreferences.throwIOException = false
+
+        // Second attempt should return null immediately without calling create()
+        prefs = EncryptedPrefsManager.createOrGet(context, "test_prefs_cache_fail")
+        org.junit.Assert.assertNull(prefs)
     }
 
     @Test
