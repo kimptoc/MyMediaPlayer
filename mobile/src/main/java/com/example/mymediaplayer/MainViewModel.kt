@@ -77,7 +77,8 @@ data class LibraryState(
 
 data class SearchState(
     val searchQuery: String = "",
-    val searchResults: List<MediaFileInfo> = emptyList()
+    val searchResults: List<MediaFileInfo> = emptyList(),
+    val previousSearchQueries: List<String> = emptyList()
 )
 
 data class PlaylistMgmtState(
@@ -125,6 +126,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         private const val KEY_FLAGGED_URIS = "flagged_uris"
         private const val KEY_PLAY_COUNTS = "play_counts"
         private const val KEY_LAST_PLAYED_AT = "last_played_at"
+        private const val KEY_SEARCH_HISTORY = "search_history"
+        private const val MAX_SEARCH_HISTORY = 10
         const val SMART_PREFIX = "smart:"
         const val SMART_FAVORITES = "${SMART_PREFIX}favorites"
         const val SMART_FLAGGED = "${SMART_PREFIX}flagged"
@@ -151,10 +154,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val flagged = prefs.getStringSet(KEY_FLAGGED_URIS, emptySet())?.toSet() ?: emptySet()
         val rawPlayCounts = prefs.getString(KEY_PLAY_COUNTS, null)
         val rawLastPlayedAt = prefs.getString(KEY_LAST_PLAYED_AT, null)
+        val searchHistory = decodeSearchHistory(prefs.getString(KEY_SEARCH_HISTORY, null))
 
         _uiState.value = _uiState.value.copy(
             favoriteUris = favorites,
-            flaggedUris = flagged
+            flaggedUris = flagged,
+            search = _uiState.value.search.copy(previousSearchQueries = searchHistory)
         )
 
         viewModelScope.launch {
@@ -179,6 +184,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     override fun onCleared() {
+        recordSearchQuery(_uiState.value.search.searchQuery)
         super.onCleared()
         mediaCacheService.clearCache()
         scanCache.clear()
@@ -572,21 +578,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updateSearchQuery(query: String) {
         val current = _uiState.value
+        if (query.isBlank() && current.search.searchQuery.isNotBlank()) {
+            recordSearchQuery(current.search.searchQuery)
+        }
         val results = applySearchResults(current.scan.scannedFiles, query)
         _uiState.value = current.copy(
             search = current.search.copy(
                 searchQuery = query,
-                searchResults = results
+                searchResults = results,
+                previousSearchQueries = _uiState.value.search.previousSearchQueries
             )
         )
     }
 
     fun clearSearch() {
         val current = _uiState.value
+        recordSearchQuery(current.search.searchQuery)
         _uiState.value = current.copy(
             search = current.search.copy(
                 searchQuery = "",
-                searchResults = emptyList()
+                searchResults = emptyList(),
+                previousSearchQueries = _uiState.value.search.previousSearchQueries
             )
         )
     }
@@ -1292,6 +1304,41 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             ).joinToString(" ").lowercase()
             haystack.contains(needle)
         }
+    }
+
+    private fun recordSearchQuery(query: String) {
+        val normalized = query.trim()
+        if (normalized.isBlank()) return
+        val current = _uiState.value
+        val updated = (listOf(normalized) + current.search.previousSearchQueries)
+            .distinctBy { it.lowercase(Locale.US) }
+            .take(MAX_SEARCH_HISTORY)
+        if (updated == current.search.previousSearchQueries) return
+        persistSearchHistory(updated)
+        _uiState.value = current.copy(
+            search = current.search.copy(previousSearchQueries = updated)
+        )
+    }
+
+    private fun persistSearchHistory(history: List<String>) {
+        val encoded = history
+            .map { it.replace('\n', ' ').replace('\t', ' ').trim() }
+            .filter { it.isNotBlank() }
+            .take(MAX_SEARCH_HISTORY)
+            .joinToString("\n")
+        getApplication<Application>()
+            .getSharedPreferences(PREFS_NAME, Application.MODE_PRIVATE)
+            .edit { putString(KEY_SEARCH_HISTORY, encoded) }
+    }
+
+    private fun decodeSearchHistory(raw: String?): List<String> {
+        if (raw.isNullOrBlank()) return emptyList()
+        return raw.lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinctBy { it.lowercase(Locale.US) }
+            .take(MAX_SEARCH_HISTORY)
+            .toList()
     }
 
     private fun sortedAlbumsForMode(mode: AlbumSortMode): List<String> {

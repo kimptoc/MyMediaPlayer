@@ -120,6 +120,55 @@ class MainViewModelTest {
     }
 
     @Test
+    fun clearSearch_savesPreviousSearchQuery() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+        val files = listOf(
+            MediaFileInfo(
+                uriString = "content://test/song1",
+                displayName = "Song One",
+                sizeBytes = 1L,
+                title = "hello world"
+            )
+        )
+        seedScanState(viewModel, files, emptyList())
+
+        viewModel.updateSearchQuery("hello")
+        viewModel.clearSearch()
+        val state = viewModel.uiState.value
+
+        assertEquals(listOf("hello"), state.search.previousSearchQueries)
+    }
+
+    @Test
+    fun updateSearchQuery_whenClearedManually_savesPreviousSearchQuery() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+
+        viewModel.updateSearchQuery("hello")
+        viewModel.updateSearchQuery("")
+        val state = viewModel.uiState.value
+
+        assertEquals(listOf("hello"), state.search.previousSearchQueries)
+    }
+
+    @Test
+    fun init_loadsPreviousSearchQueriesFromPrefs() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        app.getSharedPreferences("mymediaplayer_prefs", Application.MODE_PRIVATE)
+            .edit()
+            .putString("search_history", "hello\nworld")
+            .commit()
+
+        val viewModel = MainViewModel(app)
+
+        assertEquals(listOf("hello", "world"), viewModel.uiState.value.search.previousSearchQueries)
+    }
+
+    @Test
     fun renamePlaylist_withBlankName_setsValidationMessage() {
         val app = ApplicationProvider.getApplicationContext<Application>()
         clearPrefs(app)
