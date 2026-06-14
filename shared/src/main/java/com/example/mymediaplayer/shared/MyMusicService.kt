@@ -50,6 +50,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.guava.await
 import timber.log.Timber
@@ -2627,7 +2628,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
             it.uri == uri && it.isReadPermission
         }
         if (!hasPermission) return
-        mediaCacheService.loadPersistedCache(this, uri, limit)
+        withContext(Dispatchers.IO) {
+            mediaCacheService.loadPersistedCache(this@MyMusicService, uri, limit)
+        }
     }
 
     @VisibleForTesting
