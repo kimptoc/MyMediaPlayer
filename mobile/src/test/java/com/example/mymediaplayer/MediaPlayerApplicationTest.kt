@@ -5,7 +5,6 @@ import com.example.mymediaplayer.shared.BuildConfig
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
-import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -16,11 +15,6 @@ import timber.log.Timber
 @Config(application = MediaPlayerApplication::class)
 class MediaPlayerApplicationTest {
 
-    @Before
-    fun setUp() {
-        Timber.uprootAll()
-    }
-
     @After
     fun tearDown() {
         Timber.uprootAll()
@@ -28,10 +22,10 @@ class MediaPlayerApplicationTest {
 
     @Test
     fun `onCreate initializes Timber and does not crash`() {
+        // Robolectric instantiates the Application and calls onCreate() as part of
+        // ApplicationProvider.getApplicationContext(), so no manual onCreate() call here.
         val app = ApplicationProvider.getApplicationContext<MediaPlayerApplication>()
         assertNotNull(app)
-
-        app.onCreate()
 
         val expectedTreeCount = if (BuildConfig.DEBUG) 1 else 0
         assertEquals(expectedTreeCount, Timber.treeCount)
