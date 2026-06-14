@@ -438,6 +438,50 @@ class MyMusicServiceTest {
     }
 
     @Test
+    fun buildMediaItems_searchRootShowsPreviousSearches() {
+        val service = Robolectric.buildService(MyMusicService::class.java).get()
+        service.getSharedPreferences("mymediaplayer_prefs", android.content.Context.MODE_PRIVATE)
+            .edit()
+            .clear()
+            .putString("search_history", "hello\nworld")
+            .commit()
+
+        val items = service.buildMediaItems(MyMusicService.SEARCH_ID)
+
+        assertEquals(2, items.size)
+        assertEquals("hello", items[0].description.title.toString())
+        assertEquals("world", items[1].description.title.toString())
+        assertTrue(items[0].description.mediaId.orEmpty().startsWith("search_query:"))
+    }
+
+    @Test
+    fun buildMediaItems_previousSearchShowsMatchingSongs() {
+        val service = Robolectric.buildService(MyMusicService::class.java).get()
+        service.mediaCacheService.addFile(
+            MediaFileInfo(
+                uriString = "content://test/song1",
+                displayName = "Song One",
+                sizeBytes = 1L,
+                title = "hello song"
+            )
+        )
+        service.mediaCacheService.addFile(
+            MediaFileInfo(
+                uriString = "content://test/song2",
+                displayName = "Song Two",
+                sizeBytes = 1L,
+                title = "other song"
+            )
+        )
+
+        val items = service.buildMediaItems("search_query:hello")
+
+        assertEquals("[Play All]", items[0].description.title.toString())
+        assertEquals("[Shuffle]", items[1].description.title.toString())
+        assertEquals("hello song", items[2].description.title.toString())
+    }
+
+    @Test
     fun playlistEntriesForBrowse_includesSmartPlaylistsWhenNoUserPlaylists() {
         val service = MyMusicService()
 
