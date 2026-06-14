@@ -242,4 +242,33 @@ class MediaCacheServiceTest {
         val songsUnknown = service.songsForDecade("1980s")
         assertTrue(songsUnknown.isEmpty())
     }
+
+    @Test
+    fun clearCache_emptiesFilesAndPlaylists() {
+        val service = MediaCacheService()
+
+        service.addFile(
+            MediaFileInfo(
+                uriString = "uri1",
+                displayName = "file1",
+                sizeBytes = 1000L,
+                album = "Album",
+                year = 1995
+            )
+        )
+        service.addPlaylist(PlaylistInfo("content://playlist1", "Playlist 1"))
+        service.buildAlbumArtistIndexesFromCache()
+
+        assertEquals(1, service.cachedFiles.size)
+        assertEquals(1, service.discoveredPlaylists.size)
+        assertTrue(service.hasAlbumArtistIndexes())
+        assertEquals(1, service.albums().size)
+
+        service.clearCache()
+
+        assertTrue(service.cachedFiles.isEmpty())
+        assertTrue(service.discoveredPlaylists.isEmpty())
+        assertFalse(service.hasAlbumArtistIndexes())
+        assertTrue(service.albums().isEmpty())
+    }
 }
