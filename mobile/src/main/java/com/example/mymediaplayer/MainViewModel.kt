@@ -127,6 +127,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         private const val KEY_LAST_PLAYED_AT = "last_played_at"
         const val SMART_PREFIX = "smart:"
         const val SMART_FAVORITES = "${SMART_PREFIX}favorites"
+        const val SMART_FLAGGED = "${SMART_PREFIX}flagged"
         const val SMART_RECENTLY_ADDED = "${SMART_PREFIX}recently_added"
         const val SMART_MOST_PLAYED = "${SMART_PREFIX}most_played"
         const val SMART_NOT_HEARD_RECENTLY = "${SMART_PREFIX}not_heard_recently"
@@ -1125,6 +1126,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         getApplication<Application>()
             .getSharedPreferences(PREFS_NAME, Application.MODE_PRIVATE)
             .edit { putStringSet(KEY_FLAGGED_URIS, updated) }
+        refreshSmartPlaylistSelection()
     }
 
     fun toggleFavorite(uriString: String) {
@@ -1309,6 +1311,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val files = current.scan.scannedFiles
         return when (smartId) {
             SMART_FAVORITES -> getFavoriteSongs(files, current.favoriteUris)
+            SMART_FLAGGED -> getFlaggedSongs(files, current.flaggedUris)
             SMART_RECENTLY_ADDED -> getRecentlyAddedSongs(files)
             SMART_MOST_PLAYED -> getMostPlayedSongs(files, current.playCounts)
             SMART_NOT_HEARD_RECENTLY -> getNotHeardRecentlySongs(files, current.lastPlayedAt)
@@ -1318,6 +1321,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun getFavoriteSongs(files: List<MediaFileInfo>, favoriteUris: Set<String>): List<MediaFileInfo> {
         return files.filter { it.uriString in favoriteUris }
+    }
+
+    private fun getFlaggedSongs(files: List<MediaFileInfo>, flaggedUris: Set<String>): List<MediaFileInfo> {
+        return files.filter { it.uriString in flaggedUris }
     }
 
     private fun getRecentlyAddedSongs(files: List<MediaFileInfo>): List<MediaFileInfo> {
