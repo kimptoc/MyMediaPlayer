@@ -354,6 +354,8 @@ fun MainScreen(
                         albumHits = albumHits,
                         favoriteUris = uiState.favoriteUris,
                         onOpenAlbum = { album ->
+                            setIsSearchExpanded(false)
+                            onClearSearch()
                             onTabSelected(LibraryTab.Albums)
                             onAlbumSelected(album)
                         },
