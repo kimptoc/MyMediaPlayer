@@ -328,6 +328,14 @@ fun MainScreen(
                 }
             }
 
+            if (isSearchExpanded && uiState.search.searchQuery.isBlank() && uiState.search.previousSearchQueries.isNotEmpty()) {
+                RecentSearchesSection(
+                    queries = uiState.search.previousSearchQueries,
+                    onSearchSelected = onSearchQueryChanged
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
             if (uiState.search.searchQuery.isNotBlank()) {
                 Spacer(modifier = Modifier.height(8.dp))
                 val visibleSearchResults = if (searchFavoritesOnly) {
@@ -807,6 +815,28 @@ fun MainScreen(
             onDismissRequest = onDismissPlaylistSaveFolderPrompt,
             onSetPlaylistSaveFolderNow = onSetPlaylistSaveFolderNow
         )
+    }
+}
+
+@Composable
+private fun RecentSearchesSection(
+    queries: List<String>,
+    onSearchSelected: (String) -> Unit
+) {
+    Text(
+        text = "Recent searches",
+        style = MaterialTheme.typography.titleSmall
+    )
+    Spacer(modifier = Modifier.height(4.dp))
+    LazyRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        items(queries) { query ->
+            TextButton(onClick = { onSearchSelected(query) }) {
+                Text(query, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
     }
 }
 

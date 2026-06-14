@@ -73,6 +73,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         internal const val ARTISTS_ID = "artists"
         internal const val DECADES_ID = "decades"
         internal const val SEARCH_ID = "search"
+        private const val SEARCH_QUERY_PREFIX = "search_query:"
         internal const val PLAYLIST_PREFIX = "playlist:"
         internal const val SMART_PLAYLIST_PREFIX = "smart_playlist:"
         private const val PLAYLIST_SHORT_PREFIX = "pl:"
@@ -105,6 +106,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
         private const val KEY_TRACK_VOICE_INTRO_ENABLED = "track_voice_intro_enabled"
         private const val KEY_TRACK_VOICE_OUTRO_ENABLED = "track_voice_outro_enabled"
         private const val KEY_DEBUG_CLOUD_ANNOUNCEMENTS = "debug_cloud_announcements"
+        private const val KEY_SEARCH_HISTORY = "search_history"
+        private const val MAX_SEARCH_HISTORY = 10
         private const val SMART_PLAYLIST_FAVORITES = "favorites"
         private const val SMART_PLAYLIST_RECENTLY_ADDED = "recently_added"
         private const val SMART_PLAYLIST_MOST_PLAYED = "most_played"
@@ -878,6 +881,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         val matches = mediaCacheService.searchFiles(trimmed)
         lastSearchQuery = trimmed
         lastSearchResults = matches
+        recordSearchQuery(trimmed)
         val songIconUri = resourceIconUri(R.drawable.ic_album_placeholder)
         val items = matches.map { fileInfo ->
             val description = MediaDescriptionCompat.Builder()
@@ -893,8 +897,43 @@ class MyMusicService : MediaBrowserServiceCompat() {
         result.sendResult(items)
     }
 
+    private fun recordSearchQuery(query: String) {
+        val normalized = query.trim()
+        if (normalized.isBlank()) return
+        val history = (listOf(normalized) + readSearchHistory())
+            .distinctBy { it.lowercase() }
+            .take(MAX_SEARCH_HISTORY)
+        persistSearchHistory(history)
+        notifyChildrenChanged(SEARCH_ID)
+    }
+
+    private fun readSearchHistory(): List<String> {
+        val raw = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(KEY_SEARCH_HISTORY, null)
+        if (raw.isNullOrBlank()) return emptyList()
+        return raw.lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinctBy { it.lowercase() }
+            .take(MAX_SEARCH_HISTORY)
+            .toList()
+    }
+
+    private fun persistSearchHistory(history: List<String>) {
+        val encoded = history
+            .map { it.replace('\n', ' ').replace('\t', ' ').trim() }
+            .filter { it.isNotBlank() }
+            .take(MAX_SEARCH_HISTORY)
+            .joinToString("\n")
+        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_SEARCH_HISTORY, encoded)
+            .apply()
+    }
+
     private fun buildMediaItemsForPrefix(parentId: String): List<MediaItem>? {
         return when {
+            parentId.startsWith(SEARCH_QUERY_PREFIX) -> buildMediaItemsForSearchQuery(parentId)
             parentId.startsWith(SMART_PLAYLIST_PREFIX) -> buildMediaItemsForSmartPlaylist(parentId)
             parentId.startsWith(PLAYLIST_PREFIX) -> buildMediaItemsForPlaylist(parentId)
             parentId.startsWith(ALBUM_PREFIX) -> buildMediaItemsForAlbum(parentId)
@@ -1166,15 +1205,48 @@ class MyMusicService : MediaBrowserServiceCompat() {
     }
 
     private fun buildSearchItems(): List<MediaItem> {
-        return mutableListOf(
+        val history = readSearchHistory()
+        if (history.isEmpty()) {
+            return mutableListOf(
+                MediaItem(
+                    MediaDescriptionCompat.Builder()
+                        .setMediaId("search_hint")
+                        .setTitle("Use the search icon to search")
+                        .build(),
+                    MediaItem.FLAG_BROWSABLE
+                )
+            )
+        }
+        return history.map { query ->
             MediaItem(
                 MediaDescriptionCompat.Builder()
-                    .setMediaId("search_hint")
-                    .setTitle("Use the search icon to search")
+                    .setMediaId(SEARCH_QUERY_PREFIX + Uri.encode(query))
+                    .setTitle(query)
+                    .setSubtitle("Recent search")
+                    .setIconUri(resourceIconUri(R.drawable.ic_auto_song))
                     .build(),
                 MediaItem.FLAG_BROWSABLE
             )
-        )
+        }
+    }
+
+    private fun buildMediaItemsForSearchQuery(parentId: String): List<MediaItem> {
+        val query = Uri.decode(parentId.removePrefix(SEARCH_QUERY_PREFIX)).trim()
+        if (query.isBlank()) return emptyList()
+        val matches = mediaCacheService.searchFiles(query)
+        if (matches.isEmpty()) {
+            return listOf(
+                MediaItem(
+                    MediaDescriptionCompat.Builder()
+                        .setMediaId("search_empty")
+                        .setTitle("No results for \"$query\"")
+                        .build(),
+                    MediaItem.FLAG_BROWSABLE
+                )
+            )
+        }
+        return buildPlayAllShuffleItems(SEARCH_QUERY_PREFIX + Uri.encode(query)) +
+            buildSongItems(matches, resourceIconUri(R.drawable.ic_album_placeholder))
     }
     internal fun buildMediaItems(parentId: String): List<MediaItem> {
         val start = SystemClock.elapsedRealtime()
@@ -2081,6 +2153,10 @@ class MyMusicService : MediaBrowserServiceCompat() {
     private suspend fun resolveTracksForListKey(listKey: String): List<MediaFileInfo> {
         return when {
             listKey == SONGS_ID -> mediaCacheService.cachedMusicFiles
+            listKey.startsWith(SEARCH_QUERY_PREFIX) -> {
+                val query = Uri.decode(listKey.removePrefix(SEARCH_QUERY_PREFIX)).trim()
+                if (query.isBlank()) emptyList() else mediaCacheService.searchFiles(query)
+            }
             listKey.startsWith(PLAYLIST_SHORT_PREFIX) -> {
                 val shortId = listKey.removePrefix(PLAYLIST_SHORT_PREFIX)
                 val playlistUri = playlistShortIds[shortId] ?: ""
@@ -2141,6 +2217,10 @@ class MyMusicService : MediaBrowserServiceCompat() {
     private fun resolvePlaylistNameForListKey(listKey: String): String {
         return when {
             listKey == SONGS_ID -> "All Songs"
+            listKey.startsWith(SEARCH_QUERY_PREFIX) -> {
+                val query = Uri.decode(listKey.removePrefix(SEARCH_QUERY_PREFIX)).trim()
+                if (query.isBlank()) "Search Results" else "Search: $query"
+            }
             listKey.startsWith(PLAYLIST_SHORT_PREFIX) -> {
                 val shortId = listKey.removePrefix(PLAYLIST_SHORT_PREFIX)
                 val uri = playlistShortIds[shortId]
@@ -2385,6 +2465,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
         val (focusedMatches, focusLabel) = findFocusedMatches(raw, cleanedQuery, extras)
 
         val queryForSongs = cleanedQuery.ifBlank { raw }.trim()
+        if (queryForSongs.isNotBlank()) {
+            recordSearchQuery(queryForSongs)
+        }
         val matches = when {
             focusedMatches != null && focusedMatches.isNotEmpty() -> focusedMatches
             queryForSongs.isBlank() -> mediaCacheService.cachedFiles
