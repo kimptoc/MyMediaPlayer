@@ -130,6 +130,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         const val SMART_RECENTLY_ADDED = "${SMART_PREFIX}recently_added"
         const val SMART_MOST_PLAYED = "${SMART_PREFIX}most_played"
         const val SMART_NOT_HEARD_RECENTLY = "${SMART_PREFIX}not_heard_recently"
+        const val SMART_FLAGGED = "${SMART_PREFIX}flagged"
     }
 
     private val mediaCacheService = MediaCacheService()
@@ -1312,12 +1313,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             SMART_RECENTLY_ADDED -> getRecentlyAddedSongs(files)
             SMART_MOST_PLAYED -> getMostPlayedSongs(files, current.playCounts)
             SMART_NOT_HEARD_RECENTLY -> getNotHeardRecentlySongs(files, current.lastPlayedAt)
+            SMART_FLAGGED -> getFlaggedSongs(files, current.flaggedUris)
             else -> emptyList()
         }
     }
 
     private fun getFavoriteSongs(files: List<MediaFileInfo>, favoriteUris: Set<String>): List<MediaFileInfo> {
         return files.filter { it.uriString in favoriteUris }
+    }
+
+    private fun getFlaggedSongs(files: List<MediaFileInfo>, flaggedUris: Set<String>): List<MediaFileInfo> {
+        return files.filter { it.uriString in flaggedUris }
     }
 
     private fun getRecentlyAddedSongs(files: List<MediaFileInfo>): List<MediaFileInfo> {

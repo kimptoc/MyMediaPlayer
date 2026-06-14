@@ -210,6 +210,43 @@ class MainViewModelTest {
         )
     }
 
+    @Test
+    fun selectPlaylist_flagged_returnsOnlyFlaggedFiles() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+        val files = listOf(
+            MediaFileInfo(
+                uriString = "content://test/songA",
+                displayName = "Song A",
+                sizeBytes = 1L,
+                title = "Song A"
+            ),
+            MediaFileInfo(
+                uriString = "content://test/songB",
+                displayName = "Song B",
+                sizeBytes = 1L,
+                title = "Song B"
+            )
+        )
+        val state = MainUiState(
+            scan = ScanState(scannedFiles = files, lastScanLimit = 10),
+            flaggedUris = setOf("content://test/songB"),
+            isPreferencesLoading = false
+        )
+        seedUiState(viewModel, state)
+
+        viewModel.selectPlaylist(
+            PlaylistInfo(
+                uriString = MainViewModel.SMART_FLAGGED,
+                displayName = "Flagged.m3u"
+            )
+        )
+        val resultUris = viewModel.uiState.value.playlist.playlistSongs.map { it.uriString }
+
+        assertEquals(listOf("content://test/songB"), resultUris)
+    }
+
     private fun seedScanState(
         viewModel: MainViewModel,
         files: List<MediaFileInfo>,

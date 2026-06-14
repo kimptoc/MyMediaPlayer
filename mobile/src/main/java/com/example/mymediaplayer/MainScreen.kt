@@ -488,6 +488,7 @@ fun MainScreen(
                 LibraryTab.Playlists -> {
                     val smartPlaylists = remember(
                         uiState.favoriteUris,
+                        uiState.flaggedUris,
                         uiState.playCounts,
                         uiState.lastPlayedAt,
                         uiState.scan.scannedFiles
@@ -496,6 +497,10 @@ fun MainScreen(
                             PlaylistInfo(
                                 uriString = MainViewModel.SMART_FAVORITES,
                                 displayName = "Favorites.m3u"
+                            ),
+                            PlaylistInfo(
+                                uriString = MainViewModel.SMART_FLAGGED,
+                                displayName = "Flagged.m3u"
                             ),
                             PlaylistInfo(
                                 uriString = MainViewModel.SMART_RECENTLY_ADDED,
