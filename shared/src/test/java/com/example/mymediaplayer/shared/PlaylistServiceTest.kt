@@ -97,6 +97,31 @@ class PlaylistServiceTest {
     }
 
     @Test
+    fun readPlaylist_returnsPartialResultsOnReadIOException() {
+        val baseContext = ApplicationProvider.getApplicationContext<Context>()
+        val uri = Uri.parse("content://test/playlist.m3u")
+        val shadowResolver = Shadows.shadowOf(baseContext.contentResolver)
+        shadowResolver.registerInputStreamSupplier(uri) {
+            val validData = "content://test/song1\n".toByteArray()
+            object : java.io.InputStream() {
+                var index = 0
+                override fun read(): Int {
+                    if (index < validData.size) {
+                        return validData[index++].toInt()
+                    }
+                    throw IOException("Mocked IO exception halfway")
+                }
+            }
+        }
+        val service = PlaylistService()
+
+        val results = service.readPlaylist(baseContext, uri)
+
+        assertTrue(results.size == 1)
+        assertTrue(results[0].uriString == "content://test/song1")
+    }
+
+    @Test
     fun appendToPlaylist_returnsFalseOnSecurityException() {
         val baseContext = ApplicationProvider.getApplicationContext<Context>()
         val uri = Uri.parse("content://test/playlist.m3u")
