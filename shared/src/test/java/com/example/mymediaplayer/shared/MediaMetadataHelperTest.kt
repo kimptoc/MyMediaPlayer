@@ -114,4 +114,18 @@ class MediaMetadataHelperTest {
         // The exception caught block should catch NPE and return null
         assertNull(result)
     }
+
+    @Test
+    fun extractMetadata_whenRetrieverThrowsIllegalStateException_returnsNull() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val uriString = "content://something/ise"
+        val uri = Uri.parse(uriString)
+
+        val dataSource = DataSource.toDataSource(context, uri)
+        ShadowMediaMetadataRetriever.addException(dataSource, IllegalStateException("Simulated state error"))
+
+        val result = MediaMetadataHelper.extractMetadata(context, uriString)
+
+        assertNull(result)
+    }
 }
