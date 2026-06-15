@@ -100,4 +100,25 @@ class MainActivityTest {
         assertEquals(500, genre?.length)
         assertEquals("a".repeat(500), genre)
     }
+
+    @Test
+    fun testVoiceSearchIntent_handlesExceptionWhenExtractingQuery() {
+        val intent = object : Intent("android.media.action.MEDIA_PLAY_FROM_SEARCH") {
+            override fun getStringExtra(name: String): String? {
+                if (name == SearchManager.QUERY) {
+                    throw RuntimeException("Simulated exception")
+                }
+                return super.getStringExtra(name)
+            }
+        }
+
+        val controller = Robolectric.buildActivity(MainActivity::class.java, intent)
+        val activity = controller.create().get()
+
+        val pendingVoiceSearchQueryField = MainActivity::class.java.getDeclaredField("pendingVoiceSearchQuery")
+        pendingVoiceSearchQueryField.isAccessible = true
+        val query = pendingVoiceSearchQueryField.get(activity) as? String
+
+        assertEquals("", query)
+    }
 }
