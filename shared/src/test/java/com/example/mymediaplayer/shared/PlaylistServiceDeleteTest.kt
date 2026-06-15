@@ -13,6 +13,17 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.Implementation
+import org.robolectric.annotation.Implements
+
+@Implements(className = "androidx.documentfile.provider.SingleDocumentFile")
+class ShadowSingleDocumentFileSecurityException {
+    @Implementation
+    fun delete(): Boolean {
+        throw SecurityException("Mock SecurityException from DocumentFile.delete")
+    }
+}
 
 class MockDocumentProvider : ContentProvider() {
     var deleteCalled = false
@@ -78,6 +89,24 @@ class PlaylistServiceDeleteTest {
         val baseContext = ApplicationProvider.getApplicationContext<Context>()
         val uri = Uri.parse("content://test/playlist.m3u")
         // Just general failure where none of the strategies succeed.
+        val service = PlaylistService()
+        val result = service.deletePlaylist(baseContext, uri)
+        assertFalse(result)
+    }
+
+    @Test
+    @Config(shadows = [ShadowSingleDocumentFileSecurityException::class])
+    fun deletePlaylist_catchesSecurityExceptionFromDocumentFile() {
+        val baseContext = ApplicationProvider.getApplicationContext<Context>()
+        val providerInfo = android.content.pm.ProviderInfo().apply {
+            authority = "mock.documents.security"
+        }
+        val mockProvider = Robolectric.buildContentProvider(MockDocumentProvider::class.java).create(providerInfo).get()
+        // Ensure the fallback strategy (DocumentsContract.deleteDocument) also fails
+        // so we can assert the entire method returns false.
+        mockProvider.failDelete = true
+        val uri = DocumentsContract.buildDocumentUri("mock.documents.security", "123")
+
         val service = PlaylistService()
         val result = service.deletePlaylist(baseContext, uri)
         assertFalse(result)
