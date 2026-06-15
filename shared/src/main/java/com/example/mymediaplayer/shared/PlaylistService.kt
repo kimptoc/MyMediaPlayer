@@ -58,12 +58,9 @@ open class PlaylistService {
         if (trimmed.isEmpty()) return null
 
         val root = DocumentFile.fromTreeUri(context, treeUri) ?: return null
-        val safeName = trimmed.replace("/", "_")
-        val fileName = if (safeName.endsWith(".m3u", ignoreCase = true)) {
-            safeName
-        } else {
-            "$safeName.m3u"
-        }
+        val rawBase = if (trimmed.endsWith(".m3u", ignoreCase = true)) trimmed.dropLast(4) else trimmed
+        val safeBase = rawBase.replace("/", "_").replace("\\", "_").replace(".", "_")
+        val fileName = "$safeBase.m3u"
         val target = root.createFile("audio/x-mpegurl", fileName) ?: run {
             Log.e(TAG, "Failed to create playlist file: $fileName")
             return null
@@ -189,12 +186,9 @@ open class PlaylistService {
     ): PlaylistInfo? {
         val trimmed = newName.trim()
         if (trimmed.isEmpty()) return null
-        val safeName = trimmed.replace("/", "_")
-        val finalName = if (safeName.endsWith(".m3u", ignoreCase = true)) {
-            safeName
-        } else {
-            "$safeName.m3u"
-        }
+        val rawBase = if (trimmed.endsWith(".m3u", ignoreCase = true)) trimmed.dropLast(4) else trimmed
+        val safeBase = rawBase.replace("/", "_").replace("\\", "_").replace(".", "_")
+        val finalName = "$safeBase.m3u"
 
         return try {
             val doc = DocumentFile.fromSingleUri(context, playlistUri)
