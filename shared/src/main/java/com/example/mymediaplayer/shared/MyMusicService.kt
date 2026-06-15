@@ -760,12 +760,12 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 Log.w("MyMusicService", "Failed to read search query extra", e)
                 ""
             }
-            val sanitizedQuery = rawQuery.replace(SEARCH_INTENT_SANITIZE_REGEX, "")
-            val query = if (sanitizedQuery.length > 500) {
-                sanitizedQuery.substring(0, 500)
+            val truncatedQuery = if (rawQuery.length > 500) {
+                rawQuery.substring(0, 500)
             } else {
-                sanitizedQuery
+                rawQuery
             }
+            val query = truncatedQuery.replace(SEARCH_INTENT_SANITIZE_REGEX, "")
 
             val extras = Bundle().apply {
                 val allowedKeys = setOf(
@@ -780,8 +780,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     try {
                         val value = intent.getStringExtra(key)
                         if (value != null) {
-                            val sanitizedValue = value.replace(SEARCH_INTENT_SANITIZE_REGEX, "")
-                            putString(key, if (sanitizedValue.length > 500) sanitizedValue.substring(0, 500) else sanitizedValue)
+                            val truncatedValue = if (value.length > 500) value.substring(0, 500) else value
+                            val sanitizedValue = truncatedValue.replace(SEARCH_INTENT_SANITIZE_REGEX, "")
+                            putString(key, sanitizedValue)
                         }
                     } catch (e: Exception) {
                         Log.w("MyMusicService", "Failed to read search intent extra '$key'", e)
