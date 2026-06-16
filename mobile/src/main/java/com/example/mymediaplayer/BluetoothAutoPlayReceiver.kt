@@ -41,11 +41,15 @@ class BluetoothAutoPlayReceiver : BroadcastReceiver() {
             return
         }
 
-        val device = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
-        } else {
-            @Suppress("DEPRECATION")
-            intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+        val device = try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                intent.getParcelableExtra<android.os.Parcelable>(BluetoothDevice.EXTRA_DEVICE) as? BluetoothDevice
+            }
+        } catch (e: Exception) {
+            null
         } ?: run {
             record(prefs, "no_device")
             return
