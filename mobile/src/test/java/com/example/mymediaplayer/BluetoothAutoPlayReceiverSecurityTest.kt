@@ -1,7 +1,6 @@
 package com.example.mymediaplayer
 
 import android.content.Intent
-import android.graphics.Point
 import android.bluetooth.BluetoothDevice
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider

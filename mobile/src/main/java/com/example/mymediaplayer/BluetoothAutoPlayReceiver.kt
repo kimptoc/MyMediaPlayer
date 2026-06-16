@@ -46,7 +46,7 @@ class BluetoothAutoPlayReceiver : BroadcastReceiver() {
                 intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
             } else {
                 @Suppress("DEPRECATION")
-                intent.getParcelableExtra<android.os.Parcelable>(BluetoothDevice.EXTRA_DEVICE) as? BluetoothDevice
+                intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
             }
         } catch (e: Exception) {
             null
