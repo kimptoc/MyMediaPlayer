@@ -677,145 +677,62 @@ fun MainScreen(
         }
     }
 
-    if (showPlaylistDialog) {
-        CreateRandomPlaylistDialog(
-            maxCount = uiState.scan.scannedFiles.size,
-            playlistCountText = playlistCountText,
-            onPlaylistCountTextChange = { setPlaylistCountText(it) },
-            onDismissRequest = { setShowPlaylistDialog(false) },
-            onCreatePlaylist = onCreatePlaylist
-        )
-    }
-
-    if (showScanDialog) {
-        ScanDialogContent(
-            scanCountText = scanCountText,
-            onScanCountTextChange = { setScanCountText(it) },
-            scanWholeDriveMode = scanWholeDriveMode,
-            onScanWholeDriveModeChange = { setScanWholeDriveMode(it) },
-            scanDeepMode = scanDeepMode,
-            onScanDeepModeChange = { setScanDeepMode(it) },
-            onDismissRequest = { setShowScanDialog(false) },
-            onScanWholeDriveWithLimit = onScanWholeDriveWithLimit,
-            onSelectFolderWithLimit = onSelectFolderWithLimit
-        )
-    }
-
-    if (showAddToPlaylistDialog) {
-        AddToPlaylistDialogContent(
-            pendingAddFiles = pendingAddFiles,
-            localCreatedPlaylists = localCreatedPlaylists,
-            discoveredPlaylists = uiState.scan.discoveredPlaylists,
-            onDismissRequest = {
-                setShowAddToPlaylistDialog(false)
-                setPendingAddFiles(emptyList())
-            },
-            onCreateNewPlaylistClick = {
-                setCreateFromSelectionNameText("")
-                setShowCreateFromSelectionDialog(true)
-            },
-            onAddToExistingPlaylist = { playlist, files ->
-                onAddToExistingPlaylist(playlist, files)
-                setShowAddToPlaylistDialog(false)
-                setPendingAddFiles(emptyList())
-            }
-        )
-    }
-
-    if (showCreateFromSelectionDialog) {
-        CreateFromSelectionDialogContent(
-            createFromSelectionNameText = createFromSelectionNameText,
-            onCreateFromSelectionNameTextChange = { setCreateFromSelectionNameText(it) },
-            pendingAddFiles = pendingAddFiles,
-            onCreatePlaylistFromSongs = onCreatePlaylistFromSongs,
-            onChoosePlaylistSaveFolder = onChoosePlaylistSaveFolder,
-            onPlaylistCreated = { created ->
-                setLocalCreatedPlaylists((localCreatedPlaylists + created).distinctBy { it.uriString })
-                setShowCreateFromSelectionDialog(false)
-                setShowAddToPlaylistDialog(false)
-                setPendingAddFiles(emptyList())
-                setCreateFromSelectionNameText("")
-            },
-            onDismissRequest = { setShowCreateFromSelectionDialog(false) }
-        )
-    }
-
-    if (showDeletePlaylistDialog) {
-        DeletePlaylistDialogContent(
-            pendingDeletePlaylist = pendingDeletePlaylist,
-            onDismissRequest = { setShowDeletePlaylistDialog(false) },
-            onDeletePlaylist = { playlist ->
-                onDeletePlaylist(playlist)
-                setShowDeletePlaylistDialog(false)
-            }
-        )
-    }
-
-    if (showRenamePlaylistDialog) {
-        RenamePlaylistDialogContent(
-            pendingRenamePlaylist = pendingRenamePlaylist,
-            renamePlaylistNameText = renamePlaylistNameText,
-            onRenamePlaylistNameTextChange = { setRenamePlaylistNameText(it) },
-            onDismissRequest = { setShowRenamePlaylistDialog(false) },
-            onRenamePlaylist = { playlist, newName ->
-                onRenamePlaylist(playlist, newName)
-                setShowRenamePlaylistDialog(false)
-                setPendingRenamePlaylist(null)
-            }
-        )
-    }
-
-    if (showExpandedNowPlayingDialog && uiState.playback.currentTrackName != null) {
-        val currentMediaId = uiState.playback.currentMediaId
-        val isFlagged = currentMediaId != null && currentMediaId in uiState.flaggedUris
-        ExpandedNowPlayingDialog(
-            trackName = uiState.playback.currentTrackName,
-            artistName = uiState.playback.currentArtistName,
-            album = uiState.playback.currentAlbum,
-            genre = uiState.playback.currentGenre,
-            year = uiState.playback.currentYear,
-            artwork = nowPlayingArt,
-            currentPositionMs = uiState.playback.currentPositionMs,
-            positionUpdatedAtElapsedMs = uiState.playback.positionUpdatedAtElapsedMs,
-            durationMs = uiState.playback.durationMs,
-            isPlaying = uiState.playback.isPlaying,
-            playbackSpeed = uiState.playback.playbackSpeed,
-            hasPrev = uiState.playback.hasPrev,
-            hasNext = uiState.playback.hasNext,
-            isPlayingPlaylist = uiState.playback.isPlayingPlaylist,
-            isFlagged = isFlagged,
-            onSeekTo = onSeekTo,
-            onPlayPause = onPlayPause,
-            onPrev = onPrev,
-            onNext = onNext,
-            onToggleFlag = {
-                if (currentMediaId != null) {
-                    onToggleFlag(currentMediaId)
-                }
-            },
-            onDismiss = { setShowExpandedNowPlayingDialog(false) }
-        )
-    }
-
-    if (showQueueDialog) {
-        QueueDialogContent(
-            queueTitle = uiState.playback.queueTitle,
-            queueItems = uiState.playback.queueItems,
-            activeQueueId = uiState.playback.activeQueueId,
-            onDismissRequest = { setShowQueueDialog(false) },
-            onQueueItemSelected = { queueId ->
-                onQueueItemSelected(queueId)
-                setShowQueueDialog(false)
-            }
-        )
-    }
-
-    if (showPlaylistSaveFolderPrompt) {
-        PlaylistSaveFolderPromptDialogContent(
-            onDismissRequest = onDismissPlaylistSaveFolderPrompt,
-            onSetPlaylistSaveFolderNow = onSetPlaylistSaveFolderNow
-        )
-    }
+    MainScreenDialogs(
+        uiState = uiState,
+        nowPlayingArt = nowPlayingArt,
+        playlistCountText = playlistCountText,
+        setPlaylistCountText = setPlaylistCountText,
+        showPlaylistDialog = showPlaylistDialog,
+        setShowPlaylistDialog = setShowPlaylistDialog,
+        onCreatePlaylist = onCreatePlaylist,
+        scanCountText = scanCountText,
+        setScanCountText = setScanCountText,
+        scanWholeDriveMode = scanWholeDriveMode,
+        setScanWholeDriveMode = setScanWholeDriveMode,
+        scanDeepMode = scanDeepMode,
+        setScanDeepMode = setScanDeepMode,
+        showScanDialog = showScanDialog,
+        setShowScanDialog = setShowScanDialog,
+        onScanWholeDriveWithLimit = onScanWholeDriveWithLimit,
+        onSelectFolderWithLimit = onSelectFolderWithLimit,
+        pendingAddFiles = pendingAddFiles,
+        setPendingAddFiles = setPendingAddFiles,
+        localCreatedPlaylists = localCreatedPlaylists,
+        showAddToPlaylistDialog = showAddToPlaylistDialog,
+        setShowAddToPlaylistDialog = setShowAddToPlaylistDialog,
+        setShowCreateFromSelectionDialog = setShowCreateFromSelectionDialog,
+        setCreateFromSelectionNameText = setCreateFromSelectionNameText,
+        onAddToExistingPlaylist = onAddToExistingPlaylist,
+        showCreateFromSelectionDialog = showCreateFromSelectionDialog,
+        createFromSelectionNameText = createFromSelectionNameText,
+        onCreatePlaylistFromSongs = onCreatePlaylistFromSongs,
+        onChoosePlaylistSaveFolder = onChoosePlaylistSaveFolder,
+        setLocalCreatedPlaylists = setLocalCreatedPlaylists,
+        showDeletePlaylistDialog = showDeletePlaylistDialog,
+        setShowDeletePlaylistDialog = setShowDeletePlaylistDialog,
+        pendingDeletePlaylist = pendingDeletePlaylist,
+        onDeletePlaylist = onDeletePlaylist,
+        showRenamePlaylistDialog = showRenamePlaylistDialog,
+        setShowRenamePlaylistDialog = setShowRenamePlaylistDialog,
+        pendingRenamePlaylist = pendingRenamePlaylist,
+        setPendingRenamePlaylist = setPendingRenamePlaylist,
+        renamePlaylistNameText = renamePlaylistNameText,
+        setRenamePlaylistNameText = setRenamePlaylistNameText,
+        onRenamePlaylist = onRenamePlaylist,
+        showExpandedNowPlayingDialog = showExpandedNowPlayingDialog,
+        setShowExpandedNowPlayingDialog = setShowExpandedNowPlayingDialog,
+        onSeekTo = onSeekTo,
+        onPlayPause = onPlayPause,
+        onPrev = onPrev,
+        onNext = onNext,
+        onToggleFlag = onToggleFlag,
+        showQueueDialog = showQueueDialog,
+        setShowQueueDialog = setShowQueueDialog,
+        onQueueItemSelected = onQueueItemSelected,
+        showPlaylistSaveFolderPrompt = showPlaylistSaveFolderPrompt,
+        onDismissPlaylistSaveFolderPrompt = onDismissPlaylistSaveFolderPrompt,
+        onSetPlaylistSaveFolderNow = onSetPlaylistSaveFolderNow
+    )
 }
 
 @Composable
@@ -841,7 +758,7 @@ private fun RecentSearchesSection(
 }
 
 @Composable
-private fun DeletePlaylistDialogContent(
+fun DeletePlaylistDialogContent(
     pendingDeletePlaylist: PlaylistInfo?,
     onDismissRequest: () -> Unit,
     onDeletePlaylist: (PlaylistInfo) -> Unit
@@ -873,7 +790,7 @@ private fun DeletePlaylistDialogContent(
 }
 
 @Composable
-private fun RenamePlaylistDialogContent(
+fun RenamePlaylistDialogContent(
     pendingRenamePlaylist: PlaylistInfo?,
     renamePlaylistNameText: String,
     onRenamePlaylistNameTextChange: (String) -> Unit,
@@ -937,7 +854,7 @@ private fun QueueItem(
 }
 
 @Composable
-private fun QueueDialogContent(
+fun QueueDialogContent(
     queueTitle: String?,
     queueItems: List<QueueEntry>,
     activeQueueId: Long,
@@ -974,7 +891,7 @@ private fun QueueDialogContent(
 }
 
 @Composable
-private fun PlaylistSaveFolderPromptDialogContent(
+fun PlaylistSaveFolderPromptDialogContent(
     onDismissRequest: () -> Unit,
     onSetPlaylistSaveFolderNow: () -> Unit
 ) {
@@ -998,7 +915,7 @@ private fun PlaylistSaveFolderPromptDialogContent(
 }
 
 @Composable
-private fun CreateFromSelectionDialogContent(
+fun CreateFromSelectionDialogContent(
     createFromSelectionNameText: String,
     onCreateFromSelectionNameTextChange: (String) -> Unit,
     pendingAddFiles: List<MediaFileInfo>,
@@ -1051,7 +968,7 @@ private fun CreateFromSelectionDialogContent(
 }
 
 @Composable
-private fun AddToPlaylistDialogContent(
+fun AddToPlaylistDialogContent(
     pendingAddFiles: List<MediaFileInfo>,
     localCreatedPlaylists: List<PlaylistInfo>,
     discoveredPlaylists: List<PlaylistInfo>,
@@ -1121,7 +1038,7 @@ private fun AddToPlaylistDialogContent(
 }
 
 @Composable
-private fun ScanDialogContent(
+fun ScanDialogContent(
     scanCountText: String,
     onScanCountTextChange: (String) -> Unit,
     scanWholeDriveMode: Boolean,
@@ -1215,7 +1132,7 @@ private fun ScanDialogContent(
 }
 
 @Composable
-private fun CreateRandomPlaylistDialog(
+fun CreateRandomPlaylistDialog(
     maxCount: Int,
     playlistCountText: String,
     onPlaylistCountTextChange: (String) -> Unit,
@@ -2428,7 +2345,7 @@ fun PlaybackBar(
 }
 
 @Composable
-private fun ExpandedNowPlayingDialog(
+fun ExpandedNowPlayingDialog(
     trackName: String,
     artistName: String?,
     album: String?,
