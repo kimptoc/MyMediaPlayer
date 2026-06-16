@@ -41,7 +41,6 @@ internal class AnnouncementPreGenerator(
 ) {
     companion object {
         private const val TAG = "AnnouncementPreGen"
-        private const val KILO_ENDPOINT = "https://api.kilo.ai/api/gateway"
         private const val KILO_MODEL_ANON = "kilo/auto-free"
         private const val READY_TIMEOUT_MS = 5000L
 
@@ -246,7 +245,7 @@ internal class AnnouncementPreGenerator(
             val requestBody = bodyString.toRequestBody("application/json; charset=utf-8".toMediaType())
 
             val request = Request.Builder()
-                .url("$KILO_ENDPOINT/chat/completions")
+                .url("${BuildConfig.KILO_ENDPOINT}/chat/completions")
                 .header("Authorization", authHeader)
                 .post(requestBody)
                 .build()
