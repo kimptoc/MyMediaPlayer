@@ -44,6 +44,10 @@ class MediaCacheService {
         // MediaMetadataRetriever.setDataSource can block indefinitely when MediaPlayer holds
         // the hardware codec. This timeout lets the batch continue with filename fallback.
         private const val METADATA_EXTRACT_TIMEOUT_MS = 2000L
+        // Keeps the Room entity page and the converted MediaFileInfo page small and
+        // short-lived, so the full raw entity list and the full converted list are
+        // never both resident in memory at once (see issue #370).
+        private const val PERSISTED_CACHE_PAGE_SIZE = 500
         private val SUPPORTED_AUDIO_EXTENSIONS = setOf(
             ".mp3", ".m4a", ".aac", ".flac", ".ogg", ".opus", ".wav", ".m4b",
             ".aiff", ".aif", ".wma", ".alac", ".ape", ".amr", ".awb",
@@ -524,12 +528,16 @@ class MediaCacheService {
         if (treeUri == MediaStore.Audio.Media.EXTERNAL_CONTENT_URI && isCacheStaleForWholeDevice(context, state.scannedAt)) {
             return null
         }
-        val files = dao.getAllFiles().let { fileEntities ->
-            val loadedFiles = ArrayList<MediaFileInfo>(fileEntities.size)
-            for (entity in fileEntities) {
-                loadedFiles.add(mediaFileFromEntity(entity))
+        val totalFiles = dao.getFileCount()
+        val files = ArrayList<MediaFileInfo>(totalFiles)
+        var offset = 0
+        while (offset < totalFiles) {
+            val page = dao.getFilesPage(limit = PERSISTED_CACHE_PAGE_SIZE, offset = offset)
+            if (page.isEmpty()) break
+            for (entity in page) {
+                files.add(mediaFileFromEntity(entity))
             }
-            loadedFiles
+            offset += page.size
         }
 
         val playlists = dao.getAllPlaylists().let { playlistEntities ->
