@@ -470,6 +470,57 @@ class MyMusicServiceTest {
     }
 
     @Test
+    fun onTrimMemory_atRunningCriticalClearsIndexesButKeepsCachedFiles() {
+        val service = Robolectric.buildService(MyMusicService::class.java).get()
+        val cache = service.mediaCacheService
+
+        cache.addFile(
+            MediaFileInfo(
+                uriString = "content://test/song1",
+                displayName = "Song 1.mp3",
+                sizeBytes = 100L,
+                title = "Song 1",
+                artist = "Artist",
+                album = "Album",
+                genre = "Rock",
+                year = 1999
+            )
+        )
+        service.buildHomeItems()
+        assertTrue(cache.hasAlbumArtistIndexes())
+
+        service.onTrimMemory(android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL)
+
+        assertFalse(cache.hasAlbumArtistIndexes())
+        assertTrue(cache.hasCachedFiles())
+    }
+
+    @Test
+    fun onTrimMemory_belowRunningCriticalLeavesIndexesIntact() {
+        val service = Robolectric.buildService(MyMusicService::class.java).get()
+        val cache = service.mediaCacheService
+
+        cache.addFile(
+            MediaFileInfo(
+                uriString = "content://test/song1",
+                displayName = "Song 1.mp3",
+                sizeBytes = 100L,
+                title = "Song 1",
+                artist = "Artist",
+                album = "Album",
+                genre = "Rock",
+                year = 1999
+            )
+        )
+        service.buildHomeItems()
+        assertTrue(cache.hasAlbumArtistIndexes())
+
+        service.onTrimMemory(android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_MODERATE)
+
+        assertTrue(cache.hasAlbumArtistIndexes())
+    }
+
+    @Test
     fun buildMediaItems_searchRootShowsPreviousSearches() {
         val service = Robolectric.buildService(MyMusicService::class.java).get()
         service.getSharedPreferences("mymediaplayer_prefs", android.content.Context.MODE_PRIVATE)

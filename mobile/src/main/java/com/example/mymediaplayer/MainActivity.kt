@@ -1,6 +1,7 @@
 package com.example.mymediaplayer
 
 import android.annotation.SuppressLint
+import android.content.ComponentCallbacks2
 import android.content.ComponentName
 import android.content.Intent
 import android.media.AudioManager
@@ -551,6 +552,13 @@ class MainActivity : ComponentActivity() {
         mediaController?.unregisterCallback(controllerCallback)
         mediaBrowser?.disconnect()
         super.onDestroy()
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL) {
+            viewModel.trimMemory()
+        }
     }
 
     override fun onNewIntent(intent: Intent) {

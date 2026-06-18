@@ -851,6 +851,14 @@ class MediaCacheService {
         }
     }
 
+    // Drops rebuildable derived caches under memory pressure; _cachedFiles itself stays loaded.
+    fun trimMemory() {
+        synchronized(cacheLock) {
+            _cachedMusicFiles = null
+            clearMetadataIndexes()
+        }
+    }
+
     fun hasAlbumArtistIndexes(): Boolean = albumArtistIndexed
 
     fun buildAlbumArtistIndexesFromCache() {

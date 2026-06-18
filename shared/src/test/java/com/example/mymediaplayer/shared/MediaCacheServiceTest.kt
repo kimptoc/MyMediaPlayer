@@ -361,6 +361,32 @@ class MediaCacheServiceTest {
     }
 
     @Test
+    fun trimMemory_clearsIndexesButKeepsCachedFiles() {
+        val service = MediaCacheService()
+
+        service.addFile(
+            MediaFileInfo(
+                uriString = "uri1",
+                displayName = "file1",
+                sizeBytes = 1000L,
+                album = "Album",
+                year = 1995
+            )
+        )
+        service.buildAlbumArtistIndexesFromCache()
+        service.cachedMusicFiles
+
+        assertTrue(service.hasAlbumArtistIndexes())
+        assertEquals(1, service.cachedFiles.size)
+
+        service.trimMemory()
+
+        assertFalse(service.hasAlbumArtistIndexes())
+        assertEquals(1, service.cachedFiles.size)
+        assertEquals(1, service.cachedMusicFiles.size)
+    }
+
+    @Test
     fun hasCachedFiles_reflectsCacheStateWithoutCopying() {
         val service = MediaCacheService()
         assertFalse(service.hasCachedFiles())

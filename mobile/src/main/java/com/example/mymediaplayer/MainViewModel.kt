@@ -190,6 +190,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         scanCache.clear()
     }
 
+    fun trimMemory() {
+        mediaCacheService.trimMemory()
+        scanCache.clear()
+    }
+
     internal fun resetAfterScan(
         files: List<MediaFileInfo>,
         playlists: List<PlaylistInfo>,
