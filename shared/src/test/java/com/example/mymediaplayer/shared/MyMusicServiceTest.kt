@@ -438,6 +438,38 @@ class MyMusicServiceTest {
     }
 
     @Test
+    fun loadCachedTreeIfAvailable_indexesStayLazyUntilFirstBrowse() {
+        // Regression guard for issue #370. This test passes both before and after
+        // removing the eager buildAlbumArtistIndexesFromCache() calls in
+        // loadCachedTreeIfAvailable() — it is not a red/green TDD test, since that
+        // removal is non-behavioral (every read path already calls
+        // ensureMetadataIndexes() lazily, per benchmarkBuildHomeItemsWithUnindexedCache).
+        // Its job is to lock in the lazy-build contract this PR relies on.
+        val service = Robolectric.buildService(MyMusicService::class.java).get()
+        val cache = service.mediaCacheService
+
+        cache.addFile(
+            MediaFileInfo(
+                uriString = "content://test/song1",
+                displayName = "Song 1.mp3",
+                sizeBytes = 100L,
+                title = "Song 1",
+                artist = "Artist",
+                album = "Album",
+                genre = "Rock",
+                year = 1999
+            )
+        )
+
+        assertFalse(cache.hasAlbumArtistIndexes())
+
+        val items = service.buildHomeItems()
+
+        assertTrue(cache.hasAlbumArtistIndexes())
+        assertTrue(items.isNotEmpty())
+    }
+
+    @Test
     fun buildMediaItems_searchRootShowsPreviousSearches() {
         val service = Robolectric.buildService(MyMusicService::class.java).get()
         service.getSharedPreferences("mymediaplayer_prefs", android.content.Context.MODE_PRIVATE)

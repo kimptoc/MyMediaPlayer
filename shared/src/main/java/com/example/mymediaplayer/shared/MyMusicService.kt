@@ -1527,7 +1527,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
             try {
                 val persisted = mediaCacheService.loadPersistedCache(this@MyMusicService, uri, limit)
                 if (persisted != null && persisted.files.isNotEmpty()) {
-                    mediaCacheService.buildAlbumArtistIndexesFromCache()
+                    // Index build is deferred until first browse (see ensureMetadataIndexes()).
                 } else {
                     var lastNotify = 0
                     val progress: (Int, Int) -> Unit = { songsFound, _ ->
@@ -1550,7 +1550,6 @@ class MyMusicService : MediaBrowserServiceCompat() {
                         )
                         mediaCacheService.enrichGenresFromMediaStore(this@MyMusicService)
                     }
-                    mediaCacheService.buildAlbumArtistIndexesFromCache()
                     mediaCacheService.persistCache(this@MyMusicService, uri, limit, scanStartedAt)
                 }
             } finally {
