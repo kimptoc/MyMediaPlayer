@@ -201,6 +201,53 @@ class MediaCacheServiceTest {
     }
 
     @Test
+    fun loadPersistedCache_loadsAllFilesAcrossMultiplePages() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val db = MediaCacheDatabase.getInstance(context)
+        val dao = db.cacheDao()
+        val treeUri = Uri.parse("content://test/tree")
+
+        // More than one page at the production page size (500) to exercise paging.
+        val fileCount = 1200
+        withContext(Dispatchers.IO) {
+            dao.replaceCache(
+                files = (0 until fileCount).map { i ->
+                    MediaFileEntity(
+                        uriString = "content://test/song$i",
+                        displayName = "Song $i.mp3",
+                        sizeBytes = 100L,
+                        title = "Song $i",
+                        artist = "Artist",
+                        album = "Album",
+                        genre = "Rock",
+                        durationMs = 1000L,
+                        year = 2000,
+                        addedAtMs = 1L
+                    )
+                },
+                playlists = emptyList(),
+                state = ScanStateEntity(treeUri = treeUri.toString(), scanLimit = fileCount, scannedAt = 99L)
+            )
+        }
+
+        val service = MediaCacheService()
+        val persisted = withContext(Dispatchers.IO) {
+            service.loadPersistedCache(context, treeUri, maxFiles = fileCount)
+        }
+
+        assertNotNull(persisted)
+        assertEquals(fileCount, persisted!!.files.size)
+        assertEquals(fileCount, service.cachedFilesCount)
+        assertEquals(fileCount, persisted.files.map { it.uriString }.distinct().size)
+
+        withContext(Dispatchers.IO) {
+            dao.clearFiles()
+            dao.clearPlaylists()
+            dao.clearScanState()
+        }
+    }
+
+    @Test
     fun mediaCacheDao_getFilesPage_returnsRequestedSlice() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val db = MediaCacheDatabase.getInstance(context)
