@@ -1,5 +1,6 @@
 package com.example.mymediaplayer.shared
 
+import android.content.ComponentCallbacks2
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -720,6 +721,13 @@ class MyMusicService : MediaBrowserServiceCompat() {
         currentPlaylistName = queueTitle
         updateSessionQueue()
         playTrack(playlistQueue[currentQueueIndex])
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL) {
+            mediaCacheService.trimMemory()
+        }
     }
 
     override fun onDestroy() {

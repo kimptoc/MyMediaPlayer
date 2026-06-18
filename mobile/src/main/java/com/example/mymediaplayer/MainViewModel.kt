@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 
 data class ScanState(
     val isScanning: Boolean = false,
@@ -138,8 +139,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val mediaCacheService = MediaCacheService()
     private val playlistService = PlaylistService()
+    // ConcurrentHashMap because trimMemory() can clear() from the main thread while
+    // scan coroutines on Dispatchers.IO are concurrently reading/writing the same map.
     private val scanCache =
-        mutableMapOf<String, Pair<List<MediaFileInfo>, List<PlaylistInfo>>>()
+        ConcurrentHashMap<String, Pair<List<MediaFileInfo>, List<PlaylistInfo>>>()
     private var treeUri: Uri? = null
     private var playlistTreeUri: Uri? = null
     private var metadataKey: String? = null
@@ -187,6 +190,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         recordSearchQuery(_uiState.value.search.searchQuery)
         super.onCleared()
         mediaCacheService.clearCache()
+        scanCache.clear()
+    }
+
+    fun trimMemory() {
+        mediaCacheService.trimMemory()
         scanCache.clear()
     }
 
