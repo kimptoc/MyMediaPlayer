@@ -47,6 +47,12 @@ interface MediaCacheDao {
     @Query("SELECT * FROM media_files")
     fun getAllFiles(): List<MediaFileEntity>
 
+    @Query("SELECT COUNT(*) FROM media_files")
+    fun getFileCount(): Int
+
+    @Query("SELECT * FROM media_files LIMIT :limit OFFSET :offset")
+    fun getFilesPage(limit: Int, offset: Int): List<MediaFileEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertFiles(files: List<MediaFileEntity>)
 

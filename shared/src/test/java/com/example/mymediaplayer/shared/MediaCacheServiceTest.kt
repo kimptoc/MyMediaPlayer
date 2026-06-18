@@ -201,6 +201,47 @@ class MediaCacheServiceTest {
     }
 
     @Test
+    fun mediaCacheDao_getFilesPage_returnsRequestedSlice() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val db = MediaCacheDatabase.getInstance(context)
+        val dao = db.cacheDao()
+
+        withContext(Dispatchers.IO) {
+            dao.clearFiles()
+            val entities = (0 until 5).map { i ->
+                MediaFileEntity(
+                    uriString = "content://test/song$i",
+                    displayName = "Song $i",
+                    sizeBytes = 100L,
+                    title = "Song $i",
+                    artist = null,
+                    album = null,
+                    genre = null,
+                    durationMs = null,
+                    year = null,
+                    addedAtMs = null
+                )
+            }
+            dao.insertFiles(entities)
+        }
+
+        val count = withContext(Dispatchers.IO) { dao.getFileCount() }
+        assertEquals(5, count)
+
+        val firstPage = withContext(Dispatchers.IO) { dao.getFilesPage(limit = 2, offset = 0) }
+        val secondPage = withContext(Dispatchers.IO) { dao.getFilesPage(limit = 2, offset = 2) }
+        val thirdPage = withContext(Dispatchers.IO) { dao.getFilesPage(limit = 2, offset = 4) }
+
+        assertEquals(2, firstPage.size)
+        assertEquals(2, secondPage.size)
+        assertEquals(1, thirdPage.size)
+        val allUris = (firstPage + secondPage + thirdPage).map { it.uriString }.toSet()
+        assertEquals(5, allUris.size)
+
+        withContext(Dispatchers.IO) { dao.clearFiles() }
+    }
+
+    @Test
     fun songsForDecade_returnsCorrectSongs() {
         val service = MediaCacheService()
 
