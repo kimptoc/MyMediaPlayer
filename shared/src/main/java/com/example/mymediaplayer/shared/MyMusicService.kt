@@ -676,7 +676,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         restorePlaybackSnapshot()
         mark("restorePlaybackSnapshot done")
         loadCachedTreeIfAvailable()
-        mark("loadCachedTreeIfAvailable returned (isScanning=$isScanning, cachedFiles=${mediaCacheService.cachedFiles.size})")
+        mark("loadCachedTreeIfAvailable returned (isScanning=$isScanning, cachedFiles=${mediaCacheService.cachedFilesCount})")
         mark("exit")
     }
 
@@ -837,7 +837,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
     }
 
     override fun onLoadChildren(parentId: String, result: Result<MutableList<MediaItem>>) {
-        Log.d("MyMusicService", "onLoadChildren($parentId) isScanning=$isScanning cachedFiles=${mediaCacheService.cachedFiles.size}")
+        Log.d("MyMusicService", "onLoadChildren($parentId) isScanning=$isScanning cachedFiles=${mediaCacheService.cachedFilesCount}")
         // No direct integration test for this gate: MediaBrowserServiceCompat.Result
         // has a package-private constructor and cannot be subclassed from our test
         // sources without a fake in androidx.media. The two operands are tested
@@ -1498,7 +1498,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
     private fun loadCachedTreeIfAvailable() {
         if (isScanning) return
-        if (mediaCacheService.cachedFiles.isNotEmpty()) return
+        if (mediaCacheService.hasCachedFiles()) return
         // Read scan settings from standard prefs — the activity always writes to standard prefs,
         // but getPrefs() may return encrypted prefs (which can be stale after settings changes).
         val standardPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -2620,7 +2620,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
     }
 
     private suspend fun ensureCacheReadyForSearch() {
-        if (mediaCacheService.cachedFiles.isNotEmpty()) return
+        if (mediaCacheService.hasCachedFiles()) return
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val uriString = prefs.getString(KEY_TREE_URI, null) ?: return
         val limit = prefs.getInt(KEY_SCAN_LIMIT, MediaCacheService.MAX_CACHE_SIZE)

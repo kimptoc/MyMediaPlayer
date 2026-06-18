@@ -341,6 +341,12 @@ class MediaCacheService {
     private var _cachedMusicFiles: List<MediaFileInfo>? = null
     val cachedFiles: List<MediaFileInfo>
         get() = synchronized(cacheLock) { _cachedFiles.toList() }
+
+    val cachedFilesCount: Int
+        get() = synchronized(cacheLock) { _cachedFiles.size }
+
+    fun hasCachedFiles(): Boolean = synchronized(cacheLock) { _cachedFiles.isNotEmpty() }
+
     val cachedMusicFiles: List<MediaFileInfo>
         get() = synchronized(cacheLock) {
             var result = _cachedMusicFiles
