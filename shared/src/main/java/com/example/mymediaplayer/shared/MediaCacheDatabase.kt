@@ -44,6 +44,8 @@ data class ScanStateEntity(
 
 @Dao
 interface MediaCacheDao {
+    /** Loads every row into memory at once — for production reads of a potentially large
+     * table, prefer [getFileCount] + [getFilesPage] to avoid materializing the full table. */
     @Query("SELECT * FROM media_files")
     fun getAllFiles(): List<MediaFileEntity>
 
