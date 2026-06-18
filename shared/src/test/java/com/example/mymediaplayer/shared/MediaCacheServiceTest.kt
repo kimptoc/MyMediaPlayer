@@ -271,4 +271,28 @@ class MediaCacheServiceTest {
         assertFalse(service.hasAlbumArtistIndexes())
         assertTrue(service.albums().isEmpty())
     }
+
+    @Test
+    fun hasCachedFiles_reflectsCacheStateWithoutCopying() {
+        val service = MediaCacheService()
+        assertFalse(service.hasCachedFiles())
+
+        service.addFile(MediaFileInfo(uriString = "content://test/song1", displayName = "Song 1", sizeBytes = 100L, title = "Song 1"))
+        assertTrue(service.hasCachedFiles())
+
+        service.clearCache()
+        assertFalse(service.hasCachedFiles())
+    }
+
+    @Test
+    fun cachedFilesCount_matchesCachedFilesSize() {
+        val service = MediaCacheService()
+        assertEquals(0, service.cachedFilesCount)
+
+        service.addFile(MediaFileInfo(uriString = "content://test/song1", displayName = "Song 1", sizeBytes = 100L, title = "Song 1"))
+        service.addFile(MediaFileInfo(uriString = "content://test/song2", displayName = "Song 2", sizeBytes = 100L, title = "Song 2"))
+
+        assertEquals(2, service.cachedFilesCount)
+        assertEquals(service.cachedFiles.size, service.cachedFilesCount)
+    }
 }
