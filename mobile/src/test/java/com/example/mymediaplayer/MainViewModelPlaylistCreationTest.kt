@@ -133,4 +133,59 @@ class MainViewModelPlaylistCreationTest {
         val state = viewModel.uiState.value
         assertEquals("Failed to create playlist", state.playlist.playlistMessage)
     }
+    @Test
+    fun createManualPlaylist_noFolderSelected_returnsAndShowsMessage() {
+        val file = MediaFileInfo("content://song1", "song1.mp3", 0L, "Song 1")
+        viewModel.addToManualPlaylist(file)
+
+        viewModel.createManualPlaylist("Manual Playlist")
+
+        val state = viewModel.uiState.value
+        assertEquals("Select a folder first.", state.playlist.playlistMessage)
+        assertTrue(!mockPlaylistService.writePlaylistCalled)
+    }
+
+    @Test
+    fun createManualPlaylist_noSongsAdded_returnsAndShowsMessage() {
+        viewModel.setTreeUri(Uri.parse("content://tree"))
+
+        viewModel.createManualPlaylist("Manual Playlist")
+
+        val state = viewModel.uiState.value
+        assertEquals("Add songs first.", state.playlist.playlistMessage)
+        assertTrue(!mockPlaylistService.writePlaylistCalled)
+    }
+
+    @Test
+    fun createManualPlaylist_failure_showsFailureMessage() {
+        viewModel.setTreeUri(Uri.parse("content://tree"))
+        val file = MediaFileInfo("content://song1", "song1.mp3", 0L, "Song 1")
+        viewModel.addToManualPlaylist(file)
+
+        mockPlaylistService.mockResult = null
+
+        viewModel.createManualPlaylist("Manual Playlist")
+
+        val state = viewModel.uiState.value
+        assertEquals("Failed to create playlist", state.playlist.playlistMessage)
+        assertTrue(mockPlaylistService.writePlaylistCalled)
+    }
+
+    @Test
+    fun createManualPlaylist_success_updatesStateAndDiscoveredPlaylists() {
+        viewModel.setTreeUri(Uri.parse("content://tree"))
+        val file = MediaFileInfo("content://song1", "song1.mp3", 0L, "Song 1")
+        viewModel.addToManualPlaylist(file)
+
+        val expectedResult = PlaylistInfo("content://playlist.m3u", "Manual Playlist.m3u")
+        mockPlaylistService.mockResult = expectedResult
+
+        viewModel.createManualPlaylist("Manual Playlist")
+
+        val state = viewModel.uiState.value
+        assertEquals("Created Manual Playlist.m3u", state.playlist.playlistMessage)
+        assertTrue(state.playlist.manualPlaylistSongs.isEmpty())
+        assertTrue(state.scan.discoveredPlaylists.contains(expectedResult))
+        assertTrue(mockPlaylistService.writePlaylistCalled)
+    }
 }
