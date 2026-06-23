@@ -305,6 +305,54 @@ class MainViewModelTest {
         )
     }
 
+    @Test
+    fun addToManualPlaylist_addsNewFile() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+        val file = MediaFileInfo(
+            uriString = "content://test/song1",
+            displayName = "Song One",
+            sizeBytes = 1L,
+            title = "Song One"
+        )
+
+        viewModel.addToManualPlaylist(file)
+
+        val state = viewModel.uiState.value
+        assertEquals(1, state.playlist.manualPlaylistSongs.size)
+        assertEquals(file, state.playlist.manualPlaylistSongs.first())
+    }
+
+    @Test
+    fun addToManualPlaylist_ignoresDuplicateFile() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+        val file = MediaFileInfo(
+            uriString = "content://test/song1",
+            displayName = "Song One",
+            sizeBytes = 1L,
+            title = "Song One"
+        )
+        val state = MainUiState(
+            playlist = PlaylistMgmtState(manualPlaylistSongs = listOf(file))
+        )
+        seedUiState(viewModel, state)
+
+        val duplicateFile = MediaFileInfo(
+            uriString = "content://test/song1",
+            displayName = "Duplicate",
+            sizeBytes = 1L,
+            title = "Duplicate"
+        )
+        viewModel.addToManualPlaylist(duplicateFile)
+
+        val updatedState = viewModel.uiState.value
+        assertEquals(1, updatedState.playlist.manualPlaylistSongs.size)
+        assertEquals("Song One", updatedState.playlist.manualPlaylistSongs.first().displayName)
+    }
+
     private fun seedScanState(
         viewModel: MainViewModel,
         files: List<MediaFileInfo>,
