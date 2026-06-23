@@ -305,6 +305,41 @@ class MainViewModelTest {
         )
     }
 
+    @Test
+    fun clearCategorySelection_resetsSelectedCategoriesAndFilteredSongs() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+
+        val files = listOf(
+            MediaFileInfo(
+                uriString = "content://test/song1",
+                displayName = "Song One",
+                sizeBytes = 1L,
+                title = "Song 1"
+            )
+        )
+        val libraryState = LibraryState(
+            selectedAlbum = "Test Album",
+            selectedGenre = "Test Genre",
+            selectedArtist = "Test Artist",
+            filteredSongs = files
+        )
+        val state = MainUiState(
+            library = libraryState,
+            isPreferencesLoading = false
+        )
+        seedUiState(viewModel, state)
+
+        viewModel.clearCategorySelection()
+
+        val newState = viewModel.uiState.value.library
+        assertEquals(null, newState.selectedAlbum)
+        assertEquals(null, newState.selectedGenre)
+        assertEquals(null, newState.selectedArtist)
+        assertTrue(newState.filteredSongs.isEmpty())
+    }
+
     private fun seedScanState(
         viewModel: MainViewModel,
         files: List<MediaFileInfo>,
