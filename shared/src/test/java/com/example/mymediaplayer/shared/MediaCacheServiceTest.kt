@@ -409,4 +409,64 @@ class MediaCacheServiceTest {
         assertEquals(2, service.cachedFilesCount)
         assertEquals(service.cachedFiles.size, service.cachedFilesCount)
     }
+
+    // Regression tests for issue #382 (OOM crash loop persisting after #370). This
+    // breadcrumb is the only diagnostic that survives a release build (Log.d/Timber
+    // are no-ops there) *and* the only one that can survive an actual OOM, since it
+    // writes before the risky allocation instead of from inside a catch block (which
+    // would itself need to allocate while the heap is already exhausted).
+    @Test
+    fun recordLoadStarted_writesBreadcrumbBeforeAllocating() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        context.getSharedPreferences(MediaCacheService.OOM_DIAGNOSTIC_PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .clear()
+            .commit()
+        val service = MediaCacheService()
+
+        service.recordLoadStarted(context, totalFiles = 14209)
+
+        val prefs = context.getSharedPreferences(MediaCacheService.OOM_DIAGNOSTIC_PREFS_NAME, Context.MODE_PRIVATE)
+        assertTrue(prefs.getBoolean("load_in_progress", false))
+        assertEquals(14209, prefs.getInt("load_total_files", -1))
+        assertEquals(1, prefs.getInt("load_concurrent_entries", -1))
+        assertTrue(prefs.getLong("load_started_at_ms", -1L) > 0L)
+        assertTrue(prefs.getLong("load_started_max_heap_kb", -1L) > 0L)
+    }
+
+    @Test
+    fun recordLoadFinished_clearsInProgressFlag() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val service = MediaCacheService()
+        service.recordLoadStarted(context, totalFiles = 100)
+
+        service.recordLoadFinished(context)
+
+        val prefs = context.getSharedPreferences(MediaCacheService.OOM_DIAGNOSTIC_PREFS_NAME, Context.MODE_PRIVATE)
+        assertFalse(prefs.getBoolean("load_in_progress", true))
+    }
+
+    @Test
+    fun recordLoadStarted_countsConcurrentEntriesAcrossInstances() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val phoneInstance = MediaCacheService()
+        val serviceInstance = MediaCacheService()
+        val prefs = context.getSharedPreferences(MediaCacheService.OOM_DIAGNOSTIC_PREFS_NAME, Context.MODE_PRIVATE)
+
+        try {
+            phoneInstance.recordLoadStarted(context, totalFiles = 14209)
+            assertEquals(1, prefs.getInt("load_concurrent_entries", -1))
+
+            serviceInstance.recordLoadStarted(context, totalFiles = 14209)
+            assertEquals(
+                "A second concurrent load (e.g. phone + service both loading at once) " +
+                    "must be visible in the breadcrumb regardless of which instance started it",
+                2,
+                prefs.getInt("load_concurrent_entries", -1)
+            )
+        } finally {
+            phoneInstance.recordLoadFinished(context)
+            serviceInstance.recordLoadFinished(context)
+        }
+    }
 }
