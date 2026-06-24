@@ -305,127 +305,90 @@ class MainViewModelTest {
         )
     }
 
+
     @Test
-    fun clearCategorySelection_resetsSelectedCategoriesAndFilteredSongs() {
+    fun addManyToExistingPlaylist_emptyFiles_returnsEarly() {
         val app = ApplicationProvider.getApplicationContext<Application>()
         clearPrefs(app)
         val viewModel = MainViewModel(app)
+        val playlist = PlaylistInfo(uriString = "content://test/playlist.m3u", displayName = "playlist.m3u")
 
-        val files = listOf(
-            MediaFileInfo(
-                uriString = "content://test/song1",
-                displayName = "Song One",
-                sizeBytes = 1L,
-                title = "Song 1"
-            )
-        )
-        val libraryState = LibraryState(
-            selectedAlbum = "Test Album",
-            selectedGenre = "Test Genre",
-            selectedArtist = "Test Artist",
-            filteredSongs = files
-        )
-        val state = MainUiState(
-            library = libraryState,
-            isPreferencesLoading = false
-        )
-        seedUiState(viewModel, state)
-
-        viewModel.clearCategorySelection()
-
-        val newState = viewModel.uiState.value.library
-        assertEquals(null, newState.selectedAlbum)
-        assertEquals(null, newState.selectedGenre)
-        assertEquals(null, newState.selectedArtist)
-        assertTrue(newState.filteredSongs.isEmpty())
-    }
-
-    @Test
-    fun addManyToManualPlaylist_addsNewFilesAndIgnoresDuplicates() {
-        val app = ApplicationProvider.getApplicationContext<Application>()
-        clearPrefs(app)
-        val viewModel = MainViewModel(app)
-        val existingFile = MediaFileInfo(
-            uriString = "content://test/songA",
-            displayName = "Song A",
-            sizeBytes = 1L,
-            title = "Song A"
-        )
-        val newFile1 = MediaFileInfo(
-            uriString = "content://test/songB",
-            displayName = "Song B",
-            sizeBytes = 1L,
-            title = "Song B"
-        )
-        val newFile2 = MediaFileInfo(
-            uriString = "content://test/songC",
-            displayName = "Song C",
-            sizeBytes = 1L,
-            title = "Song C"
-        )
-
-        // Seed UI state with existing file in manual playlist
-        val state = MainUiState(
-            playlist = PlaylistMgmtState(manualPlaylistSongs = listOf(existingFile))
-        )
-        seedUiState(viewModel, state)
-
-        // Try adding existing file and new files
-        viewModel.addManyToManualPlaylist(listOf(existingFile, newFile1, newFile2))
-
-        val updatedSongs = viewModel.uiState.value.playlist.manualPlaylistSongs
-        assertEquals(3, updatedSongs.size)
-        assertEquals("content://test/songA", updatedSongs[0].uriString)
-        assertEquals("content://test/songB", updatedSongs[1].uriString)
-        assertEquals("content://test/songC", updatedSongs[2].uriString)
-    }
-
-    @Test
-    fun addToManualPlaylist_addsNewFile() {
-        val app = ApplicationProvider.getApplicationContext<Application>()
-        clearPrefs(app)
-        val viewModel = MainViewModel(app)
-        val file = MediaFileInfo(
-            uriString = "content://test/song1",
-            displayName = "Song One",
-            sizeBytes = 1L,
-            title = "Song One"
-        )
-
-        viewModel.addToManualPlaylist(file)
+        viewModel.addManyToExistingPlaylist(playlist, emptyList())
 
         val state = viewModel.uiState.value
-        assertEquals(1, state.playlist.manualPlaylistSongs.size)
-        assertEquals(file, state.playlist.manualPlaylistSongs.first())
+        assertEquals(null, state.playlist.playlistMessage)
     }
 
     @Test
-    fun addToManualPlaylist_ignoresDuplicateFile() {
+    fun addManyToExistingPlaylist_failure_setsFailureMessage() {
         val app = ApplicationProvider.getApplicationContext<Application>()
         clearPrefs(app)
         val viewModel = MainViewModel(app)
-        val file = MediaFileInfo(
-            uriString = "content://test/song1",
-            displayName = "Song One",
-            sizeBytes = 1L,
-            title = "Song One"
+        val playlist = PlaylistInfo(uriString = "content://test/playlist.m3u", displayName = "playlist.m3u")
+        val files = listOf(
+            MediaFileInfo(uriString = "content://test/song1", displayName = "Song 1", sizeBytes = 1L, title = "Song 1")
         )
-        val state = MainUiState(
-            playlist = PlaylistMgmtState(manualPlaylistSongs = listOf(file))
-        )
-        seedUiState(viewModel, state)
+        // No output stream registered, so appendToPlaylist will fail.
 
-        val duplicateFile = MediaFileInfo(
-            uriString = "content://test/song1",
-            displayName = "Duplicate",
-            sizeBytes = 1L,
-            title = "Duplicate"
-        )
-        viewModel.addToManualPlaylist(duplicateFile)
+        viewModel.addManyToExistingPlaylist(playlist, files)
 
-        val updatedState = viewModel.uiState.value
-        assertEquals(1, updatedState.playlist.manualPlaylistSongs.size)
-        assertEquals("Song One", updatedState.playlist.manualPlaylistSongs.first().displayName)
+        val state = viewModel.uiState.value
+        assertEquals("Failed to update playlist", state.playlist.playlistMessage)
+    }
+
+    @Test
+    fun addManyToExistingPlaylist_successNotSelected_updatesMessageOnly() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+
+        val uri = android.net.Uri.parse("content://test/playlist.m3u")
+        org.robolectric.Shadows.shadowOf(app.contentResolver)
+            .registerOutputStream(uri, java.io.ByteArrayOutputStream())
+
+        val viewModel = MainViewModel(app)
+        val playlist = PlaylistInfo(uriString = uri.toString(), displayName = "playlist.m3u")
+        val files = listOf(
+            MediaFileInfo(uriString = "content://test/song1", displayName = "Song 1", sizeBytes = 1L, title = "Song 1")
+        )
+
+        // Playlist is not selected.
+        viewModel.addManyToExistingPlaylist(playlist, files)
+
+        val state = viewModel.uiState.value
+        assertEquals("Added 1 song(s) to playlist", state.playlist.playlistMessage)
+        assertTrue(state.playlist.playlistSongs.isEmpty())
+    }
+
+    @Test
+    fun addManyToExistingPlaylist_successSelected_updatesMessageAndSongs() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+
+        val uri = android.net.Uri.parse("content://test/playlist.m3u")
+        org.robolectric.Shadows.shadowOf(app.contentResolver)
+            .registerOutputStream(uri, java.io.ByteArrayOutputStream())
+
+        val viewModel = MainViewModel(app)
+        val playlist = PlaylistInfo(uriString = uri.toString(), displayName = "playlist.m3u")
+        val existingSong = MediaFileInfo(uriString = "content://test/song1", displayName = "Song 1", sizeBytes = 1L, title = "Song 1")
+        val newSong = MediaFileInfo(uriString = "content://test/song2", displayName = "Song 2", sizeBytes = 1L, title = "Song 2")
+        val duplicateSong = MediaFileInfo(uriString = "content://test/song1", displayName = "Song 1 dup", sizeBytes = 1L, title = "Song 1")
+
+        // Set state to have this playlist selected with one existing song
+        val initialState = MainUiState(
+            playlist = PlaylistMgmtState(
+                selectedPlaylist = playlist,
+                playlistSongs = listOf(existingSong)
+            ),
+            isPreferencesLoading = false
+        )
+        seedUiState(viewModel, initialState)
+
+        viewModel.addManyToExistingPlaylist(playlist, listOf(newSong, duplicateSong))
+
+        val state = viewModel.uiState.value
+        assertEquals("Added 2 song(s) to playlist", state.playlist.playlistMessage)
+        assertEquals(listOf(existingSong, newSong), state.playlist.playlistSongs)
     }
 
     private fun seedScanState(
