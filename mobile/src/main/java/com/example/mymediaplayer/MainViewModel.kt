@@ -917,7 +917,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val success = playlistService.appendToPlaylist(getApplication(), uri, files)
         val current = _uiState.value
         if (success) {
-            val addedCount: Int
             val updatedSongs = if (current.playlist.isSelected(playlist)) {
                 val existingUris = HashSet<String>(current.playlist.playlistSongs.size)
                 for (i in 0 until current.playlist.playlistSongs.size) {
@@ -931,16 +930,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         additions.add(file)
                     }
                 }
-                addedCount = additions.size
                 current.playlist.playlistSongs + additions
             } else {
-                addedCount = files.size
                 current.playlist.playlistSongs
             }
             _uiState.value = current.copy(
                 playlist = current.playlist.copy(
                     playlistSongs = updatedSongs,
-                    playlistMessage = "Added $addedCount song(s) to ${playlist.displayName.removeSuffix(".m3u")}"
+                    playlistMessage = "Added ${files.size} song(s) to ${playlist.displayName.removeSuffix(".m3u")}"
                 )
             )
         } else {
