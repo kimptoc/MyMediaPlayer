@@ -305,7 +305,6 @@ class MainViewModelTest {
         )
     }
 
-
     @Test
     fun addManyToExistingPlaylist_emptyFiles_returnsEarly() {
         val app = ApplicationProvider.getApplicationContext<Application>()
