@@ -340,6 +340,46 @@ class MainViewModelTest {
         assertTrue(newState.filteredSongs.isEmpty())
     }
 
+    @Test
+    fun addManyToManualPlaylist_addsNewFilesAndIgnoresDuplicates() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+        val existingFile = MediaFileInfo(
+            uriString = "content://test/songA",
+            displayName = "Song A",
+            sizeBytes = 1L,
+            title = "Song A"
+        )
+        val newFile1 = MediaFileInfo(
+            uriString = "content://test/songB",
+            displayName = "Song B",
+            sizeBytes = 1L,
+            title = "Song B"
+        )
+        val newFile2 = MediaFileInfo(
+            uriString = "content://test/songC",
+            displayName = "Song C",
+            sizeBytes = 1L,
+            title = "Song C"
+        )
+
+        // Seed UI state with existing file in manual playlist
+        val state = MainUiState(
+            playlist = PlaylistMgmtState(manualPlaylistSongs = listOf(existingFile))
+        )
+        seedUiState(viewModel, state)
+
+        // Try adding existing file and new files
+        viewModel.addManyToManualPlaylist(listOf(existingFile, newFile1, newFile2))
+
+        val updatedSongs = viewModel.uiState.value.playlist.manualPlaylistSongs
+        assertEquals(3, updatedSongs.size)
+        assertEquals("content://test/songA", updatedSongs[0].uriString)
+        assertEquals("content://test/songB", updatedSongs[1].uriString)
+        assertEquals("content://test/songC", updatedSongs[2].uriString)
+    }
+
     private fun seedScanState(
         viewModel: MainViewModel,
         files: List<MediaFileInfo>,
