@@ -3412,18 +3412,27 @@ class MyMusicService : MediaBrowserServiceCompat() {
         pendingResumePositionMs = if (savedPosition > 0L) savedPosition else null
     }
 
-    private fun savePlaybackSnapshot(positionMsOverride: Long? = null) {
+    @VisibleForTesting
+    internal fun savePlaybackSnapshot(positionMsOverride: Long? = null) {
         val currentUri = currentMediaId ?: currentFileInfo?.uriString
         val position = positionMsOverride ?: currentPositionSafeMs()
-        getPrefs(this@MyMusicService)
+        val editor = getPrefs(this@MyMusicService)
             .edit()
             .putString(KEY_RESUME_MEDIA_URI, currentUri)
-            .putString(KEY_RESUME_QUEUE_URIS, playlistQueue.joinToString("\n") { it.uriString })
-            .putInt(KEY_RESUME_QUEUE_INDEX, currentQueueIndex)
-            .putString(KEY_RESUME_QUEUE_TITLE, currentPlaylistName)
             .putLong(KEY_RESUME_POSITION_MS, position)
             .putInt(KEY_RESUME_REPEAT_MODE, repeatMode)
-            .apply()
+        // While a queue restore is still pending (#382), playlistQueue is
+        // deliberately empty — writing it now would permanently overwrite the
+        // real saved queue still sitting in prefs before it's ever resolved
+        // (e.g. if onDestroy() or onPlay() triggers a snapshot save mid cold-start).
+        // Leave the existing KEY_RESUME_QUEUE_* values untouched until resolved.
+        if (pendingQueueRestoreUris == null) {
+            editor
+                .putString(KEY_RESUME_QUEUE_URIS, playlistQueue.joinToString("\n") { it.uriString })
+                .putInt(KEY_RESUME_QUEUE_INDEX, currentQueueIndex)
+                .putString(KEY_RESUME_QUEUE_TITLE, currentPlaylistName)
+        }
+        editor.apply()
     }
 
     private fun currentPositionSafeMs(): Long =

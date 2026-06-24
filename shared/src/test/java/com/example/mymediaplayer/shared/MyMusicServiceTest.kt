@@ -752,6 +752,38 @@ class MyMusicServiceTest {
 
     @Test
     @Config(sdk = [33])
+    fun savePlaybackSnapshot_doesNotWipeSavedQueueWhileRestoreIsPending() {
+        val service = Robolectric.buildService(MyMusicService::class.java).create().get()
+        MyMusicService.getPrefs(service)
+            .edit()
+            .putString(
+                "resume_queue_uris",
+                "content://test/song1\ncontent://test/song2"
+            )
+            .putInt("resume_queue_index", 1)
+            .putString("resume_queue_title", "All Songs")
+            .apply()
+        // Cache is deliberately empty — restorePlaybackSnapshot() will defer.
+        service.restorePlaybackSnapshot()
+        assertTrue(service.hasPendingQueueRestore())
+
+        // Something (e.g. onDestroy(), onPlay()'s resume path) triggers a
+        // snapshot save before the real cache load finishes.
+        service.savePlaybackSnapshot()
+
+        val prefs = MyMusicService.getPrefs(service)
+        assertEquals(
+            "The original saved queue must survive a snapshot save taken " +
+                "before resolvePendingQueueIfNeeded() runs",
+            "content://test/song1\ncontent://test/song2",
+            prefs.getString("resume_queue_uris", null)
+        )
+        assertEquals(1, prefs.getInt("resume_queue_index", -1))
+        assertEquals("All Songs", prefs.getString("resume_queue_title", null))
+    }
+
+    @Test
+    @Config(sdk = [33])
     fun restorePlaybackSnapshot_resolvesImmediatelyWhenCacheAlreadyLoaded() {
         val service = Robolectric.buildService(MyMusicService::class.java).create().get()
         service.mediaCacheService.addFile(
