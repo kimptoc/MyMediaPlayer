@@ -48,6 +48,12 @@ class MediaCacheService {
         // short-lived, so the full raw entity list and the full converted list are
         // never both resident in memory at once (see issue #370).
         private const val PERSISTED_CACHE_PAGE_SIZE = 500
+        @VisibleForTesting
+        internal const val OOM_DIAGNOSTIC_PREFS_NAME = "mymediaplayer_diag"
+        // Process-wide (not per-instance) so it counts concurrent loadPersistedCache
+        // calls across both the phone's and the service's separate MediaCacheService
+        // instances — directly confirms or rules out concurrency as the OOM cause.
+        private val activeLoadCount = java.util.concurrent.atomic.AtomicInteger(0)
         private val SUPPORTED_AUDIO_EXTENSIONS = setOf(
             ".mp3", ".m4a", ".aac", ".flac", ".ogg", ".opus", ".wav", ".m4b",
             ".aiff", ".aif", ".wma", ".alac", ".ape", ".amr", ".awb",
@@ -514,6 +520,36 @@ class MediaCacheService {
         )
     }
 
+    @VisibleForTesting
+    internal fun recordLoadStarted(context: Context, totalFiles: Int) {
+        val concurrentEntries = activeLoadCount.incrementAndGet()
+        runCatching {
+            val runtime = Runtime.getRuntime()
+            @Suppress("ApplySharedPref")
+            context.getSharedPreferences(OOM_DIAGNOSTIC_PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean("load_in_progress", true)
+                .putInt("load_total_files", totalFiles)
+                .putInt("load_concurrent_entries", concurrentEntries)
+                .putLong("load_started_at_ms", System.currentTimeMillis())
+                .putLong("load_started_free_heap_kb", runtime.freeMemory() / 1024)
+                .putLong("load_started_max_heap_kb", runtime.maxMemory() / 1024)
+                .commit()
+        }
+    }
+
+    @VisibleForTesting
+    internal fun recordLoadFinished(context: Context) {
+        activeLoadCount.decrementAndGet()
+        runCatching {
+            @Suppress("ApplySharedPref")
+            context.getSharedPreferences(OOM_DIAGNOSTIC_PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean("load_in_progress", false)
+                .commit()
+        }
+    }
+
     fun loadPersistedCache(
         context: Context,
         treeUri: Uri,
@@ -529,15 +565,28 @@ class MediaCacheService {
             return null
         }
         val totalFiles = dao.getFileCount()
+        // Written *before* the allocation below, while the heap is still healthy —
+        // Log.d/Timber are no-ops in release builds, so if the OOM crash loop from
+        // #382 recurs, this breadcrumb survives on disk even though the process
+        // dies before it could write anything from inside a catch block (which
+        // would itself need to allocate while the heap is already exhausted).
+        // load_concurrent_entries directly confirms or rules out concurrent loads
+        // as the cause: it should never exceed 1 now that loadCachedTreeIfAvailable()
+        // claims an atomic guard before calling in (see #382).
+        recordLoadStarted(context, totalFiles)
         val files = ArrayList<MediaFileInfo>(totalFiles)
         var offset = 0
-        while (offset < totalFiles) {
-            val page = dao.getFilesPage(limit = PERSISTED_CACHE_PAGE_SIZE, offset = offset)
-            if (page.isEmpty()) break
-            for (entity in page) {
-                files.add(mediaFileFromEntity(entity))
+        try {
+            while (offset < totalFiles) {
+                val page = dao.getFilesPage(limit = PERSISTED_CACHE_PAGE_SIZE, offset = offset)
+                if (page.isEmpty()) break
+                for (entity in page) {
+                    files.add(mediaFileFromEntity(entity))
+                }
+                offset += page.size
             }
-            offset += page.size
+        } finally {
+            recordLoadFinished(context)
         }
 
         val playlists = dao.getAllPlaylists().let { playlistEntities ->

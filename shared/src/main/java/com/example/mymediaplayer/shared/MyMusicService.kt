@@ -57,6 +57,7 @@ import kotlinx.coroutines.guava.await
 import timber.log.Timber
 import java.io.File
 import java.io.InputStream
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
 class MyMusicService : MediaBrowserServiceCompat() {
@@ -135,6 +136,12 @@ class MyMusicService : MediaBrowserServiceCompat() {
         const val ACTION_BT_AUTOPLAY = "BT_AUTOPLAY"
 
         private var prefsInstance: android.content.SharedPreferences? = null
+
+        @VisibleForTesting
+        @Synchronized
+        internal fun clearPrefsCacheForTesting() {
+            prefsInstance = null
+        }
 
         @Synchronized
         fun getPrefs(context: Context): android.content.SharedPreferences {
@@ -255,6 +262,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
     private var playlistQueue: List<MediaFileInfo> = emptyList()
     private var currentQueueIndex: Int = -1
     private var currentPlaylistName: String? = null
+    private var pendingQueueRestoreUris: List<String>? = null
     private var repeatMode: Int = PlaybackStateCompat.REPEAT_MODE_NONE
     private var pendingResumePositionMs: Long? = null
     private var resumeOnAudioFocusGain: Boolean = false
@@ -263,8 +271,12 @@ class MyMusicService : MediaBrowserServiceCompat() {
     private var lastSearchQuery: String? = null
     private var lastSearchResults: List<MediaFileInfo> = emptyList()
     private var consecutivePlaybackErrors: Int = 0
-    @Volatile
-    private var isScanning: Boolean = false
+    // Claimed atomically by tryBeginScan() so two concurrent callers of
+    // loadCachedTreeIfAvailable() can never both pass the guard and each build
+    // their own full-size cache (see issue #382).
+    private val scanGuard = AtomicBoolean(false)
+    private val isScanning: Boolean
+        get() = scanGuard.get()
     private var isForegroundPromoted: Boolean = false
     private val pendingResults =
         mutableMapOf<String, MutableList<MediaBrowserServiceCompat.Result<MutableList<MediaItem>>>>()
@@ -1504,76 +1516,92 @@ class MyMusicService : MediaBrowserServiceCompat() {
         return "${decade}s"
     }
 
+    @VisibleForTesting
+    internal fun tryBeginScan(): Boolean = scanGuard.compareAndSet(false, true)
+
+    @VisibleForTesting
+    internal fun endScan() {
+        scanGuard.set(false)
+    }
+
     private fun loadCachedTreeIfAvailable() {
-        if (isScanning) return
         if (mediaCacheService.hasCachedFiles()) return
-        // Read scan settings from standard prefs — the activity always writes to standard prefs,
-        // but getPrefs() may return encrypted prefs (which can be stale after settings changes).
-        val standardPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val limit = standardPrefs.getInt(KEY_SCAN_LIMIT, MediaCacheService.MAX_CACHE_SIZE)
-        val wholeDriveMode = standardPrefs.getBoolean(KEY_SCAN_WHOLE_DRIVE, false)
-        val uri = if (wholeDriveMode) {
-            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
-        } else {
-            val uriString = standardPrefs.getString(KEY_TREE_URI, null) ?: return
-            val parsed = Uri.parse(uriString)
-            val hasPermission = contentResolver.persistedUriPermissions.any {
-                it.uri == parsed && it.isReadPermission
-            }
-            if (!hasPermission) return
-            parsed
-        }
-
-        folderArtCache.evictAll()
-        folderArtNotFound.clear()
-
-        // Set isScanning BEFORE launching the coroutine so that any onLoadChildren
-        // calls during the loading window are queued in pendingResults and delivered
-        // properly once data is ready — rather than returning empty results immediately.
-        isScanning = true
-        serviceScope.launch {
-            try {
-                val persisted = mediaCacheService.loadPersistedCache(this@MyMusicService, uri, limit)
-                val cacheLoadedFromDisk = persisted != null && persisted.files.isNotEmpty()
-                // Index build is deferred until first browse (see ensureMetadataIndexes()).
-                if (!cacheLoadedFromDisk) {
-                    var lastNotify = 0
-                    val progress: (Int, Int) -> Unit = { songsFound, _ ->
-                        if (songsFound - lastNotify >= 200) {
-                            lastNotify = songsFound
-                            notifyChildrenChanged(SONGS_ALL_ID)
-                        }
-                    }
-                    val scanStartedAt = System.currentTimeMillis()
-                    if (wholeDriveMode) {
-                        mediaCacheService.scanWholeDevice(this@MyMusicService, limit, progress)
-                    } else {
-                        mediaCacheService.scanDirectory(
-                            ScanContext(
-                                context = this@MyMusicService,
-                                treeUri = uri,
-                                maxFiles = limit,
-                                onProgress = progress
-                            )
-                        )
-                        mediaCacheService.enrichGenresFromMediaStore(this@MyMusicService)
-                    }
-                    mediaCacheService.persistCache(this@MyMusicService, uri, limit, scanStartedAt)
+        // Claim the guard before any other work so two near-simultaneous callers
+        // can never both pass and each build their own full-size cache (#382).
+        if (!tryBeginScan()) return
+        // Released in the finally below unless handedOffToCoroutine becomes true —
+        // covers every early return *and* any unexpected exception in the
+        // synchronous setup below, so the guard can never get stuck claimed.
+        var handedOffToCoroutine = false
+        try {
+            // Read scan settings from standard prefs — the activity always writes to standard prefs,
+            // but getPrefs() may return encrypted prefs (which can be stale after settings changes).
+            val standardPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val limit = standardPrefs.getInt(KEY_SCAN_LIMIT, MediaCacheService.MAX_CACHE_SIZE)
+            val wholeDriveMode = standardPrefs.getBoolean(KEY_SCAN_WHOLE_DRIVE, false)
+            val uri = if (wholeDriveMode) {
+                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+            } else {
+                val uriString = standardPrefs.getString(KEY_TREE_URI, null) ?: return
+                val parsed = Uri.parse(uriString)
+                val hasPermission = contentResolver.persistedUriPermissions.any {
+                    it.uri == parsed && it.isReadPermission
                 }
-            } finally {
-                isScanning = false
-                refreshQueueMetadata()
-                rebuildPlaylistShortIds()
-                deliverPendingResults()
-                notifyChildrenChanged(ROOT_ID)
-                notifyChildrenChanged(HOME_ID)
-                notifyChildrenChanged(SONGS_ID)
-                notifyChildrenChanged(PLAYLISTS_ID)
-                notifyChildrenChanged(ALBUMS_ID)
-                notifyChildrenChanged(GENRES_ID)
-                notifyChildrenChanged(ARTISTS_ID)
-                notifyChildrenChanged(DECADES_ID)
+                if (!hasPermission) return
+                parsed
             }
+
+            folderArtCache.evictAll()
+            folderArtNotFound.clear()
+
+            handedOffToCoroutine = true
+            serviceScope.launch {
+                try {
+                    val persisted = mediaCacheService.loadPersistedCache(this@MyMusicService, uri, limit)
+                    val cacheLoadedFromDisk = persisted != null && persisted.files.isNotEmpty()
+                    // Index build is deferred until first browse (see ensureMetadataIndexes()).
+                    if (!cacheLoadedFromDisk) {
+                        var lastNotify = 0
+                        val progress: (Int, Int) -> Unit = { songsFound, _ ->
+                            if (songsFound - lastNotify >= 200) {
+                                lastNotify = songsFound
+                                notifyChildrenChanged(SONGS_ALL_ID)
+                            }
+                        }
+                        val scanStartedAt = System.currentTimeMillis()
+                        if (wholeDriveMode) {
+                            mediaCacheService.scanWholeDevice(this@MyMusicService, limit, progress)
+                        } else {
+                            mediaCacheService.scanDirectory(
+                                ScanContext(
+                                    context = this@MyMusicService,
+                                    treeUri = uri,
+                                    maxFiles = limit,
+                                    onProgress = progress
+                                )
+                            )
+                            mediaCacheService.enrichGenresFromMediaStore(this@MyMusicService)
+                        }
+                        mediaCacheService.persistCache(this@MyMusicService, uri, limit, scanStartedAt)
+                    }
+                } finally {
+                    endScan()
+                    resolvePendingQueueIfNeeded()
+                    refreshQueueMetadata()
+                    rebuildPlaylistShortIds()
+                    deliverPendingResults()
+                    notifyChildrenChanged(ROOT_ID)
+                    notifyChildrenChanged(HOME_ID)
+                    notifyChildrenChanged(SONGS_ID)
+                    notifyChildrenChanged(PLAYLISTS_ID)
+                    notifyChildrenChanged(ALBUMS_ID)
+                    notifyChildrenChanged(GENRES_ID)
+                    notifyChildrenChanged(ARTISTS_ID)
+                    notifyChildrenChanged(DECADES_ID)
+                }
+            }
+        } finally {
+            if (!handedOffToCoroutine) endScan()
         }
     }
 
@@ -3295,7 +3323,43 @@ class MyMusicService : MediaBrowserServiceCompat() {
         )
     }
 
-    private fun restorePlaybackSnapshot() {
+    @VisibleForTesting
+    internal fun resolvePendingQueueIfNeeded() {
+        val uris = pendingQueueRestoreUris ?: return
+        pendingQueueRestoreUris = null
+        val savedIndex = currentQueueIndex
+        resolveQueueUris(uris, savedIndex)
+        updateSessionQueue()
+    }
+
+    @VisibleForTesting
+    internal fun currentPlaylistQueue(): List<MediaFileInfo> = playlistQueue
+
+    @VisibleForTesting
+    internal fun hasPendingQueueRestore(): Boolean = pendingQueueRestoreUris != null
+
+    @VisibleForTesting
+    internal fun seedPendingQueueRestoreForTesting(uris: List<String>, index: Int) {
+        pendingQueueRestoreUris = uris
+        currentQueueIndex = index
+    }
+
+    private fun resolveQueueUris(uris: List<String>, savedIndex: Int) {
+        val byUri = mediaCacheService.getFileIndexByUri()
+        playlistQueue = uris.map { uri ->
+            byUri[uri] ?: MediaFileInfo(
+                uriString = uri,
+                displayName = uri,
+                sizeBytes = 0L,
+                title = uri
+            )
+        }
+        val clampedIndex = savedIndex.coerceIn(-1, playlistQueue.lastIndex)
+        currentQueueIndex = if (clampedIndex >= 0) clampedIndex else 0
+    }
+
+    @VisibleForTesting
+    internal fun restorePlaybackSnapshot() {
         val prefs = getPrefs(this@MyMusicService)
         repeatMode = prefs.getInt(KEY_RESUME_REPEAT_MODE, PlaybackStateCompat.REPEAT_MODE_NONE)
         session.setRepeatMode(repeatMode)
@@ -3306,21 +3370,21 @@ class MyMusicService : MediaBrowserServiceCompat() {
         } else {
             queueUrisRaw.split('\n').filter { it.isNotBlank() }
         }
-        if (queueUris.isNotEmpty()) {
-            val byUri = mediaCacheService.getFileIndexByUri()
-            playlistQueue = queueUris.map { uri ->
-                byUri[uri] ?: MediaFileInfo(
-                    uriString = uri,
-                    displayName = uri,
-                    sizeBytes = 0L,
-                    title = uri
-                )
-            }
-            val savedIndex = prefs.getInt(KEY_RESUME_QUEUE_INDEX, -1)
-            val clampedIndex = savedIndex.coerceIn(-1, playlistQueue.lastIndex)
-            currentQueueIndex = if (clampedIndex >= 0) clampedIndex else 0
+        if (queueUris.isNotEmpty() && mediaCacheService.hasCachedFiles()) {
+            resolveQueueUris(queueUris, prefs.getInt(KEY_RESUME_QUEUE_INDEX, -1))
             currentPlaylistName = prefs.getString(KEY_RESUME_QUEUE_TITLE, null)
             updateSessionQueue()
+        } else if (queueUris.isNotEmpty()) {
+            // Cache isn't loaded yet (the common cold-start case) — every lookup
+            // below would miss, so resolving now would build a full-size queue of
+            // placeholder MediaFileInfo (title = raw URI) and ship it over Binder
+            // via updateSessionQueue(), duplicating the real cache load that's
+            // about to run in loadCachedTreeIfAvailable(). Defer until that
+            // finishes (see resolvePendingQueueIfNeeded()), so this resolves once,
+            // with real data (#382).
+            pendingQueueRestoreUris = queueUris
+            currentQueueIndex = prefs.getInt(KEY_RESUME_QUEUE_INDEX, -1)
+            currentPlaylistName = prefs.getString(KEY_RESUME_QUEUE_TITLE, null)
         } else {
             playlistQueue = emptyList()
             currentQueueIndex = -1

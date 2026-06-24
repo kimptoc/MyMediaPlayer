@@ -9,13 +9,21 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
 class MyMusicServiceTest {
+
+    @Before
+    fun setup() {
+        EncryptedPrefsManager.clearCacheForTesting()
+        MyMusicService.clearPrefsCacheForTesting()
+    }
 
     @Test
     fun buildSongListItems_withSongsAddsPlayAndShuffle() {
@@ -632,5 +640,139 @@ class MyMusicServiceTest {
                 "found titles: " + actionItems.map { it.description.title.toString() },
             actionItems.isEmpty()
         )
+    }
+
+    // Regression tests for issue #382 (OOM crash loop persisting after #370).
+
+    @Test
+    fun tryBeginScan_onlyAllowsOneCallerAtATime() {
+        val service = Robolectric.buildService(MyMusicService::class.java).get()
+
+        assertTrue(service.tryBeginScan())
+        assertFalse(service.tryBeginScan())
+
+        service.endScan()
+
+        assertTrue(service.tryBeginScan())
+    }
+
+    @Test
+    fun resolvePendingQueueIfNeeded_noopWhenNothingPending() {
+        val service = Robolectric.buildService(MyMusicService::class.java).get()
+
+        assertFalse(service.hasPendingQueueRestore())
+        service.resolvePendingQueueIfNeeded()
+
+        assertTrue(service.currentPlaylistQueue().isEmpty())
+    }
+
+    @Test
+    @Config(sdk = [33])
+    fun resolvePendingQueueIfNeeded_resolvesRealDataOnceCacheIsLoaded() {
+        val service = Robolectric.buildService(MyMusicService::class.java).create().get()
+        service.seedPendingQueueRestoreForTesting(
+            listOf("content://test/song1", "content://test/song2"),
+            index = 1
+        )
+        assertTrue(service.hasPendingQueueRestore())
+        assertTrue(service.currentPlaylistQueue().isEmpty())
+
+        service.mediaCacheService.addFile(
+            MediaFileInfo(
+                uriString = "content://test/song1",
+                displayName = "Song1.mp3",
+                sizeBytes = 1L,
+                title = "Song One"
+            )
+        )
+        service.mediaCacheService.addFile(
+            MediaFileInfo(
+                uriString = "content://test/song2",
+                displayName = "Song2.mp3",
+                sizeBytes = 1L,
+                title = "Song Two"
+            )
+        )
+
+        service.resolvePendingQueueIfNeeded()
+
+        assertFalse(service.hasPendingQueueRestore())
+        val queue = service.currentPlaylistQueue()
+        assertEquals(2, queue.size)
+        assertEquals("Song One", queue[0].title)
+        assertEquals("Song Two", queue[1].title)
+    }
+
+    @Test
+    @Config(sdk = [33])
+    fun restorePlaybackSnapshot_defersQueueRestoreWhenCacheNotLoaded() {
+        val service = Robolectric.buildService(MyMusicService::class.java).create().get()
+        MyMusicService.getPrefs(service)
+            .edit()
+            .putString(
+                "resume_queue_uris",
+                "content://test/song1\ncontent://test/song2"
+            )
+            .putInt("resume_queue_index", 1)
+            .putString("resume_queue_title", "All Songs")
+            .apply()
+        // Cache is deliberately empty here — this is the cold-start case.
+
+        service.restorePlaybackSnapshot()
+
+        assertTrue(
+            "Expected no placeholder queue to be built before the cache loads",
+            service.currentPlaylistQueue().isEmpty()
+        )
+        assertTrue(service.hasPendingQueueRestore())
+
+        service.mediaCacheService.addFile(
+            MediaFileInfo(
+                uriString = "content://test/song1",
+                displayName = "Song1.mp3",
+                sizeBytes = 1L,
+                title = "Song One"
+            )
+        )
+        service.mediaCacheService.addFile(
+            MediaFileInfo(
+                uriString = "content://test/song2",
+                displayName = "Song2.mp3",
+                sizeBytes = 1L,
+                title = "Song Two"
+            )
+        )
+        service.resolvePendingQueueIfNeeded()
+
+        val queue = service.currentPlaylistQueue()
+        assertEquals(2, queue.size)
+        assertEquals("Song One", queue[0].title)
+        assertEquals("Song Two", queue[1].title)
+    }
+
+    @Test
+    @Config(sdk = [33])
+    fun restorePlaybackSnapshot_resolvesImmediatelyWhenCacheAlreadyLoaded() {
+        val service = Robolectric.buildService(MyMusicService::class.java).create().get()
+        service.mediaCacheService.addFile(
+            MediaFileInfo(
+                uriString = "content://test/song1",
+                displayName = "Song1.mp3",
+                sizeBytes = 1L,
+                title = "Song One"
+            )
+        )
+        MyMusicService.getPrefs(service)
+            .edit()
+            .putString("resume_queue_uris", "content://test/song1")
+            .putInt("resume_queue_index", 0)
+            .apply()
+
+        service.restorePlaybackSnapshot()
+
+        assertFalse(service.hasPendingQueueRestore())
+        val queue = service.currentPlaylistQueue()
+        assertEquals(1, queue.size)
+        assertEquals("Song One", queue[0].title)
     }
 }
