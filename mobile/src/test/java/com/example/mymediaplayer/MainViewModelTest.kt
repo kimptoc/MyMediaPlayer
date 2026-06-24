@@ -386,7 +386,7 @@ class MainViewModelTest {
         viewModel.addManyToExistingPlaylist(playlist, listOf(newSong, duplicateSong))
 
         val state = viewModel.uiState.value
-        assertEquals("Added 2 song(s) to playlist", state.playlist.playlistMessage)
+        assertEquals("Added 1 song(s) to playlist", state.playlist.playlistMessage)
         assertEquals(listOf(existingSong, newSong), state.playlist.playlistSongs)
     }
 
