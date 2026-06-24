@@ -133,8 +133,6 @@ class MainViewModelPlaylistCreationTest {
         val state = viewModel.uiState.value
         assertEquals("Failed to create playlist", state.playlist.playlistMessage)
     }
-    }
-
     @Test
     fun createManualPlaylist_noFolderSelected_returnsAndShowsMessage() {
         val file = MediaFileInfo("content://song1", "song1.mp3", 0L, "Song 1")
