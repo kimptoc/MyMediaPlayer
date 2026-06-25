@@ -716,6 +716,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
         setSearchResults: Boolean
     ) {
         if (uris.isEmpty()) return
+        // Fresh play/shuffle — discard any resume position carried over from a
+        // previous snapshot so the first track starts at the beginning (#384).
+        pendingResumePositionMs = null
         val snapshot = mediaCacheService.cachedFiles
         val lookup = snapshot.associateBy { it.uriString }
         val list = uris.map { uri ->
@@ -2170,6 +2173,11 @@ class MyMusicService : MediaBrowserServiceCompat() {
     }
 
     private suspend fun handlePlayFromMediaId(resolvedMediaId: String) {
+        // Fresh play/shuffle/play_all action — discard any resume position carried
+        // over from a previous snapshot so the first track starts at the
+        // beginning (#384). Subsequent onSkipToNext/Previous/QueueItem calls are
+        // routed past this method and keep using pendingResumePositionMs normally.
+        pendingResumePositionMs = null
         when {
             resolvedMediaId.startsWith(ACTION_PLAY_ALL_PREFIX) ||
             resolvedMediaId.startsWith(ACTION_SHUFFLE_PREFIX) -> {
@@ -2470,6 +2478,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
     }
 
     private suspend fun handlePlayFromSearch(query: String?, extras: Bundle?) {
+        // Fresh play from voice/search — discard any resume position carried over
+        // from a previous snapshot so the first track starts at the beginning (#384).
+        pendingResumePositionMs = null
         ensureCacheReadyForSearch()
         val raw = query?.trim().orEmpty()
         val lowered = raw.lowercase()
