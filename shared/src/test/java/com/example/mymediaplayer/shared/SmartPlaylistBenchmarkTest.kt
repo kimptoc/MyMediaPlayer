@@ -1,6 +1,7 @@
 package com.example.mymediaplayer.shared
 
 import android.content.Context
+import timber.log.Timber
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -68,8 +69,8 @@ class SmartPlaylistBenchmarkTest {
             }
         }
 
-        val output = "resolveSmartPlaylistTracksById(most_played) of 50000 items took ${timeMs / iterations.toDouble()} ms on average\n"
-        println(output)
+        val output = "resolveSmartPlaylistTracksById(most_played) of 50000 items took ${timeMs / iterations.toDouble()} ms on average"
+        Timber.d(output)
 
         assertTrue("Benchmark completed", true)
     }
