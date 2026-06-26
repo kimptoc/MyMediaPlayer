@@ -2,6 +2,8 @@ package com.example.mymediaplayer.shared
 
 import android.content.Context
 import timber.log.Timber
+import org.junit.After
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -11,6 +13,16 @@ import org.junit.Assert.assertTrue
 
 @RunWith(RobolectricTestRunner::class)
 class SmartPlaylistBenchmarkTest {
+
+    @Before
+    fun setUp() {
+        Timber.plant(Timber.DebugTree())
+    }
+
+    @After
+    fun tearDown() {
+        Timber.uprootAll()
+    }
 
     @Test
     fun benchmarkSmartPlaylistMostPlayed() {
