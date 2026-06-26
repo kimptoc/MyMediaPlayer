@@ -1,18 +1,13 @@
 package com.example.mymediaplayer
 
 import android.app.Application
-import android.content.Context
-import android.net.Uri
 import android.support.v4.media.session.PlaybackStateCompat
 import androidx.test.core.app.ApplicationProvider
 import com.example.mymediaplayer.shared.MediaFileInfo
 import com.example.mymediaplayer.shared.PlaylistInfo
-import com.example.mymediaplayer.shared.PlaylistService
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -310,92 +305,6 @@ class MainViewModelTest {
         )
     }
 
-
-    @Test
-    fun addManyToExistingPlaylist_emptyFiles_returnsEarly() {
-        val app = ApplicationProvider.getApplicationContext<Application>()
-        clearPrefs(app)
-        val viewModel = MainViewModel(app)
-        val playlist = PlaylistInfo(uriString = "content://test/playlist.m3u", displayName = "playlist.m3u")
-
-        viewModel.addManyToExistingPlaylist(playlist, emptyList())
-
-        val state = viewModel.uiState.value
-        assertEquals(null, state.playlist.playlistMessage)
-    }
-
-    @Test
-    fun addManyToExistingPlaylist_failure_setsFailureMessage() {
-        val app = ApplicationProvider.getApplicationContext<Application>()
-        clearPrefs(app)
-        val viewModel = MainViewModel(app)
-        val playlist = PlaylistInfo(uriString = "content://test/playlist.m3u", displayName = "playlist.m3u")
-        val files = listOf(
-            MediaFileInfo(uriString = "content://test/song1", displayName = "Song 1", sizeBytes = 1L, title = "Song 1")
-        )
-        // No output stream registered, so appendToPlaylist will fail.
-
-        viewModel.addManyToExistingPlaylist(playlist, files)
-
-        val state = viewModel.uiState.value
-        assertEquals("Failed to update playlist", state.playlist.playlistMessage)
-    }
-
-    @Test
-    fun addManyToExistingPlaylist_successNotSelected_updatesMessageOnly() {
-        val app = ApplicationProvider.getApplicationContext<Application>()
-        clearPrefs(app)
-
-        val uri = android.net.Uri.parse("content://test/playlist.m3u")
-        org.robolectric.Shadows.shadowOf(app.contentResolver)
-            .registerOutputStream(uri, java.io.ByteArrayOutputStream())
-
-        val viewModel = MainViewModel(app)
-        val playlist = PlaylistInfo(uriString = uri.toString(), displayName = "playlist.m3u")
-        val files = listOf(
-            MediaFileInfo(uriString = "content://test/song1", displayName = "Song 1", sizeBytes = 1L, title = "Song 1")
-        )
-
-        // Playlist is not selected.
-        viewModel.addManyToExistingPlaylist(playlist, files)
-
-        val state = viewModel.uiState.value
-        assertEquals("Added 1 song(s) to playlist", state.playlist.playlistMessage)
-        assertTrue(state.playlist.playlistSongs.isEmpty())
-    }
-
-    @Test
-    fun addManyToExistingPlaylist_successSelected_updatesMessageAndSongs() {
-        val app = ApplicationProvider.getApplicationContext<Application>()
-        clearPrefs(app)
-
-        val uri = android.net.Uri.parse("content://test/playlist.m3u")
-        org.robolectric.Shadows.shadowOf(app.contentResolver)
-            .registerOutputStream(uri, java.io.ByteArrayOutputStream())
-
-        val viewModel = MainViewModel(app)
-        val playlist = PlaylistInfo(uriString = uri.toString(), displayName = "playlist.m3u")
-        val existingSong = MediaFileInfo(uriString = "content://test/song1", displayName = "Song 1", sizeBytes = 1L, title = "Song 1")
-        val newSong = MediaFileInfo(uriString = "content://test/song2", displayName = "Song 2", sizeBytes = 1L, title = "Song 2")
-        val duplicateSong = MediaFileInfo(uriString = "content://test/song1", displayName = "Song 1 dup", sizeBytes = 1L, title = "Song 1")
-
-        // Set state to have this playlist selected with one existing song
-        val initialState = MainUiState(
-            playlist = PlaylistMgmtState(
-                selectedPlaylist = playlist,
-                playlistSongs = listOf(existingSong)
-            ),
-            isPreferencesLoading = false
-        )
-        seedUiState(viewModel, initialState)
-
-        viewModel.addManyToExistingPlaylist(playlist, listOf(newSong, duplicateSong))
-
-        val state = viewModel.uiState.value
-        assertEquals("Added 2 song(s) to playlist", state.playlist.playlistMessage)
-        assertEquals(listOf(existingSong, newSong), state.playlist.playlistSongs)
-    }
-
     private fun seedScanState(
         viewModel: MainViewModel,
         files: List<MediaFileInfo>,
@@ -426,87 +335,5 @@ class MainViewModelTest {
             .edit()
             .clear()
             .commit()
-    }
-
-    @Test
-    fun createPlaylistFromSongs_withoutUri_setsValidationMessageAndReturnsNull() {
-        val app = ApplicationProvider.getApplicationContext<Application>()
-        clearPrefs(app)
-        val viewModel = MainViewModel(app)
-
-        val result = viewModel.createPlaylistFromSongs("test", listOf())
-        assertNull(result)
-        assertEquals("Select a folder first.", viewModel.uiState.value.playlist.playlistMessage)
-    }
-
-    @Test
-    fun createPlaylistFromSongs_withEmptyFiles_setsValidationMessageAndReturnsNull() {
-        val app = ApplicationProvider.getApplicationContext<Application>()
-        clearPrefs(app)
-        val viewModel = MainViewModel(app)
-        viewModel.setTreeUri(Uri.parse("content://test"))
-
-        val result = viewModel.createPlaylistFromSongs("test", listOf())
-        assertNull(result)
-        assertEquals("Add songs first.", viewModel.uiState.value.playlist.playlistMessage)
-    }
-
-    @Test
-    fun createPlaylistFromSongs_success_createsPlaylistAndUpdatesState() {
-        val app = ApplicationProvider.getApplicationContext<Application>()
-        clearPrefs(app)
-        val viewModel = MainViewModel(app)
-        viewModel.setTreeUri(Uri.parse("content://test"))
-
-        val mockService = object : PlaylistService() {
-            override fun writePlaylistWithName(
-                context: Context,
-                treeUri: Uri,
-                files: List<MediaFileInfo>,
-                name: String
-            ): PlaylistInfo? {
-                return PlaylistInfo("content://test/playlist.m3u", name)
-            }
-        }
-        val field = MainViewModel::class.java.getDeclaredField("playlistService")
-        field.isAccessible = true
-        field.set(viewModel, mockService)
-
-        val files = listOf(MediaFileInfo("content://song", "Song", 1L, "Song Title"))
-        val result = viewModel.createPlaylistFromSongs("My New Playlist", files)
-
-        assertNotNull(result)
-        assertEquals("My New Playlist", result?.displayName)
-        assertEquals("Created My New Playlist", viewModel.uiState.value.playlist.playlistMessage)
-        assertEquals(1, viewModel.uiState.value.scan.discoveredPlaylists.size)
-        assertEquals("content://test/playlist.m3u", viewModel.uiState.value.scan.discoveredPlaylists[0].uriString)
-    }
-
-    @Test
-    fun createPlaylistFromSongs_failure_setsValidationMessage() {
-        val app = ApplicationProvider.getApplicationContext<Application>()
-        clearPrefs(app)
-        val viewModel = MainViewModel(app)
-        viewModel.setTreeUri(Uri.parse("content://test"))
-
-        val mockService = object : PlaylistService() {
-            override fun writePlaylistWithName(
-                context: Context,
-                treeUri: Uri,
-                files: List<MediaFileInfo>,
-                name: String
-            ): PlaylistInfo? {
-                return null
-            }
-        }
-        val field = MainViewModel::class.java.getDeclaredField("playlistService")
-        field.isAccessible = true
-        field.set(viewModel, mockService)
-
-        val files = listOf(MediaFileInfo("content://song", "Song", 1L, "Song Title"))
-        val result = viewModel.createPlaylistFromSongs("My Failing Playlist", files)
-
-        assertNull(result)
-        assertEquals("Failed to create playlist", viewModel.uiState.value.playlist.playlistMessage)
     }
 }
