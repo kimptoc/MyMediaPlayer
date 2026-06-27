@@ -97,7 +97,7 @@ object ApiKeyStore {
     private suspend fun validateTtsKey(apiKey: String): ValidationResult = withContext(Dispatchers.IO) {
         runCatching {
             val url = URL("https://texttospeech.googleapis.com/v1/text:synthesize")
-            if (!url.protocol.equals("https", ignoreCase = true)) {
+            if (!"https".equals(url.protocol, ignoreCase = true)) {
                 return@withContext ValidationResult.Error("Endpoint must use HTTPS")
             }
             val conn = url.openConnection() as HttpsURLConnection
