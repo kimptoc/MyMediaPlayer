@@ -308,373 +308,49 @@ fun MainScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp)
-        ) {
-            if (uiState.scan.isScanning) {
-                CircularProgressIndicator(
-                    modifier = Modifier.align(Alignment.CenterHorizontally)
-                )
-                uiState.scan.scanProgress?.let { progress ->
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = progress,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.align(Alignment.CenterHorizontally)
-                    )
-                }
-            }
-
-            if (isSearchExpanded && uiState.search.searchQuery.isBlank() && uiState.search.previousSearchQueries.isNotEmpty()) {
-                RecentSearchesSection(
-                    queries = uiState.search.previousSearchQueries,
-                    onSearchSelected = onSearchQueryChanged
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-            }
-
-            if (uiState.search.searchQuery.isNotBlank()) {
-                Spacer(modifier = Modifier.height(8.dp))
-                val visibleSearchResults = if (searchFavoritesOnly) {
-                    uiState.search.searchResults.filter { it.uriString in uiState.favoriteUris }
-                } else {
-                    uiState.search.searchResults
-                }
-                if (visibleSearchResults.isEmpty()) {
-                    Text("No results for \"${uiState.search.searchQuery}\"")
-                } else if (uiState.library.selectedTab == LibraryTab.Albums) {
-                    val allByAlbum = uiState.scan.scannedFiles.groupBy { albumLabel(it) }
-                    val albumHits = visibleSearchResults
-                        .groupBy { albumLabel(it) }
-                        .map { (album, matches) ->
-                            AlbumSearchHit(
-                                album = album,
-                                matchedCount = matches.size,
-                                songs = allByAlbum[album].orEmpty()
-                            )
-                        }
-                        .sortedBy { it.album.lowercase() }
-                    AlbumSearchResultsSection(
-                        query = uiState.search.searchQuery,
-                        albumHits = albumHits,
-                        favoriteUris = uiState.favoriteUris,
-                        onOpenAlbum = { album ->
-                            setIsSearchExpanded(false)
-                            onClearSearch()
-                            onTabSelected(LibraryTab.Albums)
-                            onAlbumSelected(album)
-                        },
-                        onAddAlbumToPlaylist = { songs ->
-                            setPendingAddFiles(songs)
-                            setShowAddToPlaylistDialog(true)
-                        },
-                        onToggleFavorite = onToggleFavorite
-                    )
-                } else {
-                    SearchResultsActionRow(
-                        searchFavoritesOnly = searchFavoritesOnly,
-                        onToggleSearchFavoritesOnly = { setSearchFavoritesOnly(!searchFavoritesOnly) },
-                        visibleSearchResults = visibleSearchResults,
-                        onAddAll = {
-                            setPendingAddFiles(it)
-                            setShowAddToPlaylistDialog(true)
-                        },
-                        isSearchSelectionMode = isSearchSelectionMode,
-                        onToggleSearchSelectionMode = {
-                            setIsSearchSelectionMode(!isSearchSelectionMode)
-                            if (!isSearchSelectionMode) setSelectedSearchUris(emptySet())
-                        },
-                        selectedSearchUris = selectedSearchUris,
-                        onSelectAll = { setSelectedSearchUris(it) },
-                        onClearSelection = { setSelectedSearchUris(emptySet()) },
-                        onAddSelected = {
-                            setPendingAddFiles(it)
-                            setShowAddToPlaylistDialog(true)
-                        }
-                    )
-                    SongsListSection(
-                        title = "Search Results (${visibleSearchResults.size})",
-                        songs = visibleSearchResults,
-                        favoriteUris = uiState.favoriteUris,
-                        isPlaying = false,
-                        isPlayingPlaylist = uiState.playback.isPlayingPlaylist,
-                        hasNext = uiState.playback.hasNext,
-                        hasPrev = uiState.playback.hasPrev,
-                        onPlay = { onPlaySearchResults(visibleSearchResults) },
-                        onShuffle = { onShuffleSearchResults(visibleSearchResults) },
-                        onStop = onStop,
-                        onNext = onNext,
-                        onPrev = onPrev,
-                        onFileClick = onFileClick,
-                        onAddToPlaylist = {
-                            setPendingAddFiles(listOf(it))
-                            setShowAddToPlaylistDialog(true)
-                        },
-                        onToggleFavorite = onToggleFavorite,
-                        enableSelection = isSearchSelectionMode,
-                        selectedUris = selectedSearchUris,
-                        onSelectionToggle = { file ->
-                            setSelectedSearchUris(if (file.uriString in selectedSearchUris) {
-                                selectedSearchUris - file.uriString
-                            } else {
-                                selectedSearchUris + file.uriString
-                            })
-                        },
-                        currentMediaId = uiState.playback.currentMediaId
-                    )
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-            }
-
-            val albumCounts = remember(uiState.scan.scannedFiles) { buildAlbumCounts(uiState.scan.scannedFiles) }
-            val artistCounts = remember(uiState.scan.scannedFiles) { buildArtistCounts(uiState.scan.scannedFiles) }
-            val genreCounts = remember(uiState.scan.scannedFiles) { buildGenreCounts(uiState.scan.scannedFiles) }
-            val tabs = LibraryTab.values().toList()
-            ScrollableTabRow(
-                selectedTabIndex = tabs.indexOf(uiState.library.selectedTab),
-                containerColor = MaterialTheme.colorScheme.surface,
-                edgePadding = 20.dp,
-                indicator = { tabPositions ->
-                    val index = tabs.indexOf(uiState.library.selectedTab)
-                    if (index in tabPositions.indices) {
-                        TabRowDefaults.SecondaryIndicator(
-                            modifier = Modifier.tabIndicatorOffset(tabPositions[index]),
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
-            ) {
-                tabs.forEach { tab ->
-                    Tab(
-                        selected = uiState.library.selectedTab == tab,
-                        onClick = { onTabSelected(tab) },
-                        text = { Text(tab.label, maxLines = 1) }
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            when (uiState.library.selectedTab) {
-                LibraryTab.Songs -> {
-                    val (selectedDecade, setSelectedDecade) = rememberSaveable { mutableStateOf<String?>(null) }
-                    val availableDecades = remember(uiState.scan.scannedFiles) {
-                        uiState.scan.scannedFiles
-                            .map { decadeLabelForYear(it.year) }
-                            .filter { it != "Unknown Decade" }
-                            .distinct()
-                            .sorted()
-                    }
-                    SongsTabContent(
-                        songsFavoritesOnly = songsFavoritesOnly,
-                        onToggleSongsFavoritesOnly = { setSongsFavoritesOnly(!songsFavoritesOnly) },
-                        selectedDecade = selectedDecade,
-                        availableDecades = availableDecades,
-                        onDecadeSelected = { setSelectedDecade(it) },
-                        scannedFiles = uiState.scan.scannedFiles,
-                        favoriteUris = uiState.favoriteUris,
-                        isPlayingPlaylist = uiState.playback.isPlayingPlaylist,
-                        hasNext = uiState.playback.hasNext,
-                        hasPrev = uiState.playback.hasPrev,
-                        onPlaySongs = onPlaySongs,
-                        onShuffleSongs = onShuffleSongs,
-                        onStop = onStop,
-                        onNext = onNext,
-                        onPrev = onPrev,
-                        onFileClick = onFileClick,
-                        onAddToPlaylist = {
-                            setPendingAddFiles(listOf(it))
-                            setShowAddToPlaylistDialog(true)
-                        },
-                        onToggleFavorite = onToggleFavorite,
-                        currentMediaId = uiState.playback.currentMediaId
-                    )
-                }
-                LibraryTab.Playlists -> {
-                    val smartPlaylists = remember(
-                        uiState.favoriteUris,
-                        uiState.flaggedUris,
-                        uiState.playCounts,
-                        uiState.lastPlayedAt,
-                        uiState.scan.scannedFiles
-                    ) {
-                        listOf(
-                            PlaylistInfo(
-                                uriString = MainViewModel.SMART_FAVORITES,
-                                displayName = "Favorites.m3u"
-                            ),
-                            PlaylistInfo(
-                                uriString = MainViewModel.SMART_FLAGGED,
-                                displayName = "Flagged.m3u"
-                            ),
-                            PlaylistInfo(
-                                uriString = MainViewModel.SMART_RECENTLY_ADDED,
-                                displayName = "Recently Added.m3u"
-                            ),
-                            PlaylistInfo(
-                                uriString = MainViewModel.SMART_MOST_PLAYED,
-                                displayName = "Most Played.m3u"
-                            ),
-                            PlaylistInfo(
-                                uriString = MainViewModel.SMART_NOT_HEARD_RECENTLY,
-                                displayName = "Haven't Heard In A While.m3u"
-                            )
-                        )
-                    }
-                    PlaylistsSection(
-                        playlists = uiState.scan.discoveredPlaylists + smartPlaylists,
-                        selectedPlaylist = uiState.playlist.selectedPlaylist,
-                        playlistSongs = uiState.playlist.playlistSongs,
-                        isLoading = uiState.playlist.isPlaylistLoading,
-                        isPlaying = false,
-                        isPlayingPlaylist = uiState.playback.isPlayingPlaylist,
-                        queueTitle = uiState.playback.queueTitle,
-                        hasNext = uiState.playback.hasNext,
-                        hasPrev = uiState.playback.hasPrev,
-                        onPlaylistSelected = onPlaylistSelected,
-                        onClearPlaylistSelection = onClearPlaylistSelection,
-                        onRequestDeletePlaylist = {
-                            setPendingDeletePlaylist(it)
-                            setShowDeletePlaylistDialog(true)
-                        },
-                        onRequestRenamePlaylist = {
-                            setPendingRenamePlaylist(it)
-                            setRenamePlaylistNameText(it.displayName.removeSuffix(".m3u"))
-                            setShowRenamePlaylistDialog(true)
-                        },
-                        onSavePlaylistEdits = onSavePlaylistEdits,
-                        onPlayPlaylist = onPlayPlaylist,
-                        onShufflePlaylistSongs = onShufflePlaylistSongs,
-                        onStop = onStop,
-                        onNext = onNext,
-                        onPrev = onPrev,
-                        onFileClick = onFileClick,
-                        onAddToPlaylist = {
-                            setPendingAddFiles(listOf(it))
-                            setShowAddToPlaylistDialog(true)
-                        },
-                        favoriteUris = uiState.favoriteUris,
-                        onToggleFavorite = onToggleFavorite,
-                        currentMediaId = uiState.playback.currentMediaId
-                    )
-                }
-                LibraryTab.Albums -> {
-                    CategoryTabContent(
-                        title = "Albums",
-                        categories = uiState.library.albums,
-                        categoryCounts = albumCounts,
-                        isLoading = uiState.library.isMetadataLoading,
-                        selectedLabel = uiState.library.selectedAlbum,
-                        onCategorySelected = onAlbumSelected,
-                        onClearCategorySelection = onClearCategorySelection,
-                        headerContent = {
-                            LazyRow(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                item {
-                                    TextButton(
-                                        onClick = { onAlbumSortModeChanged(AlbumSortMode.Name) },
-                                        enabled = uiState.library.albumSortMode != AlbumSortMode.Name
-                                    ) {
-                                        Text("Sort: Name")
-                                    }
-                                }
-                                item {
-                                    TextButton(
-                                        onClick = { onAlbumSortModeChanged(AlbumSortMode.DateAddedDesc) },
-                                        enabled = uiState.library.albumSortMode != AlbumSortMode.DateAddedDesc
-                                    ) {
-                                        Text("Sort: Date added")
-                                    }
-                                }
-                            }
-                        },
-                        songs = uiState.library.filteredSongs,
-                        isPlaying = false,
-                        isPlayingPlaylist = uiState.playback.isPlayingPlaylist,
-                        hasNext = uiState.playback.hasNext,
-                        hasPrev = uiState.playback.hasPrev,
-                        onPlay = { onPlaySongs(uiState.library.filteredSongs) },
-                        onShuffle = { onShuffleSongs(uiState.library.filteredSongs) },
-                        onStop = onStop,
-                        onNext = onNext,
-                        onPrev = onPrev,
-                        onFileClick = onFileClick,
-                        onAddToPlaylist = {
-                            setPendingAddFiles(listOf(it))
-                            setShowAddToPlaylistDialog(true)
-                        },
-                        favoriteUris = uiState.favoriteUris,
-                        onToggleFavorite = onToggleFavorite,
-                        currentMediaId = uiState.playback.currentMediaId
-                    )
-                }
-                LibraryTab.Genres -> {
-                    CategoryTabContent(
-                        title = "Genres",
-                        categories = uiState.library.genres,
-                        categoryCounts = genreCounts,
-                        isLoading = uiState.library.isMetadataLoading,
-                        selectedLabel = uiState.library.selectedGenre,
-                        onCategorySelected = onGenreSelected,
-                        onClearCategorySelection = onClearCategorySelection,
-                        enableAlphaIndex = false,
-                        songs = uiState.library.filteredSongs,
-                        isPlaying = false,
-                        isPlayingPlaylist = uiState.playback.isPlayingPlaylist,
-                        hasNext = uiState.playback.hasNext,
-                        hasPrev = uiState.playback.hasPrev,
-                        onPlay = { onPlaySongs(uiState.library.filteredSongs) },
-                        onShuffle = { onShuffleSongs(uiState.library.filteredSongs) },
-                        onStop = onStop,
-                        onNext = onNext,
-                        onPrev = onPrev,
-                        onFileClick = onFileClick,
-                        onAddToPlaylist = {
-                            setPendingAddFiles(listOf(it))
-                            setShowAddToPlaylistDialog(true)
-                        },
-                        favoriteUris = uiState.favoriteUris,
-                        onToggleFavorite = onToggleFavorite,
-                        currentMediaId = uiState.playback.currentMediaId
-                    )
-                }
-                LibraryTab.Artists -> {
-                    CategoryTabContent(
-                        title = "Artists",
-                        categories = uiState.library.artists,
-                        categoryCounts = artistCounts,
-                        isLoading = uiState.library.isMetadataLoading,
-                        selectedLabel = uiState.library.selectedArtist,
-                        onCategorySelected = onArtistSelected,
-                        onClearCategorySelection = onClearCategorySelection,
-                        enableAlphaIndex = true,
-                        songs = uiState.library.filteredSongs,
-                        isPlaying = false,
-                        isPlayingPlaylist = uiState.playback.isPlayingPlaylist,
-                        hasNext = uiState.playback.hasNext,
-                        hasPrev = uiState.playback.hasPrev,
-                        onPlay = { onPlaySongs(uiState.library.filteredSongs) },
-                        onShuffle = { onShuffleSongs(uiState.library.filteredSongs) },
-                        onStop = onStop,
-                        onNext = onNext,
-                        onPrev = onPrev,
-                        onFileClick = onFileClick,
-                        onAddToPlaylist = {
-                            setPendingAddFiles(listOf(it))
-                            setShowAddToPlaylistDialog(true)
-                        },
-                        favoriteUris = uiState.favoriteUris,
-                        onToggleFavorite = onToggleFavorite,
-                        currentMediaId = uiState.playback.currentMediaId
-                    )
-                }
-            }
-        }
+        MainScreenContent(
+            padding = padding,
+            uiState = uiState,
+            onFileClick = onFileClick,
+            onStop = onStop,
+            onNext = onNext,
+            onPrev = onPrev,
+            onTabSelected = onTabSelected,
+            onAlbumSelected = onAlbumSelected,
+            onAlbumSortModeChanged = onAlbumSortModeChanged,
+            onGenreSelected = onGenreSelected,
+            onArtistSelected = onArtistSelected,
+            onSearchQueryChanged = onSearchQueryChanged,
+            onClearCategorySelection = onClearCategorySelection,
+            onClearSearch = onClearSearch,
+            onPlaylistSelected = onPlaylistSelected,
+            onClearPlaylistSelection = onClearPlaylistSelection,
+            onSavePlaylistEdits = onSavePlaylistEdits,
+            onPlaySongs = onPlaySongs,
+            onShuffleSongs = onShuffleSongs,
+            onPlaySearchResults = onPlaySearchResults,
+            onShuffleSearchResults = onShuffleSearchResults,
+            onPlayPlaylist = onPlayPlaylist,
+            onShufflePlaylistSongs = onShufflePlaylistSongs,
+            onToggleFavorite = onToggleFavorite,
+            setShowAddToPlaylistDialog = setShowAddToPlaylistDialog,
+            setPendingAddFiles = setPendingAddFiles,
+            isSearchSelectionMode = isSearchSelectionMode,
+            setIsSearchSelectionMode = setIsSearchSelectionMode,
+            selectedSearchUris = selectedSearchUris,
+            setSelectedSearchUris = setSelectedSearchUris,
+            setShowDeletePlaylistDialog = setShowDeletePlaylistDialog,
+            setPendingDeletePlaylist = setPendingDeletePlaylist,
+            setShowRenamePlaylistDialog = setShowRenamePlaylistDialog,
+            setPendingRenamePlaylist = setPendingRenamePlaylist,
+            setRenamePlaylistNameText = setRenamePlaylistNameText,
+            songsFavoritesOnly = songsFavoritesOnly,
+            setSongsFavoritesOnly = setSongsFavoritesOnly,
+            searchFavoritesOnly = searchFavoritesOnly,
+            setSearchFavoritesOnly = setSearchFavoritesOnly,
+            isSearchExpanded = isSearchExpanded,
+            setIsSearchExpanded = setIsSearchExpanded,
+        )
     }
 
     PlaylistDialogs(
@@ -2882,4 +2558,417 @@ private fun MainScreenTopBarActions(
     } else if (searchQuery.isNotEmpty()) {
         TextButton(onClick = onClearSearch) { Text("Clear") }
     }
+}
+
+@Composable
+private fun MainScreenContent(
+    padding: androidx.compose.foundation.layout.PaddingValues,
+    uiState: MainUiState,
+    onFileClick: (MediaFileInfo) -> Unit,
+    onStop: () -> Unit,
+    onNext: () -> Unit,
+    onPrev: () -> Unit,
+    onTabSelected: (LibraryTab) -> Unit,
+    onAlbumSelected: (String) -> Unit,
+    onAlbumSortModeChanged: (AlbumSortMode) -> Unit,
+    onGenreSelected: (String) -> Unit,
+    onArtistSelected: (String) -> Unit,
+    onSearchQueryChanged: (String) -> Unit,
+    onClearCategorySelection: () -> Unit,
+    onClearSearch: () -> Unit,
+    onPlaylistSelected: (PlaylistInfo) -> Unit,
+    onClearPlaylistSelection: () -> Unit,
+    onSavePlaylistEdits: (PlaylistInfo, List<MediaFileInfo>) -> Unit,
+    onPlaySongs: (List<MediaFileInfo>) -> Unit,
+    onShuffleSongs: (List<MediaFileInfo>) -> Unit,
+    onPlaySearchResults: (List<MediaFileInfo>) -> Unit,
+    onShuffleSearchResults: (List<MediaFileInfo>) -> Unit,
+    onPlayPlaylist: (PlaylistInfo) -> Unit,
+    onShufflePlaylistSongs: (PlaylistInfo, List<MediaFileInfo>) -> Unit,
+    onToggleFavorite: (MediaFileInfo) -> Unit,
+    setShowAddToPlaylistDialog: (Boolean) -> Unit,
+    setPendingAddFiles: (List<MediaFileInfo>) -> Unit,
+    isSearchSelectionMode: Boolean,
+    setIsSearchSelectionMode: (Boolean) -> Unit,
+    selectedSearchUris: Set<String>,
+    setSelectedSearchUris: (Set<String>) -> Unit,
+    setShowDeletePlaylistDialog: (Boolean) -> Unit,
+    setPendingDeletePlaylist: (PlaylistInfo?) -> Unit,
+    setShowRenamePlaylistDialog: (Boolean) -> Unit,
+    setPendingRenamePlaylist: (PlaylistInfo?) -> Unit,
+    setRenamePlaylistNameText: (String) -> Unit,
+    songsFavoritesOnly: Boolean,
+    setSongsFavoritesOnly: (Boolean) -> Unit,
+    searchFavoritesOnly: Boolean,
+    setSearchFavoritesOnly: (Boolean) -> Unit,
+    isSearchExpanded: Boolean,
+    setIsSearchExpanded: (Boolean) -> Unit,
+) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(16.dp)
+        ) {
+            if (uiState.scan.isScanning) {
+                CircularProgressIndicator(
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                )
+                uiState.scan.scanProgress?.let { progress ->
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = progress,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.align(Alignment.CenterHorizontally)
+                    )
+                }
+            }
+
+            if (isSearchExpanded && uiState.search.searchQuery.isBlank() && uiState.search.previousSearchQueries.isNotEmpty()) {
+                RecentSearchesSection(
+                    queries = uiState.search.previousSearchQueries,
+                    onSearchSelected = onSearchQueryChanged
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
+            if (uiState.search.searchQuery.isNotBlank()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                val visibleSearchResults = if (searchFavoritesOnly) {
+                    uiState.search.searchResults.filter { it.uriString in uiState.favoriteUris }
+                } else {
+                    uiState.search.searchResults
+                }
+                if (visibleSearchResults.isEmpty()) {
+                    Text("No results for \"${uiState.search.searchQuery}\"")
+                } else if (uiState.library.selectedTab == LibraryTab.Albums) {
+                    val allByAlbum = uiState.scan.scannedFiles.groupBy { albumLabel(it) }
+                    val albumHits = visibleSearchResults
+                        .groupBy { albumLabel(it) }
+                        .map { (album, matches) ->
+                            AlbumSearchHit(
+                                album = album,
+                                matchedCount = matches.size,
+                                songs = allByAlbum[album].orEmpty()
+                            )
+                        }
+                        .sortedBy { it.album.lowercase() }
+                    AlbumSearchResultsSection(
+                        query = uiState.search.searchQuery,
+                        albumHits = albumHits,
+                        favoriteUris = uiState.favoriteUris,
+                        onOpenAlbum = { album ->
+                            setIsSearchExpanded(false)
+                            onClearSearch()
+                            onTabSelected(LibraryTab.Albums)
+                            onAlbumSelected(album)
+                        },
+                        onAddAlbumToPlaylist = { songs ->
+                            setPendingAddFiles(songs)
+                            setShowAddToPlaylistDialog(true)
+                        },
+                        onToggleFavorite = onToggleFavorite
+                    )
+                } else {
+                    SearchResultsActionRow(
+                        searchFavoritesOnly = searchFavoritesOnly,
+                        onToggleSearchFavoritesOnly = { setSearchFavoritesOnly(!searchFavoritesOnly) },
+                        visibleSearchResults = visibleSearchResults,
+                        onAddAll = {
+                            setPendingAddFiles(it)
+                            setShowAddToPlaylistDialog(true)
+                        },
+                        isSearchSelectionMode = isSearchSelectionMode,
+                        onToggleSearchSelectionMode = {
+                            setIsSearchSelectionMode(!isSearchSelectionMode)
+                            if (!isSearchSelectionMode) setSelectedSearchUris(emptySet())
+                        },
+                        selectedSearchUris = selectedSearchUris,
+                        onSelectAll = { setSelectedSearchUris(it) },
+                        onClearSelection = { setSelectedSearchUris(emptySet()) },
+                        onAddSelected = {
+                            setPendingAddFiles(it)
+                            setShowAddToPlaylistDialog(true)
+                        }
+                    )
+                    SongsListSection(
+                        title = "Search Results (${visibleSearchResults.size})",
+                        songs = visibleSearchResults,
+                        favoriteUris = uiState.favoriteUris,
+                        isPlaying = false,
+                        isPlayingPlaylist = uiState.playback.isPlayingPlaylist,
+                        hasNext = uiState.playback.hasNext,
+                        hasPrev = uiState.playback.hasPrev,
+                        onPlay = { onPlaySearchResults(visibleSearchResults) },
+                        onShuffle = { onShuffleSearchResults(visibleSearchResults) },
+                        onStop = onStop,
+                        onNext = onNext,
+                        onPrev = onPrev,
+                        onFileClick = onFileClick,
+                        onAddToPlaylist = {
+                            setPendingAddFiles(listOf(it))
+                            setShowAddToPlaylistDialog(true)
+                        },
+                        onToggleFavorite = onToggleFavorite,
+                        enableSelection = isSearchSelectionMode,
+                        selectedUris = selectedSearchUris,
+                        onSelectionToggle = { file ->
+                            setSelectedSearchUris(if (file.uriString in selectedSearchUris) {
+                                selectedSearchUris - file.uriString
+                            } else {
+                                selectedSearchUris + file.uriString
+                            })
+                        },
+                        currentMediaId = uiState.playback.currentMediaId
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
+            val albumCounts = remember(uiState.scan.scannedFiles) { buildAlbumCounts(uiState.scan.scannedFiles) }
+            val artistCounts = remember(uiState.scan.scannedFiles) { buildArtistCounts(uiState.scan.scannedFiles) }
+            val genreCounts = remember(uiState.scan.scannedFiles) { buildGenreCounts(uiState.scan.scannedFiles) }
+            val tabs = LibraryTab.values().toList()
+            ScrollableTabRow(
+                selectedTabIndex = tabs.indexOf(uiState.library.selectedTab),
+                containerColor = MaterialTheme.colorScheme.surface,
+                edgePadding = 20.dp,
+                indicator = { tabPositions ->
+                    val index = tabs.indexOf(uiState.library.selectedTab)
+                    if (index in tabPositions.indices) {
+                        TabRowDefaults.SecondaryIndicator(
+                            modifier = Modifier.tabIndicatorOffset(tabPositions[index]),
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            ) {
+                tabs.forEach { tab ->
+                    Tab(
+                        selected = uiState.library.selectedTab == tab,
+                        onClick = { onTabSelected(tab) },
+                        text = { Text(tab.label, maxLines = 1) }
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            when (uiState.library.selectedTab) {
+                LibraryTab.Songs -> {
+                    val (selectedDecade, setSelectedDecade) = rememberSaveable { mutableStateOf<String?>(null) }
+                    val availableDecades = remember(uiState.scan.scannedFiles) {
+                        uiState.scan.scannedFiles
+                            .map { decadeLabelForYear(it.year) }
+                            .filter { it != "Unknown Decade" }
+                            .distinct()
+                            .sorted()
+                    }
+                    SongsTabContent(
+                        songsFavoritesOnly = songsFavoritesOnly,
+                        onToggleSongsFavoritesOnly = { setSongsFavoritesOnly(!songsFavoritesOnly) },
+                        selectedDecade = selectedDecade,
+                        availableDecades = availableDecades,
+                        onDecadeSelected = { setSelectedDecade(it) },
+                        scannedFiles = uiState.scan.scannedFiles,
+                        favoriteUris = uiState.favoriteUris,
+                        isPlayingPlaylist = uiState.playback.isPlayingPlaylist,
+                        hasNext = uiState.playback.hasNext,
+                        hasPrev = uiState.playback.hasPrev,
+                        onPlaySongs = onPlaySongs,
+                        onShuffleSongs = onShuffleSongs,
+                        onStop = onStop,
+                        onNext = onNext,
+                        onPrev = onPrev,
+                        onFileClick = onFileClick,
+                        onAddToPlaylist = {
+                            setPendingAddFiles(listOf(it))
+                            setShowAddToPlaylistDialog(true)
+                        },
+                        onToggleFavorite = onToggleFavorite,
+                        currentMediaId = uiState.playback.currentMediaId
+                    )
+                }
+                LibraryTab.Playlists -> {
+                    val smartPlaylists = remember(
+                        uiState.favoriteUris,
+                        uiState.flaggedUris,
+                        uiState.playCounts,
+                        uiState.lastPlayedAt,
+                        uiState.scan.scannedFiles
+                    ) {
+                        listOf(
+                            PlaylistInfo(
+                                uriString = MainViewModel.SMART_FAVORITES,
+                                displayName = "Favorites.m3u"
+                            ),
+                            PlaylistInfo(
+                                uriString = MainViewModel.SMART_FLAGGED,
+                                displayName = "Flagged.m3u"
+                            ),
+                            PlaylistInfo(
+                                uriString = MainViewModel.SMART_RECENTLY_ADDED,
+                                displayName = "Recently Added.m3u"
+                            ),
+                            PlaylistInfo(
+                                uriString = MainViewModel.SMART_MOST_PLAYED,
+                                displayName = "Most Played.m3u"
+                            ),
+                            PlaylistInfo(
+                                uriString = MainViewModel.SMART_NOT_HEARD_RECENTLY,
+                                displayName = "Haven't Heard In A While.m3u"
+                            )
+                        )
+                    }
+                    PlaylistsSection(
+                        playlists = uiState.scan.discoveredPlaylists + smartPlaylists,
+                        selectedPlaylist = uiState.playlist.selectedPlaylist,
+                        playlistSongs = uiState.playlist.playlistSongs,
+                        isLoading = uiState.playlist.isPlaylistLoading,
+                        isPlaying = false,
+                        isPlayingPlaylist = uiState.playback.isPlayingPlaylist,
+                        queueTitle = uiState.playback.queueTitle,
+                        hasNext = uiState.playback.hasNext,
+                        hasPrev = uiState.playback.hasPrev,
+                        onPlaylistSelected = onPlaylistSelected,
+                        onClearPlaylistSelection = onClearPlaylistSelection,
+                        onRequestDeletePlaylist = {
+                            setPendingDeletePlaylist(it)
+                            setShowDeletePlaylistDialog(true)
+                        },
+                        onRequestRenamePlaylist = {
+                            setPendingRenamePlaylist(it)
+                            setRenamePlaylistNameText(it.displayName.removeSuffix(".m3u"))
+                            setShowRenamePlaylistDialog(true)
+                        },
+                        onSavePlaylistEdits = onSavePlaylistEdits,
+                        onPlayPlaylist = onPlayPlaylist,
+                        onShufflePlaylistSongs = onShufflePlaylistSongs,
+                        onStop = onStop,
+                        onNext = onNext,
+                        onPrev = onPrev,
+                        onFileClick = onFileClick,
+                        onAddToPlaylist = {
+                            setPendingAddFiles(listOf(it))
+                            setShowAddToPlaylistDialog(true)
+                        },
+                        favoriteUris = uiState.favoriteUris,
+                        onToggleFavorite = onToggleFavorite,
+                        currentMediaId = uiState.playback.currentMediaId
+                    )
+                }
+                LibraryTab.Albums -> {
+                    CategoryTabContent(
+                        title = "Albums",
+                        categories = uiState.library.albums,
+                        categoryCounts = albumCounts,
+                        isLoading = uiState.library.isMetadataLoading,
+                        selectedLabel = uiState.library.selectedAlbum,
+                        onCategorySelected = onAlbumSelected,
+                        onClearCategorySelection = onClearCategorySelection,
+                        headerContent = {
+                            LazyRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                item {
+                                    TextButton(
+                                        onClick = { onAlbumSortModeChanged(AlbumSortMode.Name) },
+                                        enabled = uiState.library.albumSortMode != AlbumSortMode.Name
+                                    ) {
+                                        Text("Sort: Name")
+                                    }
+                                }
+                                item {
+                                    TextButton(
+                                        onClick = { onAlbumSortModeChanged(AlbumSortMode.DateAddedDesc) },
+                                        enabled = uiState.library.albumSortMode != AlbumSortMode.DateAddedDesc
+                                    ) {
+                                        Text("Sort: Date added")
+                                    }
+                                }
+                            }
+                        },
+                        songs = uiState.library.filteredSongs,
+                        isPlaying = false,
+                        isPlayingPlaylist = uiState.playback.isPlayingPlaylist,
+                        hasNext = uiState.playback.hasNext,
+                        hasPrev = uiState.playback.hasPrev,
+                        onPlay = { onPlaySongs(uiState.library.filteredSongs) },
+                        onShuffle = { onShuffleSongs(uiState.library.filteredSongs) },
+                        onStop = onStop,
+                        onNext = onNext,
+                        onPrev = onPrev,
+                        onFileClick = onFileClick,
+                        onAddToPlaylist = {
+                            setPendingAddFiles(listOf(it))
+                            setShowAddToPlaylistDialog(true)
+                        },
+                        favoriteUris = uiState.favoriteUris,
+                        onToggleFavorite = onToggleFavorite,
+                        currentMediaId = uiState.playback.currentMediaId
+                    )
+                }
+                LibraryTab.Genres -> {
+                    CategoryTabContent(
+                        title = "Genres",
+                        categories = uiState.library.genres,
+                        categoryCounts = genreCounts,
+                        isLoading = uiState.library.isMetadataLoading,
+                        selectedLabel = uiState.library.selectedGenre,
+                        onCategorySelected = onGenreSelected,
+                        onClearCategorySelection = onClearCategorySelection,
+                        enableAlphaIndex = false,
+                        songs = uiState.library.filteredSongs,
+                        isPlaying = false,
+                        isPlayingPlaylist = uiState.playback.isPlayingPlaylist,
+                        hasNext = uiState.playback.hasNext,
+                        hasPrev = uiState.playback.hasPrev,
+                        onPlay = { onPlaySongs(uiState.library.filteredSongs) },
+                        onShuffle = { onShuffleSongs(uiState.library.filteredSongs) },
+                        onStop = onStop,
+                        onNext = onNext,
+                        onPrev = onPrev,
+                        onFileClick = onFileClick,
+                        onAddToPlaylist = {
+                            setPendingAddFiles(listOf(it))
+                            setShowAddToPlaylistDialog(true)
+                        },
+                        favoriteUris = uiState.favoriteUris,
+                        onToggleFavorite = onToggleFavorite,
+                        currentMediaId = uiState.playback.currentMediaId
+                    )
+                }
+                LibraryTab.Artists -> {
+                    CategoryTabContent(
+                        title = "Artists",
+                        categories = uiState.library.artists,
+                        categoryCounts = artistCounts,
+                        isLoading = uiState.library.isMetadataLoading,
+                        selectedLabel = uiState.library.selectedArtist,
+                        onCategorySelected = onArtistSelected,
+                        onClearCategorySelection = onClearCategorySelection,
+                        enableAlphaIndex = true,
+                        songs = uiState.library.filteredSongs,
+                        isPlaying = false,
+                        isPlayingPlaylist = uiState.playback.isPlayingPlaylist,
+                        hasNext = uiState.playback.hasNext,
+                        hasPrev = uiState.playback.hasPrev,
+                        onPlay = { onPlaySongs(uiState.library.filteredSongs) },
+                        onShuffle = { onShuffleSongs(uiState.library.filteredSongs) },
+                        onStop = onStop,
+                        onNext = onNext,
+                        onPrev = onPrev,
+                        onFileClick = onFileClick,
+                        onAddToPlaylist = {
+                            setPendingAddFiles(listOf(it))
+                            setShowAddToPlaylistDialog(true)
+                        },
+                        favoriteUris = uiState.favoriteUris,
+                        onToggleFavorite = onToggleFavorite,
+                        currentMediaId = uiState.playback.currentMediaId
+                    )
+                }
+            }
+        }
 }
