@@ -677,24 +677,14 @@ fun MainScreen(
         }
     }
 
-    MainScreenDialogs(
-        uiState = uiState,
-        nowPlayingArt = nowPlayingArt,
+    PlaylistDialogs(
+        maxScannedFilesCount = uiState.scan.scannedFiles.size,
+        discoveredPlaylists = uiState.scan.discoveredPlaylists,
         playlistCountText = playlistCountText,
         setPlaylistCountText = setPlaylistCountText,
         showPlaylistDialog = showPlaylistDialog,
         setShowPlaylistDialog = setShowPlaylistDialog,
         onCreatePlaylist = onCreatePlaylist,
-        scanCountText = scanCountText,
-        setScanCountText = setScanCountText,
-        scanWholeDriveMode = scanWholeDriveMode,
-        setScanWholeDriveMode = setScanWholeDriveMode,
-        scanDeepMode = scanDeepMode,
-        setScanDeepMode = setScanDeepMode,
-        showScanDialog = showScanDialog,
-        setShowScanDialog = setShowScanDialog,
-        onScanWholeDriveWithLimit = onScanWholeDriveWithLimit,
-        onSelectFolderWithLimit = onSelectFolderWithLimit,
         pendingAddFiles = pendingAddFiles,
         setPendingAddFiles = setPendingAddFiles,
         localCreatedPlaylists = localCreatedPlaylists,
@@ -718,7 +708,26 @@ fun MainScreen(
         setPendingRenamePlaylist = setPendingRenamePlaylist,
         renamePlaylistNameText = renamePlaylistNameText,
         setRenamePlaylistNameText = setRenamePlaylistNameText,
-        onRenamePlaylist = onRenamePlaylist,
+        onRenamePlaylist = onRenamePlaylist
+    )
+
+    ScanDialogs(
+        scanCountText = scanCountText,
+        setScanCountText = setScanCountText,
+        scanWholeDriveMode = scanWholeDriveMode,
+        setScanWholeDriveMode = setScanWholeDriveMode,
+        scanDeepMode = scanDeepMode,
+        setScanDeepMode = setScanDeepMode,
+        showScanDialog = showScanDialog,
+        setShowScanDialog = setShowScanDialog,
+        onScanWholeDriveWithLimit = onScanWholeDriveWithLimit,
+        onSelectFolderWithLimit = onSelectFolderWithLimit
+    )
+
+    PlaybackDialogs(
+        playbackState = uiState.playback,
+        flaggedUris = uiState.flaggedUris,
+        nowPlayingArt = nowPlayingArt,
         showExpandedNowPlayingDialog = showExpandedNowPlayingDialog,
         setShowExpandedNowPlayingDialog = setShowExpandedNowPlayingDialog,
         onSeekTo = onSeekTo,
@@ -728,7 +737,10 @@ fun MainScreen(
         onToggleFlag = onToggleFlag,
         showQueueDialog = showQueueDialog,
         setShowQueueDialog = setShowQueueDialog,
-        onQueueItemSelected = onQueueItemSelected,
+        onQueueItemSelected = onQueueItemSelected
+    )
+
+    SettingsDialogs(
         showPlaylistSaveFolderPrompt = showPlaylistSaveFolderPrompt,
         onDismissPlaylistSaveFolderPrompt = onDismissPlaylistSaveFolderPrompt,
         onSetPlaylistSaveFolderNow = onSetPlaylistSaveFolderNow
