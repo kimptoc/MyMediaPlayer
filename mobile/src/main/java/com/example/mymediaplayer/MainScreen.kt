@@ -677,24 +677,14 @@ fun MainScreen(
         }
     }
 
-    MainScreenDialogs(
-        uiState = uiState,
-        nowPlayingArt = nowPlayingArt,
+    PlaylistDialogs(
+        maxScannedFilesCount = uiState.scan.scannedFiles.size,
+        discoveredPlaylists = uiState.scan.discoveredPlaylists,
         playlistCountText = playlistCountText,
         setPlaylistCountText = setPlaylistCountText,
         showPlaylistDialog = showPlaylistDialog,
         setShowPlaylistDialog = setShowPlaylistDialog,
         onCreatePlaylist = onCreatePlaylist,
-        scanCountText = scanCountText,
-        setScanCountText = setScanCountText,
-        scanWholeDriveMode = scanWholeDriveMode,
-        setScanWholeDriveMode = setScanWholeDriveMode,
-        scanDeepMode = scanDeepMode,
-        setScanDeepMode = setScanDeepMode,
-        showScanDialog = showScanDialog,
-        setShowScanDialog = setShowScanDialog,
-        onScanWholeDriveWithLimit = onScanWholeDriveWithLimit,
-        onSelectFolderWithLimit = onSelectFolderWithLimit,
         pendingAddFiles = pendingAddFiles,
         setPendingAddFiles = setPendingAddFiles,
         localCreatedPlaylists = localCreatedPlaylists,
@@ -718,7 +708,26 @@ fun MainScreen(
         setPendingRenamePlaylist = setPendingRenamePlaylist,
         renamePlaylistNameText = renamePlaylistNameText,
         setRenamePlaylistNameText = setRenamePlaylistNameText,
-        onRenamePlaylist = onRenamePlaylist,
+        onRenamePlaylist = onRenamePlaylist
+    )
+
+    ScanDialogs(
+        scanCountText = scanCountText,
+        setScanCountText = setScanCountText,
+        scanWholeDriveMode = scanWholeDriveMode,
+        setScanWholeDriveMode = setScanWholeDriveMode,
+        scanDeepMode = scanDeepMode,
+        setScanDeepMode = setScanDeepMode,
+        showScanDialog = showScanDialog,
+        setShowScanDialog = setShowScanDialog,
+        onScanWholeDriveWithLimit = onScanWholeDriveWithLimit,
+        onSelectFolderWithLimit = onSelectFolderWithLimit
+    )
+
+    PlaybackDialogs(
+        playbackState = uiState.playback,
+        flaggedUris = uiState.flaggedUris,
+        nowPlayingArt = nowPlayingArt,
         showExpandedNowPlayingDialog = showExpandedNowPlayingDialog,
         setShowExpandedNowPlayingDialog = setShowExpandedNowPlayingDialog,
         onSeekTo = onSeekTo,
@@ -728,7 +737,10 @@ fun MainScreen(
         onToggleFlag = onToggleFlag,
         showQueueDialog = showQueueDialog,
         setShowQueueDialog = setShowQueueDialog,
-        onQueueItemSelected = onQueueItemSelected,
+        onQueueItemSelected = onQueueItemSelected
+    )
+
+    SettingsDialogs(
         showPlaylistSaveFolderPrompt = showPlaylistSaveFolderPrompt,
         onDismissPlaylistSaveFolderPrompt = onDismissPlaylistSaveFolderPrompt,
         onSetPlaylistSaveFolderNow = onSetPlaylistSaveFolderNow
@@ -1771,6 +1783,81 @@ private fun PlaylistList(
     }
 }
 
+
+@Composable
+private fun PlaylistSongsContent(
+    isEditing: Boolean,
+    editableSongs: List<MediaFileInfo>,
+    playlistSongs: List<MediaFileInfo>,
+    editSearchQuery: String,
+    setEditSearchQuery: (String) -> Unit,
+    dedupeOnSave: Boolean,
+    setDedupeOnSave: (Boolean) -> Unit,
+    currentMediaId: String?,
+    favoriteUris: Set<String>,
+    onFileClick: (MediaFileInfo) -> Unit,
+    onAddToPlaylist: (MediaFileInfo) -> Unit,
+    onToggleFavorite: (MediaFileInfo) -> Unit,
+    setEditableSongs: (List<MediaFileInfo>) -> Unit,
+    draggingIndex: Int?,
+    setDraggingIndex: (Int?) -> Unit,
+    draggingOffsetY: Float,
+    setDraggingOffsetY: (Float) -> Unit,
+    dragSwapThresholdPx: Float
+) {
+    val displayedSongs = if (isEditing) editableSongs else playlistSongs
+    if (isEditing) {
+        PlaylistEditFilterRow(
+            editSearchQuery = editSearchQuery,
+            setEditSearchQuery = setEditSearchQuery,
+            dedupeOnSave = dedupeOnSave,
+            setDedupeOnSave = setDedupeOnSave
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+    }
+
+    if (displayedSongs.isEmpty()) {
+        Text("No songs in playlist")
+    } else {
+        if (!isEditing) {
+            PlaylistViewList(
+                displayedSongs = displayedSongs,
+                currentMediaId = currentMediaId,
+                favoriteUris = favoriteUris,
+                onFileClick = onFileClick,
+                onAddToPlaylist = onAddToPlaylist,
+                onToggleFavorite = onToggleFavorite
+            )
+        } else {
+            val filteredRows = if (editSearchQuery.isNotBlank()) {
+                val needle = editSearchQuery.trim().lowercase()
+                editableSongs.withIndex().filter { indexed ->
+                    val file = indexed.value
+                    val haystack = listOfNotNull(
+                        file.cleanTitle,
+                        file.artist,
+                        file.album
+                    ).joinToString(" ").lowercase()
+                    haystack.contains(needle)
+                }
+            } else {
+                editableSongs.withIndex().toList()
+            }
+            PlaylistEditList(
+                filteredRows = filteredRows,
+                editSearchQuery = editSearchQuery,
+                editableSongs = editableSongs,
+                setEditableSongs = setEditableSongs,
+                draggingIndex = draggingIndex,
+                setDraggingIndex = setDraggingIndex,
+                draggingOffsetY = draggingOffsetY,
+                setDraggingOffsetY = setDraggingOffsetY,
+                dragSwapThresholdPx = dragSwapThresholdPx
+            )
+        }
+    }
+}
+
 @Composable
 private fun PlaylistDetails(
     selectedPlaylist: PlaylistInfo,
@@ -1863,57 +1950,26 @@ private fun PlaylistDetails(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            val displayedSongs = if (isEditing) editableSongs else playlistSongs
-            if (isEditing) {
-                PlaylistEditFilterRow(
-                    editSearchQuery = editSearchQuery,
-                    setEditSearchQuery = setEditSearchQuery,
-                    dedupeOnSave = dedupeOnSave,
-                    setDedupeOnSave = setDedupeOnSave
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-            }
-
-            if (displayedSongs.isEmpty()) {
-                Text("No songs in playlist")
-            } else {
-                if (!isEditing) {
-                    PlaylistViewList(
-                        displayedSongs = displayedSongs,
-                        currentMediaId = currentMediaId,
-                        favoriteUris = favoriteUris,
-                        onFileClick = onFileClick,
-                        onAddToPlaylist = onAddToPlaylist,
-                        onToggleFavorite = onToggleFavorite
-                    )
-                } else {
-                    val filteredRows = if (editSearchQuery.isNotBlank()) {
-                        val needle = editSearchQuery.trim().lowercase()
-                        editableSongs.withIndex().filter { indexed ->
-                            val file = indexed.value
-                            val haystack = listOfNotNull(
-                                file.cleanTitle,
-                                file.artist,
-                                file.album
-                            ).joinToString(" ").lowercase()
-                            haystack.contains(needle)
-                        }
-                    } else {
-                        editableSongs.withIndex().toList()
-                    }
-                    PlaylistEditList(
-                        filteredRows = filteredRows,
-                        editSearchQuery = editSearchQuery,
-                        editableSongs = editableSongs,
-                        setEditableSongs = setEditableSongs,
-                        draggingIndex = draggingIndex,
-                        setDraggingIndex = setDraggingIndex,
-                        draggingOffsetY = draggingOffsetY,
-                        setDraggingOffsetY = { draggingOffsetY = it },
-                        dragSwapThresholdPx = dragSwapThresholdPx
-                    )
-                }
-            }
+            PlaylistSongsContent(
+                isEditing = isEditing,
+                editableSongs = editableSongs,
+                playlistSongs = playlistSongs,
+                editSearchQuery = editSearchQuery,
+                setEditSearchQuery = setEditSearchQuery,
+                dedupeOnSave = dedupeOnSave,
+                setDedupeOnSave = setDedupeOnSave,
+                currentMediaId = currentMediaId,
+                favoriteUris = favoriteUris,
+                onFileClick = onFileClick,
+                onAddToPlaylist = onAddToPlaylist,
+                onToggleFavorite = onToggleFavorite,
+                setEditableSongs = setEditableSongs,
+                draggingIndex = draggingIndex,
+                setDraggingIndex = setDraggingIndex,
+                draggingOffsetY = draggingOffsetY,
+                setDraggingOffsetY = { draggingOffsetY = it },
+                dragSwapThresholdPx = dragSwapThresholdPx
+            )
         }
     }
 
