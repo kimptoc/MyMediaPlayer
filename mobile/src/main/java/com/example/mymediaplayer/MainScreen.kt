@@ -678,7 +678,8 @@ fun MainScreen(
     }
 
     PlaylistDialogs(
-        uiState = uiState,
+        maxScannedFilesCount = uiState.scan.scannedFiles.size,
+        discoveredPlaylists = uiState.scan.discoveredPlaylists,
         playlistCountText = playlistCountText,
         setPlaylistCountText = setPlaylistCountText,
         showPlaylistDialog = showPlaylistDialog,
@@ -724,7 +725,8 @@ fun MainScreen(
     )
 
     PlaybackDialogs(
-        uiState = uiState,
+        playbackState = uiState.playback,
+        flaggedUris = uiState.flaggedUris,
         nowPlayingArt = nowPlayingArt,
         showExpandedNowPlayingDialog = showExpandedNowPlayingDialog,
         setShowExpandedNowPlayingDialog = setShowExpandedNowPlayingDialog,

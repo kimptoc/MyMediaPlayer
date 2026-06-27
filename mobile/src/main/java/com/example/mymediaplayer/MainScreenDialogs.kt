@@ -4,10 +4,12 @@ import android.graphics.Bitmap
 import androidx.compose.runtime.Composable
 import com.example.mymediaplayer.shared.MediaFileInfo
 import com.example.mymediaplayer.shared.PlaylistInfo
+import com.example.mymediaplayer.PlaybackState
 
 @Composable
 fun PlaylistDialogs(
-    uiState: MainUiState,
+    maxScannedFilesCount: Int,
+    discoveredPlaylists: List<PlaylistInfo>,
     playlistCountText: String,
     setPlaylistCountText: (String) -> Unit,
     showPlaylistDialog: Boolean,
@@ -44,7 +46,7 @@ fun PlaylistDialogs(
 ) {
     if (showPlaylistDialog) {
         CreateRandomPlaylistDialog(
-            maxCount = uiState.scan.scannedFiles.size,
+            maxCount = maxScannedFilesCount,
             playlistCountText = playlistCountText,
             onPlaylistCountTextChange = { setPlaylistCountText(it) },
             onDismissRequest = { setShowPlaylistDialog(false) },
@@ -56,7 +58,7 @@ fun PlaylistDialogs(
         AddToPlaylistDialogContent(
             pendingAddFiles = pendingAddFiles,
             localCreatedPlaylists = localCreatedPlaylists,
-            discoveredPlaylists = uiState.scan.discoveredPlaylists,
+            discoveredPlaylists = discoveredPlaylists,
             onDismissRequest = {
                 setShowAddToPlaylistDialog(false)
                 setPendingAddFiles(emptyList())
@@ -147,7 +149,8 @@ fun ScanDialogs(
 
 @Composable
 fun PlaybackDialogs(
-    uiState: MainUiState,
+    playbackState: PlaybackState,
+    flaggedUris: Set<String>,
     nowPlayingArt: Bitmap?,
     showExpandedNowPlayingDialog: Boolean,
     setShowExpandedNowPlayingDialog: (Boolean) -> Unit,
@@ -160,24 +163,24 @@ fun PlaybackDialogs(
     setShowQueueDialog: (Boolean) -> Unit,
     onQueueItemSelected: (Long) -> Unit
 ) {
-    if (showExpandedNowPlayingDialog && uiState.playback.currentTrackName != null) {
-        val currentMediaId = uiState.playback.currentMediaId
-        val isFlagged = currentMediaId != null && currentMediaId in uiState.flaggedUris
+    if (showExpandedNowPlayingDialog && playbackState.currentTrackName != null) {
+        val currentMediaId = playbackState.currentMediaId
+        val isFlagged = currentMediaId != null && currentMediaId in flaggedUris
         ExpandedNowPlayingDialog(
-            trackName = uiState.playback.currentTrackName,
-            artistName = uiState.playback.currentArtistName,
-            album = uiState.playback.currentAlbum,
-            genre = uiState.playback.currentGenre,
-            year = uiState.playback.currentYear,
+            trackName = playbackState.currentTrackName,
+            artistName = playbackState.currentArtistName,
+            album = playbackState.currentAlbum,
+            genre = playbackState.currentGenre,
+            year = playbackState.currentYear,
             artwork = nowPlayingArt,
-            currentPositionMs = uiState.playback.currentPositionMs,
-            positionUpdatedAtElapsedMs = uiState.playback.positionUpdatedAtElapsedMs,
-            durationMs = uiState.playback.durationMs,
-            isPlaying = uiState.playback.isPlaying,
-            playbackSpeed = uiState.playback.playbackSpeed,
-            hasPrev = uiState.playback.hasPrev,
-            hasNext = uiState.playback.hasNext,
-            isPlayingPlaylist = uiState.playback.isPlayingPlaylist,
+            currentPositionMs = playbackState.currentPositionMs,
+            positionUpdatedAtElapsedMs = playbackState.positionUpdatedAtElapsedMs,
+            durationMs = playbackState.durationMs,
+            isPlaying = playbackState.isPlaying,
+            playbackSpeed = playbackState.playbackSpeed,
+            hasPrev = playbackState.hasPrev,
+            hasNext = playbackState.hasNext,
+            isPlayingPlaylist = playbackState.isPlayingPlaylist,
             isFlagged = isFlagged,
             onSeekTo = onSeekTo,
             onPlayPause = onPlayPause,
@@ -194,9 +197,9 @@ fun PlaybackDialogs(
 
     if (showQueueDialog) {
         QueueDialogContent(
-            queueTitle = uiState.playback.queueTitle,
-            queueItems = uiState.playback.queueItems,
-            activeQueueId = uiState.playback.activeQueueId,
+            queueTitle = playbackState.queueTitle,
+            queueItems = playbackState.queueItems,
+            activeQueueId = playbackState.activeQueueId,
             onDismissRequest = { setShowQueueDialog(false) },
             onQueueItemSelected = { queueId ->
                 onQueueItemSelected(queueId)
