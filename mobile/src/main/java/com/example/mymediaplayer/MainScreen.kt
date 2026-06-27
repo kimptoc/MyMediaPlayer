@@ -677,24 +677,13 @@ fun MainScreen(
         }
     }
 
-    MainScreenDialogs(
+    PlaylistDialogs(
         uiState = uiState,
-        nowPlayingArt = nowPlayingArt,
         playlistCountText = playlistCountText,
         setPlaylistCountText = setPlaylistCountText,
         showPlaylistDialog = showPlaylistDialog,
         setShowPlaylistDialog = setShowPlaylistDialog,
         onCreatePlaylist = onCreatePlaylist,
-        scanCountText = scanCountText,
-        setScanCountText = setScanCountText,
-        scanWholeDriveMode = scanWholeDriveMode,
-        setScanWholeDriveMode = setScanWholeDriveMode,
-        scanDeepMode = scanDeepMode,
-        setScanDeepMode = setScanDeepMode,
-        showScanDialog = showScanDialog,
-        setShowScanDialog = setShowScanDialog,
-        onScanWholeDriveWithLimit = onScanWholeDriveWithLimit,
-        onSelectFolderWithLimit = onSelectFolderWithLimit,
         pendingAddFiles = pendingAddFiles,
         setPendingAddFiles = setPendingAddFiles,
         localCreatedPlaylists = localCreatedPlaylists,
@@ -718,7 +707,25 @@ fun MainScreen(
         setPendingRenamePlaylist = setPendingRenamePlaylist,
         renamePlaylistNameText = renamePlaylistNameText,
         setRenamePlaylistNameText = setRenamePlaylistNameText,
-        onRenamePlaylist = onRenamePlaylist,
+        onRenamePlaylist = onRenamePlaylist
+    )
+
+    ScanDialogs(
+        scanCountText = scanCountText,
+        setScanCountText = setScanCountText,
+        scanWholeDriveMode = scanWholeDriveMode,
+        setScanWholeDriveMode = setScanWholeDriveMode,
+        scanDeepMode = scanDeepMode,
+        setScanDeepMode = setScanDeepMode,
+        showScanDialog = showScanDialog,
+        setShowScanDialog = setShowScanDialog,
+        onScanWholeDriveWithLimit = onScanWholeDriveWithLimit,
+        onSelectFolderWithLimit = onSelectFolderWithLimit
+    )
+
+    PlaybackDialogs(
+        uiState = uiState,
+        nowPlayingArt = nowPlayingArt,
         showExpandedNowPlayingDialog = showExpandedNowPlayingDialog,
         setShowExpandedNowPlayingDialog = setShowExpandedNowPlayingDialog,
         onSeekTo = onSeekTo,
@@ -728,7 +735,10 @@ fun MainScreen(
         onToggleFlag = onToggleFlag,
         showQueueDialog = showQueueDialog,
         setShowQueueDialog = setShowQueueDialog,
-        onQueueItemSelected = onQueueItemSelected,
+        onQueueItemSelected = onQueueItemSelected
+    )
+
+    SettingsDialogs(
         showPlaylistSaveFolderPrompt = showPlaylistSaveFolderPrompt,
         onDismissPlaylistSaveFolderPrompt = onDismissPlaylistSaveFolderPrompt,
         onSetPlaylistSaveFolderNow = onSetPlaylistSaveFolderNow

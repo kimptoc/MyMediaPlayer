@@ -6,25 +6,13 @@ import com.example.mymediaplayer.shared.MediaFileInfo
 import com.example.mymediaplayer.shared.PlaylistInfo
 
 @Composable
-fun MainScreenDialogs(
+fun PlaylistDialogs(
     uiState: MainUiState,
-    nowPlayingArt: Bitmap?,
     playlistCountText: String,
     setPlaylistCountText: (String) -> Unit,
     showPlaylistDialog: Boolean,
     setShowPlaylistDialog: (Boolean) -> Unit,
     onCreatePlaylist: (Int) -> Unit,
-
-    scanCountText: String,
-    setScanCountText: (String) -> Unit,
-    scanWholeDriveMode: Boolean,
-    setScanWholeDriveMode: (Boolean) -> Unit,
-    scanDeepMode: Boolean,
-    setScanDeepMode: (Boolean) -> Unit,
-    showScanDialog: Boolean,
-    setShowScanDialog: (Boolean) -> Unit,
-    onScanWholeDriveWithLimit: (Int) -> Unit,
-    onSelectFolderWithLimit: (Int, Boolean) -> Unit,
 
     pendingAddFiles: List<MediaFileInfo>,
     setPendingAddFiles: (List<MediaFileInfo>) -> Unit,
@@ -52,23 +40,7 @@ fun MainScreenDialogs(
     setPendingRenamePlaylist: (PlaylistInfo?) -> Unit,
     renamePlaylistNameText: String,
     setRenamePlaylistNameText: (String) -> Unit,
-    onRenamePlaylist: (PlaylistInfo, String) -> Unit,
-
-    showExpandedNowPlayingDialog: Boolean,
-    setShowExpandedNowPlayingDialog: (Boolean) -> Unit,
-    onSeekTo: (Long) -> Unit,
-    onPlayPause: () -> Unit,
-    onPrev: () -> Unit,
-    onNext: () -> Unit,
-    onToggleFlag: (String) -> Unit,
-
-    showQueueDialog: Boolean,
-    setShowQueueDialog: (Boolean) -> Unit,
-    onQueueItemSelected: (Long) -> Unit,
-
-    showPlaylistSaveFolderPrompt: Boolean,
-    onDismissPlaylistSaveFolderPrompt: () -> Unit,
-    onSetPlaylistSaveFolderNow: () -> Unit
+    onRenamePlaylist: (PlaylistInfo, String) -> Unit
 ) {
     if (showPlaylistDialog) {
         CreateRandomPlaylistDialog(
@@ -77,20 +49,6 @@ fun MainScreenDialogs(
             onPlaylistCountTextChange = { setPlaylistCountText(it) },
             onDismissRequest = { setShowPlaylistDialog(false) },
             onCreatePlaylist = onCreatePlaylist
-        )
-    }
-
-    if (showScanDialog) {
-        ScanDialogContent(
-            scanCountText = scanCountText,
-            onScanCountTextChange = { setScanCountText(it) },
-            scanWholeDriveMode = scanWholeDriveMode,
-            onScanWholeDriveModeChange = { setScanWholeDriveMode(it) },
-            scanDeepMode = scanDeepMode,
-            onScanDeepModeChange = { setScanDeepMode(it) },
-            onDismissRequest = { setShowScanDialog(false) },
-            onScanWholeDriveWithLimit = onScanWholeDriveWithLimit,
-            onSelectFolderWithLimit = onSelectFolderWithLimit
         )
     }
 
@@ -157,7 +115,51 @@ fun MainScreenDialogs(
             }
         )
     }
+}
 
+@Composable
+fun ScanDialogs(
+    scanCountText: String,
+    setScanCountText: (String) -> Unit,
+    scanWholeDriveMode: Boolean,
+    setScanWholeDriveMode: (Boolean) -> Unit,
+    scanDeepMode: Boolean,
+    setScanDeepMode: (Boolean) -> Unit,
+    showScanDialog: Boolean,
+    setShowScanDialog: (Boolean) -> Unit,
+    onScanWholeDriveWithLimit: (Int) -> Unit,
+    onSelectFolderWithLimit: (Int, Boolean) -> Unit
+) {
+    if (showScanDialog) {
+        ScanDialogContent(
+            scanCountText = scanCountText,
+            onScanCountTextChange = { setScanCountText(it) },
+            scanWholeDriveMode = scanWholeDriveMode,
+            onScanWholeDriveModeChange = { setScanWholeDriveMode(it) },
+            scanDeepMode = scanDeepMode,
+            onScanDeepModeChange = { setScanDeepMode(it) },
+            onDismissRequest = { setShowScanDialog(false) },
+            onScanWholeDriveWithLimit = onScanWholeDriveWithLimit,
+            onSelectFolderWithLimit = onSelectFolderWithLimit
+        )
+    }
+}
+
+@Composable
+fun PlaybackDialogs(
+    uiState: MainUiState,
+    nowPlayingArt: Bitmap?,
+    showExpandedNowPlayingDialog: Boolean,
+    setShowExpandedNowPlayingDialog: (Boolean) -> Unit,
+    onSeekTo: (Long) -> Unit,
+    onPlayPause: () -> Unit,
+    onPrev: () -> Unit,
+    onNext: () -> Unit,
+    onToggleFlag: (String) -> Unit,
+    showQueueDialog: Boolean,
+    setShowQueueDialog: (Boolean) -> Unit,
+    onQueueItemSelected: (Long) -> Unit
+) {
     if (showExpandedNowPlayingDialog && uiState.playback.currentTrackName != null) {
         val currentMediaId = uiState.playback.currentMediaId
         val isFlagged = currentMediaId != null && currentMediaId in uiState.flaggedUris
@@ -202,7 +204,14 @@ fun MainScreenDialogs(
             }
         )
     }
+}
 
+@Composable
+fun SettingsDialogs(
+    showPlaylistSaveFolderPrompt: Boolean,
+    onDismissPlaylistSaveFolderPrompt: () -> Unit,
+    onSetPlaylistSaveFolderNow: () -> Unit
+) {
     if (showPlaylistSaveFolderPrompt) {
         PlaylistSaveFolderPromptDialogContent(
             onDismissRequest = onDismissPlaylistSaveFolderPrompt,
