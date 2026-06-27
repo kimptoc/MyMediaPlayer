@@ -38,6 +38,13 @@ class Mp4CoverExtractorTest {
     }
 
     @Test
+    fun extractCoverArt_withEmptyUri_returnsNull() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val result = Mp4CoverExtractor.extractCoverArt(context, "")
+        assertNull(result)
+    }
+
+    @Test
     fun extractCoverArt_withContentResolverStream_returnsImageBytes() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val uri = Uri.parse("content://test/song.m4a")
