@@ -723,16 +723,9 @@ class MainActivity : ComponentActivity() {
 
     private fun sendPlaylistsToServiceIfNeeded(playlists: List<PlaylistInfo>) {
         val controller = mediaController ?: return
-        val uris = ArrayList<String>(playlists.size)
-        for (playlist in playlists) {
-            uris.add(playlist.uriString)
-        }
+        val uris = playlists.mapTo(ArrayList<String>(playlists.size)) { it.uriString }
         if (uris == lastSentPlaylistUris) return
-
-        val names = ArrayList<String>(playlists.size)
-        for (playlist in playlists) {
-            names.add(playlist.displayName)
-        }
+        val names = playlists.mapTo(ArrayList<String>(playlists.size)) { it.displayName }
         val bundle = Bundle().apply {
             putStringArrayList(EXTRA_PLAYLIST_URIS, uris)
             putStringArrayList(EXTRA_PLAYLIST_NAMES, names)
