@@ -60,7 +60,7 @@ object ApiKeyStore {
     private suspend fun validateKiloKey(apiKey: String): ValidationResult = withContext(Dispatchers.IO) {
         runCatching {
             val url = URL("${BuildConfig.KILO_ENDPOINT}/chat/completions")
-            if (!url.protocol.equals("https", ignoreCase = true)) {
+            if (!"https".equals(url.protocol, ignoreCase = true)) {
                 return@withContext ValidationResult.Error("Endpoint must use HTTPS")
             }
             val conn = url.openConnection() as HttpsURLConnection
