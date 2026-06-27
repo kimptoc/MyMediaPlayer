@@ -59,8 +59,11 @@ object ApiKeyStore {
 
     private suspend fun validateKiloKey(apiKey: String): ValidationResult = withContext(Dispatchers.IO) {
         runCatching {
-            val conn = URL("${BuildConfig.KILO_ENDPOINT}/chat/completions")
-                .openConnection() as HttpsURLConnection
+            val url = URL("${BuildConfig.KILO_ENDPOINT}/chat/completions")
+            if (!"https".equals(url.protocol, ignoreCase = true)) {
+                return@withContext ValidationResult.Error("Endpoint must use HTTPS")
+            }
+            val conn = url.openConnection() as HttpsURLConnection
             conn.connectTimeout = 5_000
             conn.readTimeout = 8_000
             conn.requestMethod = "POST"
@@ -87,18 +90,17 @@ object ApiKeyStore {
 
             ValidationResult.Success
         }.getOrElse { e ->
-            if (e is ClassCastException) {
-                ValidationResult.Error("Endpoint must use HTTPS")
-            } else {
-                ValidationResult.Error("Connection failed: ${e.message}")
-            }
+            ValidationResult.Error("Connection failed: ${e.message}")
         }
     }
 
     private suspend fun validateTtsKey(apiKey: String): ValidationResult = withContext(Dispatchers.IO) {
         runCatching {
-            val conn = URL("https://texttospeech.googleapis.com/v1/text:synthesize")
-                .openConnection() as HttpsURLConnection
+            val url = URL("https://texttospeech.googleapis.com/v1/text:synthesize")
+            if (!"https".equals(url.protocol, ignoreCase = true)) {
+                return@withContext ValidationResult.Error("Endpoint must use HTTPS")
+            }
+            val conn = url.openConnection() as HttpsURLConnection
             conn.connectTimeout = 5_000
             conn.readTimeout = 8_000
             conn.requestMethod = "POST"
