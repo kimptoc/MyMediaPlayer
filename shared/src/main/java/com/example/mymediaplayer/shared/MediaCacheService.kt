@@ -580,7 +580,7 @@ class MediaCacheService {
             while (offset < totalFiles) {
                 val page = dao.getFilesPage(limit = PERSISTED_CACHE_PAGE_SIZE, offset = offset)
                 if (page.isEmpty()) break
-                for (i in page.indices) {
+                for (i in 0 until page.size) {
                     files.add(mediaFileFromEntity(page[i]))
                 }
                 offset += page.size
