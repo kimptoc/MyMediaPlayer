@@ -590,17 +590,12 @@ class MediaCacheService {
         }
 
         val playlists = dao.getAllPlaylists().let { playlistEntities ->
-            val loadedPlaylists = ArrayList<PlaylistInfo>(playlistEntities.size)
-            for (i in 0 until playlistEntities.size) {
-                val entity = playlistEntities[i]
-                loadedPlaylists.add(
-                    PlaylistInfo(
-                        uriString = entity.uriString,
-                        displayName = entity.displayName
-                    )
+            playlistEntities.mapTo(ArrayList(playlistEntities.size)) { entity ->
+                PlaylistInfo(
+                    uriString = entity.uriString,
+                    displayName = entity.displayName
                 )
             }
-            loadedPlaylists
         }
         synchronized(cacheLock) {
             _cachedFiles.clear()
