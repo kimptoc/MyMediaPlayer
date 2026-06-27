@@ -20,12 +20,7 @@ open class PlaylistService {
     }
 
     private fun StringBuilder.appendWithoutNewlines(str: String) {
-        for (i in 0 until str.length) {
-            val c = str[i]
-            if (c != '\n' && c != '\r') {
-                append(c)
-            }
-        }
+        append(str.replace("\n", "").replace("\r", ""))
     }
 
     fun generateM3uContent(files: List<MediaFileInfo>): String {
