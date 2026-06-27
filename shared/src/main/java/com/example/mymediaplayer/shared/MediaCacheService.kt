@@ -580,8 +580,8 @@ class MediaCacheService {
             while (offset < totalFiles) {
                 val page = dao.getFilesPage(limit = PERSISTED_CACHE_PAGE_SIZE, offset = offset)
                 if (page.isEmpty()) break
-                for (entity in page) {
-                    files.add(mediaFileFromEntity(entity))
+                for (i in 0 until page.size) {
+                    files.add(mediaFileFromEntity(page[i]))
                 }
                 offset += page.size
             }
@@ -591,7 +591,8 @@ class MediaCacheService {
 
         val playlists = dao.getAllPlaylists().let { playlistEntities ->
             val loadedPlaylists = ArrayList<PlaylistInfo>(playlistEntities.size)
-            for (entity in playlistEntities) {
+            for (i in 0 until playlistEntities.size) {
+                val entity = playlistEntities[i]
                 loadedPlaylists.add(
                     PlaylistInfo(
                         uriString = entity.uriString,
