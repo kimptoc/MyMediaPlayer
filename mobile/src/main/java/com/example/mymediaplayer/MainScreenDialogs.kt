@@ -4,27 +4,17 @@ import android.graphics.Bitmap
 import androidx.compose.runtime.Composable
 import com.example.mymediaplayer.shared.MediaFileInfo
 import com.example.mymediaplayer.shared.PlaylistInfo
+import com.example.mymediaplayer.PlaybackState
 
 @Composable
-fun MainScreenDialogs(
-    uiState: MainUiState,
-    nowPlayingArt: Bitmap?,
+fun PlaylistDialogs(
+    maxScannedFilesCount: Int,
+    discoveredPlaylists: List<PlaylistInfo>,
     playlistCountText: String,
     setPlaylistCountText: (String) -> Unit,
     showPlaylistDialog: Boolean,
     setShowPlaylistDialog: (Boolean) -> Unit,
     onCreatePlaylist: (Int) -> Unit,
-
-    scanCountText: String,
-    setScanCountText: (String) -> Unit,
-    scanWholeDriveMode: Boolean,
-    setScanWholeDriveMode: (Boolean) -> Unit,
-    scanDeepMode: Boolean,
-    setScanDeepMode: (Boolean) -> Unit,
-    showScanDialog: Boolean,
-    setShowScanDialog: (Boolean) -> Unit,
-    onScanWholeDriveWithLimit: (Int) -> Unit,
-    onSelectFolderWithLimit: (Int, Boolean) -> Unit,
 
     pendingAddFiles: List<MediaFileInfo>,
     setPendingAddFiles: (List<MediaFileInfo>) -> Unit,
@@ -52,27 +42,11 @@ fun MainScreenDialogs(
     setPendingRenamePlaylist: (PlaylistInfo?) -> Unit,
     renamePlaylistNameText: String,
     setRenamePlaylistNameText: (String) -> Unit,
-    onRenamePlaylist: (PlaylistInfo, String) -> Unit,
-
-    showExpandedNowPlayingDialog: Boolean,
-    setShowExpandedNowPlayingDialog: (Boolean) -> Unit,
-    onSeekTo: (Long) -> Unit,
-    onPlayPause: () -> Unit,
-    onPrev: () -> Unit,
-    onNext: () -> Unit,
-    onToggleFlag: (String) -> Unit,
-
-    showQueueDialog: Boolean,
-    setShowQueueDialog: (Boolean) -> Unit,
-    onQueueItemSelected: (Long) -> Unit,
-
-    showPlaylistSaveFolderPrompt: Boolean,
-    onDismissPlaylistSaveFolderPrompt: () -> Unit,
-    onSetPlaylistSaveFolderNow: () -> Unit
+    onRenamePlaylist: (PlaylistInfo, String) -> Unit
 ) {
     if (showPlaylistDialog) {
         CreateRandomPlaylistDialog(
-            maxCount = uiState.scan.scannedFiles.size,
+            maxCount = maxScannedFilesCount,
             playlistCountText = playlistCountText,
             onPlaylistCountTextChange = { setPlaylistCountText(it) },
             onDismissRequest = { setShowPlaylistDialog(false) },
@@ -80,25 +54,11 @@ fun MainScreenDialogs(
         )
     }
 
-    if (showScanDialog) {
-        ScanDialogContent(
-            scanCountText = scanCountText,
-            onScanCountTextChange = { setScanCountText(it) },
-            scanWholeDriveMode = scanWholeDriveMode,
-            onScanWholeDriveModeChange = { setScanWholeDriveMode(it) },
-            scanDeepMode = scanDeepMode,
-            onScanDeepModeChange = { setScanDeepMode(it) },
-            onDismissRequest = { setShowScanDialog(false) },
-            onScanWholeDriveWithLimit = onScanWholeDriveWithLimit,
-            onSelectFolderWithLimit = onSelectFolderWithLimit
-        )
-    }
-
     if (showAddToPlaylistDialog) {
         AddToPlaylistDialogContent(
             pendingAddFiles = pendingAddFiles,
             localCreatedPlaylists = localCreatedPlaylists,
-            discoveredPlaylists = uiState.scan.discoveredPlaylists,
+            discoveredPlaylists = discoveredPlaylists,
             onDismissRequest = {
                 setShowAddToPlaylistDialog(false)
                 setPendingAddFiles(emptyList())
@@ -157,25 +117,70 @@ fun MainScreenDialogs(
             }
         )
     }
+}
 
-    if (showExpandedNowPlayingDialog && uiState.playback.currentTrackName != null) {
-        val currentMediaId = uiState.playback.currentMediaId
-        val isFlagged = currentMediaId != null && currentMediaId in uiState.flaggedUris
+@Composable
+fun ScanDialogs(
+    scanCountText: String,
+    setScanCountText: (String) -> Unit,
+    scanWholeDriveMode: Boolean,
+    setScanWholeDriveMode: (Boolean) -> Unit,
+    scanDeepMode: Boolean,
+    setScanDeepMode: (Boolean) -> Unit,
+    showScanDialog: Boolean,
+    setShowScanDialog: (Boolean) -> Unit,
+    onScanWholeDriveWithLimit: (Int) -> Unit,
+    onSelectFolderWithLimit: (Int, Boolean) -> Unit
+) {
+    if (showScanDialog) {
+        ScanDialogContent(
+            scanCountText = scanCountText,
+            onScanCountTextChange = { setScanCountText(it) },
+            scanWholeDriveMode = scanWholeDriveMode,
+            onScanWholeDriveModeChange = { setScanWholeDriveMode(it) },
+            scanDeepMode = scanDeepMode,
+            onScanDeepModeChange = { setScanDeepMode(it) },
+            onDismissRequest = { setShowScanDialog(false) },
+            onScanWholeDriveWithLimit = onScanWholeDriveWithLimit,
+            onSelectFolderWithLimit = onSelectFolderWithLimit
+        )
+    }
+}
+
+@Composable
+fun PlaybackDialogs(
+    playbackState: PlaybackState,
+    flaggedUris: Set<String>,
+    nowPlayingArt: Bitmap?,
+    showExpandedNowPlayingDialog: Boolean,
+    setShowExpandedNowPlayingDialog: (Boolean) -> Unit,
+    onSeekTo: (Long) -> Unit,
+    onPlayPause: () -> Unit,
+    onPrev: () -> Unit,
+    onNext: () -> Unit,
+    onToggleFlag: (String) -> Unit,
+    showQueueDialog: Boolean,
+    setShowQueueDialog: (Boolean) -> Unit,
+    onQueueItemSelected: (Long) -> Unit
+) {
+    if (showExpandedNowPlayingDialog && playbackState.currentTrackName != null) {
+        val currentMediaId = playbackState.currentMediaId
+        val isFlagged = currentMediaId != null && currentMediaId in flaggedUris
         ExpandedNowPlayingDialog(
-            trackName = uiState.playback.currentTrackName,
-            artistName = uiState.playback.currentArtistName,
-            album = uiState.playback.currentAlbum,
-            genre = uiState.playback.currentGenre,
-            year = uiState.playback.currentYear,
+            trackName = playbackState.currentTrackName,
+            artistName = playbackState.currentArtistName,
+            album = playbackState.currentAlbum,
+            genre = playbackState.currentGenre,
+            year = playbackState.currentYear,
             artwork = nowPlayingArt,
-            currentPositionMs = uiState.playback.currentPositionMs,
-            positionUpdatedAtElapsedMs = uiState.playback.positionUpdatedAtElapsedMs,
-            durationMs = uiState.playback.durationMs,
-            isPlaying = uiState.playback.isPlaying,
-            playbackSpeed = uiState.playback.playbackSpeed,
-            hasPrev = uiState.playback.hasPrev,
-            hasNext = uiState.playback.hasNext,
-            isPlayingPlaylist = uiState.playback.isPlayingPlaylist,
+            currentPositionMs = playbackState.currentPositionMs,
+            positionUpdatedAtElapsedMs = playbackState.positionUpdatedAtElapsedMs,
+            durationMs = playbackState.durationMs,
+            isPlaying = playbackState.isPlaying,
+            playbackSpeed = playbackState.playbackSpeed,
+            hasPrev = playbackState.hasPrev,
+            hasNext = playbackState.hasNext,
+            isPlayingPlaylist = playbackState.isPlayingPlaylist,
             isFlagged = isFlagged,
             onSeekTo = onSeekTo,
             onPlayPause = onPlayPause,
@@ -192,9 +197,9 @@ fun MainScreenDialogs(
 
     if (showQueueDialog) {
         QueueDialogContent(
-            queueTitle = uiState.playback.queueTitle,
-            queueItems = uiState.playback.queueItems,
-            activeQueueId = uiState.playback.activeQueueId,
+            queueTitle = playbackState.queueTitle,
+            queueItems = playbackState.queueItems,
+            activeQueueId = playbackState.activeQueueId,
             onDismissRequest = { setShowQueueDialog(false) },
             onQueueItemSelected = { queueId ->
                 onQueueItemSelected(queueId)
@@ -202,7 +207,14 @@ fun MainScreenDialogs(
             }
         )
     }
+}
 
+@Composable
+fun SettingsDialogs(
+    showPlaylistSaveFolderPrompt: Boolean,
+    onDismissPlaylistSaveFolderPrompt: () -> Unit,
+    onSetPlaylistSaveFolderNow: () -> Unit
+) {
     if (showPlaylistSaveFolderPrompt) {
         PlaylistSaveFolderPromptDialogContent(
             onDismissRequest = onDismissPlaylistSaveFolderPrompt,
