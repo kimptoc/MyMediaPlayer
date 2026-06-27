@@ -2587,9 +2587,15 @@ class MyMusicService : MediaBrowserServiceCompat() {
         return false
     }
 
-    private fun findFocusedMatches(
-        raw: String,
-        cleanedQuery: String,
+    private fun refine(
+        base: List<MediaFileInfo>?,
+        filter: (MediaFileInfo) -> Boolean
+    ): List<MediaFileInfo> {
+        val source = base ?: mediaCacheService.cachedFiles
+        return source.filter(filter)
+    }
+
+    private fun findMatchesByExplicitFields(
         extras: Bundle?
     ): Pair<List<MediaFileInfo>?, String?> {
         val requestedArtist = extras?.getString(EXTRA_MEDIA_ARTIST_KEY)?.trim().orEmpty()
@@ -2597,23 +2603,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
         val requestedGenre = extras?.getString(EXTRA_MEDIA_GENRE_KEY)?.trim().orEmpty()
         val requestedTitle = extras?.getString(EXTRA_MEDIA_TITLE_KEY)?.trim().orEmpty()
 
-        val mediaFocus = extras?.getString(EXTRA_MEDIA_FOCUS_KEY)?.trim().orEmpty()
-        val focusArtist = mediaFocus.equals(FOCUS_ARTIST, ignoreCase = true)
-        val focusAlbum = mediaFocus.equals(FOCUS_ALBUM, ignoreCase = true)
-        val focusGenre = mediaFocus.equals(FOCUS_GENRE, ignoreCase = true)
-        val focusTitle = mediaFocus.equals(FOCUS_TITLE, ignoreCase = true)
-
-        fun refine(
-            base: List<MediaFileInfo>?,
-            filter: (MediaFileInfo) -> Boolean
-        ): List<MediaFileInfo> {
-            val source = base ?: mediaCacheService.cachedFiles
-            return source.filter(filter)
-        }
-
         var focusedMatches: List<MediaFileInfo>? = null
         var focusLabel: String? = null
-        val focusQuery = cleanedQuery.ifBlank { raw }.trim()
 
         if (requestedArtist.isNotBlank()) {
             focusedMatches = refine(focusedMatches) { file ->
@@ -2640,31 +2631,59 @@ class MyMusicService : MediaBrowserServiceCompat() {
             focusLabel = "Title: $requestedTitle"
         }
 
-        if (focusedMatches == null && focusQuery.isNotBlank()) {
-            focusedMatches = when {
-                focusArtist -> mediaCacheService.cachedFiles.filter { file ->
-                    file.artist?.contains(focusQuery, ignoreCase = true) == true
-                }
-                focusAlbum -> mediaCacheService.cachedFiles.filter { file ->
-                    file.album?.contains(focusQuery, ignoreCase = true) == true
-                }
-                focusGenre -> mediaCacheService.cachedFiles.filter { file ->
-                    file.genre?.contains(focusQuery, ignoreCase = true) == true
-                }
-                focusTitle -> mediaCacheService.cachedFiles.filter { file ->
-                    file.cleanTitle.contains(focusQuery, ignoreCase = true)
-                }
-                else -> null
+        return Pair(focusedMatches, focusLabel)
+    }
+
+    private fun findMatchesByFocus(
+        focusQuery: String,
+        mediaFocus: String
+    ): Pair<List<MediaFileInfo>?, String?> {
+        if (focusQuery.isBlank()) return Pair(null, null)
+
+        val focusArtist = mediaFocus.equals(FOCUS_ARTIST, ignoreCase = true)
+        val focusAlbum = mediaFocus.equals(FOCUS_ALBUM, ignoreCase = true)
+        val focusGenre = mediaFocus.equals(FOCUS_GENRE, ignoreCase = true)
+        val focusTitle = mediaFocus.equals(FOCUS_TITLE, ignoreCase = true)
+
+        val focusedMatches = when {
+            focusArtist -> mediaCacheService.cachedFiles.filter { file ->
+                file.artist?.contains(focusQuery, ignoreCase = true) == true
             }
-            focusLabel = when {
-                focusArtist -> "Artist: $focusQuery"
-                focusAlbum -> "Album: $focusQuery"
-                focusGenre -> "Genre: $focusQuery"
-                focusTitle -> "Title: $focusQuery"
-                else -> focusLabel
+            focusAlbum -> mediaCacheService.cachedFiles.filter { file ->
+                file.album?.contains(focusQuery, ignoreCase = true) == true
             }
+            focusGenre -> mediaCacheService.cachedFiles.filter { file ->
+                file.genre?.contains(focusQuery, ignoreCase = true) == true
+            }
+            focusTitle -> mediaCacheService.cachedFiles.filter { file ->
+                file.cleanTitle.contains(focusQuery, ignoreCase = true)
+            }
+            else -> null
+        }
+        val focusLabel = when {
+            focusArtist -> "Artist: $focusQuery"
+            focusAlbum -> "Album: $focusQuery"
+            focusGenre -> "Genre: $focusQuery"
+            focusTitle -> "Title: $focusQuery"
+            else -> null
         }
         return Pair(focusedMatches, focusLabel)
+    }
+
+    private fun findFocusedMatches(
+        raw: String,
+        cleanedQuery: String,
+        extras: Bundle?
+    ): Pair<List<MediaFileInfo>?, String?> {
+        val (explicitMatches, explicitLabel) = findMatchesByExplicitFields(extras)
+        if (explicitMatches != null) {
+            return Pair(explicitMatches, explicitLabel)
+        }
+
+        val mediaFocus = extras?.getString(EXTRA_MEDIA_FOCUS_KEY)?.trim().orEmpty()
+        val focusQuery = cleanedQuery.ifBlank { raw }.trim()
+
+        return findMatchesByFocus(focusQuery, mediaFocus)
     }
 
     private suspend fun ensureCacheReadyForSearch() {
