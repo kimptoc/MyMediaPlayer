@@ -1297,21 +1297,15 @@ class MyMusicService : MediaBrowserServiceCompat() {
         var hasOther = false
 
         for (value in values) {
-            var foundNonWhitespace = false
-            for (i in 0 until value.length) {
-                val c = value[i]
-                if (!c.isWhitespace()) {
-                    foundNonWhitespace = true
-                    val u = c.uppercaseChar()
-                    if (u in 'A'..'Z') {
-                        seenLetters[u - 'A'] = true
-                    } else {
-                        hasOther = true
-                    }
-                    break
+            val c = value.firstOrNull { !it.isWhitespace() }
+            if (c != null) {
+                val u = c.uppercaseChar()
+                if (u in 'A'..'Z') {
+                    seenLetters[u - 'A'] = true
+                } else {
+                    hasOther = true
                 }
-            }
-            if (!foundNonWhitespace) {
+            } else {
                 hasOther = true
             }
         }
