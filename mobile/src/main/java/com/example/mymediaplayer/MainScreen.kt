@@ -1771,6 +1771,81 @@ private fun PlaylistList(
     }
 }
 
+
+@Composable
+private fun PlaylistSongsContent(
+    isEditing: Boolean,
+    editableSongs: List<MediaFileInfo>,
+    playlistSongs: List<MediaFileInfo>,
+    editSearchQuery: String,
+    setEditSearchQuery: (String) -> Unit,
+    dedupeOnSave: Boolean,
+    setDedupeOnSave: (Boolean) -> Unit,
+    currentMediaId: String?,
+    favoriteUris: Set<String>,
+    onFileClick: (MediaFileInfo) -> Unit,
+    onAddToPlaylist: (MediaFileInfo) -> Unit,
+    onToggleFavorite: (MediaFileInfo) -> Unit,
+    setEditableSongs: (List<MediaFileInfo>) -> Unit,
+    draggingIndex: Int?,
+    setDraggingIndex: (Int?) -> Unit,
+    draggingOffsetY: Float,
+    setDraggingOffsetY: (Float) -> Unit,
+    dragSwapThresholdPx: Float
+) {
+    val displayedSongs = if (isEditing) editableSongs else playlistSongs
+    if (isEditing) {
+        PlaylistEditFilterRow(
+            editSearchQuery = editSearchQuery,
+            setEditSearchQuery = setEditSearchQuery,
+            dedupeOnSave = dedupeOnSave,
+            setDedupeOnSave = setDedupeOnSave
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+    }
+
+    if (displayedSongs.isEmpty()) {
+        Text("No songs in playlist")
+    } else {
+        if (!isEditing) {
+            PlaylistViewList(
+                displayedSongs = displayedSongs,
+                currentMediaId = currentMediaId,
+                favoriteUris = favoriteUris,
+                onFileClick = onFileClick,
+                onAddToPlaylist = onAddToPlaylist,
+                onToggleFavorite = onToggleFavorite
+            )
+        } else {
+            val filteredRows = if (editSearchQuery.isNotBlank()) {
+                val needle = editSearchQuery.trim().lowercase()
+                editableSongs.withIndex().filter { indexed ->
+                    val file = indexed.value
+                    val haystack = listOfNotNull(
+                        file.cleanTitle,
+                        file.artist,
+                        file.album
+                    ).joinToString(" ").lowercase()
+                    haystack.contains(needle)
+                }
+            } else {
+                editableSongs.withIndex().toList()
+            }
+            PlaylistEditList(
+                filteredRows = filteredRows,
+                editSearchQuery = editSearchQuery,
+                editableSongs = editableSongs,
+                setEditableSongs = setEditableSongs,
+                draggingIndex = draggingIndex,
+                setDraggingIndex = setDraggingIndex,
+                draggingOffsetY = draggingOffsetY,
+                setDraggingOffsetY = setDraggingOffsetY,
+                dragSwapThresholdPx = dragSwapThresholdPx
+            )
+        }
+    }
+}
+
 @Composable
 private fun PlaylistDetails(
     selectedPlaylist: PlaylistInfo,
@@ -1863,57 +1938,26 @@ private fun PlaylistDetails(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            val displayedSongs = if (isEditing) editableSongs else playlistSongs
-            if (isEditing) {
-                PlaylistEditFilterRow(
-                    editSearchQuery = editSearchQuery,
-                    setEditSearchQuery = setEditSearchQuery,
-                    dedupeOnSave = dedupeOnSave,
-                    setDedupeOnSave = setDedupeOnSave
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-            }
-
-            if (displayedSongs.isEmpty()) {
-                Text("No songs in playlist")
-            } else {
-                if (!isEditing) {
-                    PlaylistViewList(
-                        displayedSongs = displayedSongs,
-                        currentMediaId = currentMediaId,
-                        favoriteUris = favoriteUris,
-                        onFileClick = onFileClick,
-                        onAddToPlaylist = onAddToPlaylist,
-                        onToggleFavorite = onToggleFavorite
-                    )
-                } else {
-                    val filteredRows = if (editSearchQuery.isNotBlank()) {
-                        val needle = editSearchQuery.trim().lowercase()
-                        editableSongs.withIndex().filter { indexed ->
-                            val file = indexed.value
-                            val haystack = listOfNotNull(
-                                file.cleanTitle,
-                                file.artist,
-                                file.album
-                            ).joinToString(" ").lowercase()
-                            haystack.contains(needle)
-                        }
-                    } else {
-                        editableSongs.withIndex().toList()
-                    }
-                    PlaylistEditList(
-                        filteredRows = filteredRows,
-                        editSearchQuery = editSearchQuery,
-                        editableSongs = editableSongs,
-                        setEditableSongs = setEditableSongs,
-                        draggingIndex = draggingIndex,
-                        setDraggingIndex = setDraggingIndex,
-                        draggingOffsetY = draggingOffsetY,
-                        setDraggingOffsetY = { draggingOffsetY = it },
-                        dragSwapThresholdPx = dragSwapThresholdPx
-                    )
-                }
-            }
+            PlaylistSongsContent(
+                isEditing = isEditing,
+                editableSongs = editableSongs,
+                playlistSongs = playlistSongs,
+                editSearchQuery = editSearchQuery,
+                setEditSearchQuery = setEditSearchQuery,
+                dedupeOnSave = dedupeOnSave,
+                setDedupeOnSave = setDedupeOnSave,
+                currentMediaId = currentMediaId,
+                favoriteUris = favoriteUris,
+                onFileClick = onFileClick,
+                onAddToPlaylist = onAddToPlaylist,
+                onToggleFavorite = onToggleFavorite,
+                setEditableSongs = setEditableSongs,
+                draggingIndex = draggingIndex,
+                setDraggingIndex = setDraggingIndex,
+                draggingOffsetY = draggingOffsetY,
+                setDraggingOffsetY = { draggingOffsetY = it },
+                dragSwapThresholdPx = dragSwapThresholdPx
+            )
         }
     }
 
