@@ -591,7 +591,7 @@ class MediaCacheService {
 
         val playlists = dao.getAllPlaylists().let { playlistEntities ->
             val loadedPlaylists = ArrayList<PlaylistInfo>(playlistEntities.size)
-            for (i in playlistEntities.indices) {
+            for (i in 0 until playlistEntities.size) {
                 val entity = playlistEntities[i]
                 loadedPlaylists.add(
                     PlaylistInfo(
