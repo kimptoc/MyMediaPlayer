@@ -490,7 +490,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
             mediaCacheService.clearFiles()
             val count = minOf(uris.size, names.size, sizes.size)
-            val mappedFiles = (0 until count).mapTo(ArrayList<MediaFileInfo>(count)) { i ->
+            val mappedFiles = ArrayList<MediaFileInfo>(count)
+            for (i in 0 until count) {
                 val title = titles?.getOrNull(i).orEmpty().ifBlank { names[i].substringBeforeLast('.') }
                 val artist = artists?.getOrNull(i).orEmpty().ifBlank { null }
                 val album = albums?.getOrNull(i).orEmpty().ifBlank { null }
@@ -498,17 +499,19 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 val durationMs = durations?.getOrNull(i)?.takeIf { it >= 0L }
                 val year = years?.getOrNull(i)?.takeIf { it > 0 }
                 val addedAtMs = addedAt?.getOrNull(i)?.takeIf { it >= 0L }
-                MediaFileInfo(
-                    uriString = uris[i],
-                    displayName = names[i],
-                    sizeBytes = sizes[i],
-                    title = title,
-                    artist = artist,
-                    album = album,
-                    genre = genre,
-                    durationMs = durationMs,
-                    year = year,
-                    addedAtMs = addedAtMs
+                mappedFiles.add(
+                    MediaFileInfo(
+                        uriString = uris[i],
+                        displayName = names[i],
+                        sizeBytes = sizes[i],
+                        title = title,
+                        artist = artist,
+                        album = album,
+                        genre = genre,
+                        durationMs = durationMs,
+                        year = year,
+                        addedAtMs = addedAtMs
+                    )
                 )
             }
             mediaCacheService.addAllFiles(mappedFiles)
@@ -917,8 +920,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
             MediaItem(description, MediaItem.FLAG_PLAYABLE)
         }.toMutableList()
         val elapsed = SystemClock.elapsedRealtime() - start
-        val sanitizedLogQuery = trimmed.replace("\n", " ").replace("\r", " ")
-        Log.d("MyMusicService", "onSearch($sanitizedLogQuery) -> ${items.size} in ${elapsed}ms")
+        Log.d("MyMusicService", "onSearch($trimmed) -> ${items.size} in ${elapsed}ms")
         result.sendResult(items)
     }
 
@@ -1295,15 +1297,21 @@ class MyMusicService : MediaBrowserServiceCompat() {
         var hasOther = false
 
         for (value in values) {
-            val c = value.firstOrNull { !it.isWhitespace() }
-            if (c != null) {
-                val u = c.uppercaseChar()
-                if (u in 'A'..'Z') {
-                    seenLetters[u - 'A'] = true
-                } else {
-                    hasOther = true
+            var foundNonWhitespace = false
+            for (i in 0 until value.length) {
+                val c = value[i]
+                if (!c.isWhitespace()) {
+                    foundNonWhitespace = true
+                    val u = c.uppercaseChar()
+                    if (u in 'A'..'Z') {
+                        seenLetters[u - 'A'] = true
+                    } else {
+                        hasOther = true
+                    }
+                    break
                 }
-            } else {
+            }
+            if (!foundNonWhitespace) {
                 hasOther = true
             }
         }
@@ -3148,17 +3156,6 @@ class MyMusicService : MediaBrowserServiceCompat() {
             builder.setContentIntent(contentIntent)
         }
 
-        addNotificationActions(builder, isPlaying, hasPrev, hasNext)
-
-        return builder.build()
-    }
-
-    private fun addNotificationActions(
-        builder: NotificationCompat.Builder,
-        isPlaying: Boolean,
-        hasPrev: Boolean,
-        hasNext: Boolean
-    ) {
         if (hasPrev) {
             builder.addAction(
                 NotificationCompat.Action(
@@ -3217,6 +3214,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 .setMediaSession(session.sessionToken)
                 .setShowActionsInCompactView(*compactIndices)
         )
+
+        return builder.build()
     }
 
     private fun buildLaunchIntent(): PendingIntent? {

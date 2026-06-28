@@ -1038,38 +1038,14 @@ class MediaCacheService {
     }
 
     private fun normalizeGenre(raw: String?): String {
-        if (raw == null) return "Other"
-
-        var start = 0
-        var end = raw.length - 1
-
-        while (start <= end && raw[start].isWhitespace()) start++
-        while (end >= start && raw[end].isWhitespace()) end--
-
-        if (start > end) return "Other"
-
-        var partStart = start
-        while (partStart <= end) {
-            var partEnd = partStart
-            while (partEnd <= end) {
-                val c = raw[partEnd]
-                if (c == ';' || c == '/' || c == '|' || c == ',') break
-                partEnd++
-            }
-
-            var ts = partStart
-            var te = partEnd - 1
-            while (ts <= te && raw[ts].isWhitespace()) ts++
-            while (te >= ts && raw[te].isWhitespace()) te--
-
-            if (ts <= te) {
-                return raw.substring(ts, te + 1)
-            }
-
-            partStart = partEnd + 1
-        }
-
-        return "Other"
+        val trimmed = raw?.trim().orEmpty()
+        if (trimmed.isBlank()) return "Other"
+        val primary = trimmed
+            .split(';', '/', '|', ',')
+            .firstOrNull { it.isNotBlank() }
+            ?.trim()
+            .orEmpty()
+        return if (primary.isBlank()) "Other" else primary
     }
 
     private fun inferGenreFromPath(pathLike: String?): String? {

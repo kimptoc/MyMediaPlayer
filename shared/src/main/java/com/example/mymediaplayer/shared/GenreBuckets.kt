@@ -6,69 +6,6 @@ const val PODCAST_GENRE: String = "Podcasts"
 
 private val WHITESPACE_REGEX = Regex("\\s+")
 
-private data class GenreRule(
-    val bucket: String,
-    val substrings: List<String> = emptyList(),
-    val prefixes: List<String> = emptyList(),
-    val exactMatches: List<String> = emptyList()
-) {
-    fun matches(normalized: String): Boolean {
-        if (exactMatches.any { normalized == it }) return true
-        if (prefixes.any { normalized.startsWith(it) }) return true
-        if (substrings.any { normalized.contains(it) }) return true
-        return false
-    }
-}
-
-private val GENRE_RULES = listOf(
-    GenreRule(
-        bucket = "Pop",
-        substrings = listOf("j-pop", "jpop", "k-pop", "kpop", "synthpop", "electropop", "pop", "dance pop")
-    ),
-    GenreRule(
-        bucket = "Rock/Metal",
-        substrings = listOf("metalcore", "hardcore", "nu metal", "progressive metal", "death metal", "black metal", "metal", "alternative rock", "alt rock", "indie rock", "hard rock", "classic rock", "punk", "grunge", "rock")
-    ),
-    GenreRule(
-        bucket = "Hip-Hop/Rap",
-        substrings = listOf("hip hop", "hip-hop", " rap", "trap"),
-        prefixes = listOf("rap")
-    ),
-    GenreRule(
-        bucket = "R&B/Soul",
-        substrings = listOf("r&b", "rnb", "rhythm and blues", "soul", "motown", "neo soul", "funk", "gospel", "christian", "worship")
-    ),
-    GenreRule(
-        bucket = "Electronic/Dance",
-        substrings = listOf("electronic", "edm", "house", "techno", "trance", "dubstep", "dnb", "drum and bass", "electro", "ambient", "breakbeat", "garage")
-    ),
-    GenreRule(
-        bucket = "Country/Folk",
-        substrings = listOf("country", "bluegrass", "folk", "americana", "singer-songwriter", "acoustic")
-    ),
-    GenreRule(
-        bucket = "Jazz/Blues",
-        substrings = listOf("jazz", "blues", "swing", "big band", "bebop", "fusion")
-    ),
-    GenreRule(
-        bucket = "Classical",
-        substrings = listOf("classical", "orchestra", "baroque", "opera")
-    ),
-    GenreRule(
-        bucket = "Latin",
-        substrings = listOf("latin", "reggaeton", "salsa", "bachata", "afrobeat")
-    ),
-    GenreRule(
-        bucket = "Reggae",
-        substrings = listOf("reggae", "dancehall", "ska"),
-        exactMatches = listOf("dub")
-    ),
-    GenreRule(
-        bucket = "Other",
-        substrings = listOf("soundtrack", "score", "ost", "musical", "spoken", "podcast", "audiobook")
-    )
-)
-
 fun bucketGenre(raw: String?): String {
     val trimmed = raw?.trim().orEmpty()
     if (trimmed.isBlank()) return "Other"
@@ -85,5 +22,51 @@ fun bucketGenre(raw: String?): String {
         .trim()
         .lowercase(Locale.US)
 
-    return GENRE_RULES.firstOrNull { it.matches(normalized) }?.bucket ?: "Other"
+    return when {
+        normalized.contains("j-pop") || normalized.contains("jpop") ||
+            normalized.contains("k-pop") || normalized.contains("kpop") ||
+            normalized.contains("synthpop") || normalized.contains("electropop") ||
+            normalized.contains("pop") || normalized.contains("dance pop") -> "Pop"
+        normalized.contains("metalcore") || normalized.contains("hardcore") ||
+            normalized.contains("nu metal") || normalized.contains("progressive metal") ||
+            normalized.contains("death metal") || normalized.contains("black metal") ||
+            normalized.contains("metal") ||
+            normalized.contains("alternative rock") || normalized.contains("alt rock") ||
+            normalized.contains("indie rock") || normalized.contains("hard rock") ||
+            normalized.contains("classic rock") || normalized.contains("punk") ||
+            normalized.contains("grunge") || normalized.contains("rock") -> "Rock/Metal"
+        normalized.contains("hip hop") || normalized.contains("hip-hop") ||
+            normalized.contains(" rap") || normalized.startsWith("rap") ||
+            normalized.contains("trap") -> "Hip-Hop/Rap"
+        normalized.contains("r&b") || normalized.contains("rnb") ||
+            normalized.contains("rhythm and blues") || normalized.contains("soul") ||
+            normalized.contains("motown") || normalized.contains("neo soul") ||
+            normalized.contains("funk") || normalized.contains("gospel") ||
+            normalized.contains("christian") || normalized.contains("worship") -> "R&B/Soul"
+        normalized.contains("electronic") || normalized.contains("edm") ||
+            normalized.contains("house") || normalized.contains("techno") ||
+            normalized.contains("trance") || normalized.contains("dubstep") ||
+            normalized.contains("dnb") || normalized.contains("drum and bass") ||
+            normalized.contains("electro") || normalized.contains("ambient") ||
+            normalized.contains("breakbeat") || normalized.contains("garage") -> "Electronic/Dance"
+        normalized.contains("country") || normalized.contains("bluegrass") ||
+            normalized.contains("folk") || normalized.contains("americana") ||
+            normalized.contains("singer-songwriter") || normalized.contains("acoustic") ->
+            "Country/Folk"
+        normalized.contains("jazz") || normalized.contains("blues") ||
+            normalized.contains("swing") || normalized.contains("big band") ||
+            normalized.contains("bebop") || normalized.contains("fusion") -> "Jazz/Blues"
+        normalized.contains("classical") || normalized.contains("orchestra") ||
+            normalized.contains("baroque") || normalized.contains("opera") -> "Classical"
+        normalized.contains("latin") || normalized.contains("reggaeton") ||
+            normalized.contains("salsa") || normalized.contains("bachata") ||
+            normalized.contains("afrobeat") -> "Latin"
+        normalized.contains("reggae") || normalized.contains("dancehall") ||
+            normalized.contains("ska") || normalized == "dub" -> "Reggae"
+        normalized.contains("soundtrack") || normalized.contains("score") ||
+            normalized.contains("ost") || normalized.contains("musical") ||
+            normalized.contains("spoken") || normalized.contains("podcast") ||
+            normalized.contains("audiobook") -> "Other"
+        else -> "Other"
+    }
 }

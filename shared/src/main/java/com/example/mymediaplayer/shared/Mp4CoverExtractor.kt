@@ -14,7 +14,6 @@ internal object Mp4CoverExtractor {
     // Walks the MP4 atom tree to extract cover art from the iTunes 'covr' box.
     // Handles both moov/meta/ilst and moov/udta/meta/ilst structures.
     fun extractCoverArt(context: Context, uriString: String): ByteArray? {
-        if (uriString.isEmpty()) return null
         val input = context.contentResolver.openInputStream(Uri.parse(uriString)) ?: return null
         return input.use { extractCoverArt(it) }
     }
