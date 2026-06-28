@@ -2368,6 +2368,19 @@ class MyMusicService : MediaBrowserServiceCompat() {
             title = Uri.parse(resolvedMediaId).lastPathSegment
         )
 
+        // If the requested track is already the current item in an existing queue
+        // (e.g. Bluetooth reconnect sends onPlayFromMediaId instead of onPlay),
+        // preserve the queue rather than rebuilding it sequentially from the browse context.
+        if (playlistQueue.isNotEmpty() &&
+            currentQueueIndex in playlistQueue.indices &&
+            playlistQueue[currentQueueIndex].uriString == resolvedMediaId
+        ) {
+            updateSessionQueue()
+            playTrack(fileInfo)
+            savePlaybackSnapshot()
+            return
+        }
+
         val parentId = lastBrowseParentId
         val listFromParent = getListFromParent(parentId)
 
@@ -3443,6 +3456,15 @@ class MyMusicService : MediaBrowserServiceCompat() {
         val savedPosition = prefs.getLong(KEY_RESUME_POSITION_MS, 0L)
         pendingResumePositionMs = if (savedPosition > 0L) savedPosition else null
     }
+
+    @VisibleForTesting
+    internal suspend fun handlePlaySingleItemForTesting(mediaId: String) = handlePlaySingleItem(mediaId)
+
+    @VisibleForTesting
+    internal fun queuePreservationGuardWouldFire(mediaId: String): Boolean =
+        playlistQueue.isNotEmpty() &&
+            currentQueueIndex in playlistQueue.indices &&
+            playlistQueue[currentQueueIndex].uriString == mediaId
 
     @VisibleForTesting
     internal fun savePlaybackSnapshot(positionMsOverride: Long? = null) {
