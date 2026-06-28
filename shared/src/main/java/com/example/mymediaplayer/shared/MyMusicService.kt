@@ -920,7 +920,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
             MediaItem(description, MediaItem.FLAG_PLAYABLE)
         }.toMutableList()
         val elapsed = SystemClock.elapsedRealtime() - start
-        Log.d("MyMusicService", "onSearch($trimmed) -> ${items.size} in ${elapsed}ms")
+        val sanitizedLogQuery = trimmed.replace("\n", " ").replace("\r", " ")
+        Log.d("MyMusicService", "onSearch($sanitizedLogQuery) -> ${items.size} in ${elapsed}ms")
         result.sendResult(items)
     }
 
