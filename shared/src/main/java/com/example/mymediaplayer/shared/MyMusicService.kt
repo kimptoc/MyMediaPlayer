@@ -490,8 +490,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
             mediaCacheService.clearFiles()
             val count = minOf(uris.size, names.size, sizes.size)
-            val mappedFiles = ArrayList<MediaFileInfo>(count)
-            for (i in 0 until count) {
+            val mappedFiles = (0 until count).mapTo(ArrayList<MediaFileInfo>(count)) { i ->
                 val title = titles?.getOrNull(i).orEmpty().ifBlank { names[i].substringBeforeLast('.') }
                 val artist = artists?.getOrNull(i).orEmpty().ifBlank { null }
                 val album = albums?.getOrNull(i).orEmpty().ifBlank { null }
@@ -499,19 +498,17 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 val durationMs = durations?.getOrNull(i)?.takeIf { it >= 0L }
                 val year = years?.getOrNull(i)?.takeIf { it > 0 }
                 val addedAtMs = addedAt?.getOrNull(i)?.takeIf { it >= 0L }
-                mappedFiles.add(
-                    MediaFileInfo(
-                        uriString = uris[i],
-                        displayName = names[i],
-                        sizeBytes = sizes[i],
-                        title = title,
-                        artist = artist,
-                        album = album,
-                        genre = genre,
-                        durationMs = durationMs,
-                        year = year,
-                        addedAtMs = addedAtMs
-                    )
+                MediaFileInfo(
+                    uriString = uris[i],
+                    displayName = names[i],
+                    sizeBytes = sizes[i],
+                    title = title,
+                    artist = artist,
+                    album = album,
+                    genre = genre,
+                    durationMs = durationMs,
+                    year = year,
+                    addedAtMs = addedAtMs
                 )
             }
             mediaCacheService.addAllFiles(mappedFiles)
