@@ -49,6 +49,10 @@ object EncryptedPrefsManager {
                 Log.e(TAG, "Failed to create EncryptedSharedPreferences for $fileName", e)
                 failedFileNames.add(fileName)
                 null
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to create EncryptedSharedPreferences for $fileName", e)
+                failedFileNames.add(fileName)
+                null
             }
         }
     }

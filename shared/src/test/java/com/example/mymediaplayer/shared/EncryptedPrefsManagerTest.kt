@@ -27,6 +27,7 @@ class EncryptedPrefsManagerTest {
         companion object {
             var throwGeneralSecurityException = false
             var throwIOException = false
+            var throwException = false
 
             @Implementation
             @JvmStatic
@@ -42,6 +43,9 @@ class EncryptedPrefsManagerTest {
                 }
                 if (throwIOException) {
                     throw java.io.IOException("Mocked IOException")
+                }
+                if (throwException) {
+                    throw java.lang.Exception("Mocked Exception")
                 }
                 return context.getSharedPreferences(fileName + java.util.UUID.randomUUID().toString(), Context.MODE_PRIVATE)
             }
@@ -84,6 +88,15 @@ class EncryptedPrefsManagerTest {
         EncryptedPrefsManager.clearCacheForTesting()
         ShadowEncryptedSharedPreferences.throwGeneralSecurityException = false
         ShadowEncryptedSharedPreferences.throwIOException = false
+        ShadowEncryptedSharedPreferences.throwException = false
+    }
+
+    @Test
+    fun testCreateOrGet_throwsException() {
+        ShadowEncryptedSharedPreferences.throwException = true
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val prefs = EncryptedPrefsManager.createOrGet(context, "test_prefs_exception_fail")
+        org.junit.Assert.assertNull(prefs)
     }
 
     @Test
