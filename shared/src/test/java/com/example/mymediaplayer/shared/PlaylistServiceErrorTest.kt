@@ -63,7 +63,7 @@ class PlaylistServiceErrorTest {
 
         val treeUri = Uri.parse("content://myauth_valid/tree/doc")
 
-        // Mock the output stream to throw IOException when the service tries to open the new file's URI
+        // Mock the output stream to throw IOException when the service writes to the new file's URI
         val shadowResolver = Shadows.shadowOf(baseContext.contentResolver)
         val targetUri = Uri.parse("content://myauth_valid/document/new_file")
         shadowResolver.registerOutputStreamSupplier(targetUri) {
