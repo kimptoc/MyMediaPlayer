@@ -232,15 +232,15 @@ class NetworkQualityCheckerTest {
         setupNetworkForPing()
 
         NetworkQualityChecker.testInterceptor = okhttp3.Interceptor { chain ->
-            Thread.sleep(500) // delay to ensure we can cancel while suspended
+            Thread.sleep(Long.MAX_VALUE) // blocks until OkHttp cancels and interrupts the thread
             chain.proceed(chain.request())
         }
 
-        var caughtException: Throwable? = null
+        var caughtException: Exception? = null
         val job = launch {
             try {
                 checker.check()
-            } catch (e: Throwable) {
+            } catch (e: Exception) {
                 caughtException = e
             }
         }
