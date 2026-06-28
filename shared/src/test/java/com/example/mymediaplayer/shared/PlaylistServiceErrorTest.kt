@@ -56,6 +56,32 @@ class PlaylistServiceErrorTest {
     }
 
     @Test
+    fun writePlaylist_returnsNullOnIOException() {
+        val baseContext = ApplicationProvider.getApplicationContext<Context>()
+        val info = ProviderInfo().apply { authority = "myauth_valid" }
+        Robolectric.buildContentProvider(ValidInsertProvider::class.java).create(info)
+
+        val treeUri = Uri.parse("content://myauth_valid/tree/doc")
+
+        // Mock the output stream to throw IOException when the service tries to open the new file's URI
+        val shadowResolver = Shadows.shadowOf(baseContext.contentResolver)
+        val targetUri = Uri.parse("content://myauth_valid/document/new_file")
+        shadowResolver.registerOutputStreamSupplier(targetUri) {
+            object : java.io.OutputStream() {
+                override fun write(b: Int) {
+                    throw IOException("Mocked exception on write")
+                }
+            }
+        }
+
+        val service = PlaylistService()
+        val files = listOf(MediaFileInfo("content://test/song1", "Song One", 1L, "Song One"))
+
+        val result = service.writePlaylist(baseContext, treeUri, files)
+        assertNull(result)
+    }
+
+    @Test
     fun writePlaylistWithName_returnsNullOnSecurityException() {
         val baseContext = ApplicationProvider.getApplicationContext<Context>()
         val info = ProviderInfo().apply { authority = "myauth_valid" }
