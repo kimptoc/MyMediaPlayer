@@ -3151,6 +3151,17 @@ class MyMusicService : MediaBrowserServiceCompat() {
             builder.setContentIntent(contentIntent)
         }
 
+        addNotificationActions(builder, isPlaying, hasPrev, hasNext)
+
+        return builder.build()
+    }
+
+    private fun addNotificationActions(
+        builder: NotificationCompat.Builder,
+        isPlaying: Boolean,
+        hasPrev: Boolean,
+        hasNext: Boolean
+    ) {
         if (hasPrev) {
             builder.addAction(
                 NotificationCompat.Action(
@@ -3209,8 +3220,6 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 .setMediaSession(session.sessionToken)
                 .setShowActionsInCompactView(*compactIndices)
         )
-
-        return builder.build()
     }
 
     private fun buildLaunchIntent(): PendingIntent? {
