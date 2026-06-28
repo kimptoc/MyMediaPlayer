@@ -331,70 +331,48 @@ class MainActivity : ComponentActivity() {
         )
     }
 
-
-    private fun handleSelectFolderWithLimit(limit: Int, deepScan: Boolean) {
-        pendingScanLimit = limit
-        pendingDeepScan = deepScan
-        openDocumentTree.launch(null)
-    }
-
-    private fun playPlaylist(
-        playlist: com.example.mymediaplayer.shared.PlaylistInfo,
-        scannedFiles: List<com.example.mymediaplayer.shared.MediaFileInfo>,
-        discoveredPlaylists: List<com.example.mymediaplayer.shared.PlaylistInfo>
-    ) {
-        sendFilesToServiceIfNeeded(scannedFiles)
-        sendPlaylistsToServiceIfNeeded(discoveredPlaylists)
-        val mediaId = getPlaylistMediaId(playlist.uriString)
-        mediaController?.transportControls?.playFromMediaId(mediaId, null)
-    }
-
-    private fun shufflePlaylistSongs(
-        playlist: com.example.mymediaplayer.shared.PlaylistInfo,
-        songs: List<com.example.mymediaplayer.shared.MediaFileInfo>,
-        scannedFiles: List<com.example.mymediaplayer.shared.MediaFileInfo>,
-        discoveredPlaylists: List<com.example.mymediaplayer.shared.PlaylistInfo>
-    ) {
-        if (songs.isNotEmpty()) {
-            sendFilesToServiceIfNeeded(scannedFiles)
-            sendPlaylistsToServiceIfNeeded(discoveredPlaylists)
-            val mediaId = getPlaylistShuffleMediaId(playlist.uriString)
-            mediaController?.transportControls?.playFromMediaId(mediaId, null)
-        }
-    }
-
     @androidx.compose.runtime.Composable
     private fun MainAppContent(uiState: MainUiState) {
         MainScreen(
             uiState = uiState,
-            onSelectFolderWithLimit = ::handleSelectFolderWithLimit,
-            onChoosePlaylistSaveFolder = { openPlaylistDocumentTree.launch(null) },
+            onSelectFolderWithLimit = { limit, deepScan ->
+                pendingScanLimit = limit
+                pendingDeepScan = deepScan
+                openDocumentTree.launch(null)
+            },
+            onChoosePlaylistSaveFolder = {
+                openPlaylistDocumentTree.launch(null)
+            },
             onScanWholeDriveWithLimit = ::handleScanWholeDriveWithLimit,
             onFileClick = { file -> playFile(file, uiState.scan.scannedFiles) },
             onPlayPause = { togglePlayPause(uiState.playback.isPlaying) },
-            onStop = ::stopPlayback,
-            onNext = ::skipToNext,
-            onPrev = ::skipToPrevious,
+            onStop = { stopPlayback() },
+            onNext = { skipToNext() },
+            onPrev = { skipToPrevious() },
             onToggleRepeat = { toggleRepeatMode(uiState.playback.repeatMode) },
-            onQueueItemSelected = ::skipToQueueItem,
-            onSeekTo = ::seekTo,
-            onCreatePlaylist = viewModel::createRandomPlaylist,
-            onPlaylistMessageDismissed = viewModel::clearPlaylistMessage,
-            onFolderMessageDismissed = viewModel::clearFolderMessage,
-            onScanMessageDismissed = viewModel::clearScanMessage,
-            onTabSelected = viewModel::selectTab,
-            onAlbumSelected = viewModel::selectAlbum,
-            onAlbumSortModeChanged = viewModel::setAlbumSortMode,
-            onGenreSelected = viewModel::selectGenre,
-            onArtistSelected = viewModel::selectArtist,
-            onSearchQueryChanged = viewModel::updateSearchQuery,
-            onClearSearch = viewModel::clearSearch,
-            onClearCategorySelection = viewModel::clearCategorySelection,
-            onPlaylistSelected = viewModel::selectPlaylist,
-            onClearPlaylistSelection = viewModel::clearSelectedPlaylist,
-            onDeletePlaylist = viewModel::deletePlaylist,
-            onRenamePlaylist = viewModel::renamePlaylist,
-            onSavePlaylistEdits = viewModel::savePlaylistEdits,
+            onQueueItemSelected = { queueId -> skipToQueueItem(queueId) },
+            onSeekTo = { positionMs -> seekTo(positionMs) },
+            onCreatePlaylist = { count -> viewModel.createRandomPlaylist(count) },
+            onPlaylistMessageDismissed = { viewModel.clearPlaylistMessage() },
+            onFolderMessageDismissed = { viewModel.clearFolderMessage() },
+            onScanMessageDismissed = { viewModel.clearScanMessage() },
+            onTabSelected = { viewModel.selectTab(it) },
+            onAlbumSelected = { viewModel.selectAlbum(it) },
+            onAlbumSortModeChanged = { viewModel.setAlbumSortMode(it) },
+            onGenreSelected = { viewModel.selectGenre(it) },
+            onArtistSelected = { viewModel.selectArtist(it) },
+            onSearchQueryChanged = { viewModel.updateSearchQuery(it) },
+            onClearSearch = { viewModel.clearSearch() },
+            onClearCategorySelection = { viewModel.clearCategorySelection() },
+            onPlaylistSelected = { viewModel.selectPlaylist(it) },
+            onClearPlaylistSelection = { viewModel.clearSelectedPlaylist() },
+            onDeletePlaylist = { playlist -> viewModel.deletePlaylist(playlist) },
+            onRenamePlaylist = { playlist, newName ->
+                viewModel.renamePlaylist(playlist, newName)
+            },
+            onSavePlaylistEdits = { playlist, songs ->
+                viewModel.savePlaylistEdits(playlist, songs)
+            },
             onPlaySongs = { songs ->
                 playUiList(
                     songs = songs,
@@ -415,12 +393,18 @@ class MainActivity : ComponentActivity() {
             onShuffleSearchResults = { songs ->
                 playSearchResults(songs, shuffle = true)
             },
-            onAddToExistingPlaylist = viewModel::addManyToExistingPlaylist,
-            onCreatePlaylistFromSongs = viewModel::createPlaylistFromSongs,
+            onAddToExistingPlaylist = { playlist, files ->
+                viewModel.addManyToExistingPlaylist(playlist, files)
+            },
+            onCreatePlaylistFromSongs = { name, files ->
+                viewModel.createPlaylistFromSongs(name, files)
+            },
             onToggleFavorite = { file ->
                 viewModel.toggleFavorite(file.uriString)
             },
-            onToggleFlag = viewModel::toggleFlaggedUri,
+            onToggleFlag = { uri ->
+                viewModel.toggleFlaggedUri(uri)
+            },
             nowPlayingArt = nowPlayingArt.value,
             showPlaylistSaveFolderPrompt = showPlaylistSaveFolderPrompt.value,
             onDismissPlaylistSaveFolderPrompt = {
@@ -431,8 +415,20 @@ class MainActivity : ComponentActivity() {
                 openPlaylistDocumentTree.launch(null)
             },
             onOpenSettings = { showSettings.value = true },
-            onPlayPlaylist = { playlist -> playPlaylist(playlist, uiState.scan.scannedFiles, uiState.scan.discoveredPlaylists) },
-            onShufflePlaylistSongs = { playlist, songs -> shufflePlaylistSongs(playlist, songs, uiState.scan.scannedFiles, uiState.scan.discoveredPlaylists) }
+            onPlayPlaylist = { playlist ->
+                sendFilesToServiceIfNeeded(uiState.scan.scannedFiles)
+                sendPlaylistsToServiceIfNeeded(uiState.scan.discoveredPlaylists)
+                val mediaId = getPlaylistMediaId(playlist.uriString)
+                mediaController?.transportControls?.playFromMediaId(mediaId, null)
+            },
+            onShufflePlaylistSongs = { playlist, songs ->
+                if (songs.isNotEmpty()) {
+                    sendFilesToServiceIfNeeded(uiState.scan.scannedFiles)
+                    sendPlaylistsToServiceIfNeeded(uiState.scan.discoveredPlaylists)
+                    val mediaId = getPlaylistShuffleMediaId(playlist.uriString)
+                    mediaController?.transportControls?.playFromMediaId(mediaId, null)
+                }
+            }
         )
     }
 
