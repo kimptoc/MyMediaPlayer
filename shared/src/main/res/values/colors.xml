@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Notification accent — pins the Android 12+ app icon badge to the app's brand colour
+         rather than letting the system derive it from album art (which produces an arbitrary tint). -->
+    <color name="notification_color">#FF9900</color>
+</resources>

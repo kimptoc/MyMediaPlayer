@@ -3154,6 +3154,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
         val builder = NotificationCompat.Builder(this, NOW_PLAYING_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
+            .setColor(resources.getColor(R.color.notification_color, theme))
             .setContentTitle(title)
             .setContentText(artist)
             .setOnlyAlertOnce(true)
