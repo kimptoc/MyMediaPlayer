@@ -28,6 +28,14 @@ class ShadowMediaMetadataRetrieverThrowingRelease : ShadowMediaMetadataRetriever
     }
 }
 
+@Implements(MediaMetadataRetriever::class)
+class ShadowMediaMetadataRetrieverThrowingExtractMetadata : ShadowMediaMetadataRetriever() {
+    @Implementation
+    override fun extractMetadata(keyCode: Int): String? {
+        throw RuntimeException("Simulated extractMetadata exception")
+    }
+}
+
 @RunWith(RobolectricTestRunner::class)
 class MediaMetadataHelperTest {
 
@@ -123,6 +131,17 @@ class MediaMetadataHelperTest {
 
         val dataSource = DataSource.toDataSource(context, uri)
         ShadowMediaMetadataRetriever.addException(dataSource, IllegalStateException("Simulated state error"))
+
+        val result = MediaMetadataHelper.extractMetadata(context, uriString)
+
+        assertNull(result)
+    }
+
+    @Test
+    @Config(shadows = [ShadowMediaMetadataRetrieverThrowingExtractMetadata::class])
+    fun extractMetadata_whenExtractMetadataThrowsException_returnsNull() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val uriString = "content://something/valid/extractMetadataException"
 
         val result = MediaMetadataHelper.extractMetadata(context, uriString)
 
