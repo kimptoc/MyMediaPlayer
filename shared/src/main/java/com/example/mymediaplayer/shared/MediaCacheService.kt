@@ -1043,8 +1043,8 @@ class MediaCacheService {
         var start = 0
         var end = raw.length - 1
 
-        while (start <= end && raw[start] <= ' ') start++
-        while (end >= start && raw[end] <= ' ') end--
+        while (start <= end && raw[start].isWhitespace()) start++
+        while (end >= start && raw[end].isWhitespace()) end--
 
         if (start > end) return "Other"
 
@@ -1059,8 +1059,8 @@ class MediaCacheService {
 
             var ts = partStart
             var te = partEnd - 1
-            while (ts <= te && raw[ts] <= ' ') ts++
-            while (te >= ts && raw[te] <= ' ') te--
+            while (ts <= te && raw[ts].isWhitespace()) ts++
+            while (te >= ts && raw[te].isWhitespace()) te--
 
             if (ts <= te) {
                 return raw.substring(ts, te + 1)
