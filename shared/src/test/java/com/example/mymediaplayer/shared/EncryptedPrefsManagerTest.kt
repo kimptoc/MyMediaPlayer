@@ -27,6 +27,7 @@ class EncryptedPrefsManagerTest {
         companion object {
             var throwGeneralSecurityException = false
             var throwIOException = false
+            var throwException = false
 
             @Implementation
             @JvmStatic
@@ -42,6 +43,9 @@ class EncryptedPrefsManagerTest {
                 }
                 if (throwIOException) {
                     throw java.io.IOException("Mocked IOException")
+                }
+                if (throwException) {
+                    throw java.lang.Exception("Mocked Exception")
                 }
                 return context.getSharedPreferences(fileName + java.util.UUID.randomUUID().toString(), Context.MODE_PRIVATE)
             }
@@ -84,6 +88,15 @@ class EncryptedPrefsManagerTest {
         EncryptedPrefsManager.clearCacheForTesting()
         ShadowEncryptedSharedPreferences.throwGeneralSecurityException = false
         ShadowEncryptedSharedPreferences.throwIOException = false
+        ShadowEncryptedSharedPreferences.throwException = false
+    }
+
+    @Test
+    fun testCreateOrGet_throwsException() {
+        ShadowEncryptedSharedPreferences.throwException = true
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val prefs = EncryptedPrefsManager.createOrGet(context, "test_prefs_exception_fail")
+        org.junit.Assert.assertNull(prefs)
     }
 
     @Test
@@ -148,6 +161,7 @@ class EncryptedPrefsManagerTest {
         // Verify the internal prefsInstances map is actually cleared
         val field = EncryptedPrefsManager::class.java.getDeclaredField("prefsInstances")
         field.isAccessible = true
+        field.isAccessible = true
         val map = field.get(EncryptedPrefsManager) as Map<*, *>
 
         assertTrue(map.isEmpty())
@@ -160,5 +174,57 @@ class EncryptedPrefsManagerTest {
 
         prefs.edit().putString("key", "value").commit()
         assertEquals("value", prefs.getString("key", null))
+    }
+
+
+
+
+
+
+
+    @Test
+    fun testClearCache_catchesException() {
+        val field = EncryptedPrefsManager::class.java.getDeclaredField("prefsInstances")
+        field.isAccessible = true
+        val originalMap = field.get(EncryptedPrefsManager)
+
+        try {
+            val unsafeClass = Class.forName("sun.misc.Unsafe")
+            val theUnsafeField = unsafeClass.getDeclaredField("theUnsafe")
+            theUnsafeField.isAccessible = true
+            val unsafe = theUnsafeField.get(null)
+
+            val staticFieldOffsetMethod = unsafeClass.getMethod("staticFieldOffset", java.lang.reflect.Field::class.java)
+            val staticFieldBaseMethod = unsafeClass.getMethod("staticFieldBase", java.lang.reflect.Field::class.java)
+            val putObjectMethod = unsafeClass.getMethod("putObject", Any::class.java, Long::class.javaPrimitiveType, Any::class.java)
+
+            val offset = staticFieldOffsetMethod.invoke(unsafe, field) as Long
+            val base = staticFieldBaseMethod.invoke(unsafe, field)
+
+            val mockMap = object : java.util.concurrent.ConcurrentHashMap<String, SharedPreferences>() {
+                override fun clear() {
+                    throw RuntimeException("Mocked clear exception")
+                }
+            }
+
+            putObjectMethod.invoke(unsafe, base, offset, mockMap)
+
+            // This should catch the exception and not propagate it
+            EncryptedPrefsManager.clearCacheForTesting()
+        } finally {
+            val unsafeClass = Class.forName("sun.misc.Unsafe")
+            val theUnsafeField = unsafeClass.getDeclaredField("theUnsafe")
+            theUnsafeField.isAccessible = true
+            val unsafe = theUnsafeField.get(null)
+
+            val staticFieldOffsetMethod = unsafeClass.getMethod("staticFieldOffset", java.lang.reflect.Field::class.java)
+            val staticFieldBaseMethod = unsafeClass.getMethod("staticFieldBase", java.lang.reflect.Field::class.java)
+            val putObjectMethod = unsafeClass.getMethod("putObject", Any::class.java, Long::class.javaPrimitiveType, Any::class.java)
+
+            val offset = staticFieldOffsetMethod.invoke(unsafe, field) as Long
+            val base = staticFieldBaseMethod.invoke(unsafe, field)
+
+            putObjectMethod.invoke(unsafe, base, offset, originalMap)
+        }
     }
 }

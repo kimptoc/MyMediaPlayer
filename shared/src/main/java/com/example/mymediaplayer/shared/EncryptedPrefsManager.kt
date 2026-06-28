@@ -49,12 +49,20 @@ object EncryptedPrefsManager {
                 Log.e(TAG, "Failed to create EncryptedSharedPreferences for $fileName", e)
                 failedFileNames.add(fileName)
                 null
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to create EncryptedSharedPreferences for $fileName", e)
+                failedFileNames.add(fileName)
+                null
             }
         }
     }
 
     fun clearCacheForTesting() {
-        prefsInstances.clear()
-        failedFileNames.clear()
+        try {
+            prefsInstances.clear()
+            failedFileNames.clear()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to clear cache", e)
+        }
     }
 }
