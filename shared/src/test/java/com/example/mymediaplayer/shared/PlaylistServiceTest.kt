@@ -263,6 +263,16 @@ class PlaylistServiceTest {
     }
 
     @Test
+    fun generateM3uContent_returnsHeaderOnlyForEmptyList() {
+        val service = PlaylistService()
+        val files = emptyList<MediaFileInfo>()
+
+        val content = service.generateM3uContent(files)
+
+        assertTrue(content == "#EXTM3U\n")
+    }
+
+    @Test
     fun generateM3uContent_stripsNewlines() {
         val service = PlaylistService()
         val files = listOf(
