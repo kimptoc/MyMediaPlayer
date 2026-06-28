@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -224,6 +225,31 @@ class NetworkQualityCheckerTest {
 
         // After invalidate, it should re-evaluate and return the new value (POOR)
         assertEquals(NetworkQualityChecker.Quality.POOR, checker.check())
+    }
+
+    @Test
+    fun check_cancellationIsPropagated() = runBlocking {
+        setupNetworkForPing()
+
+        NetworkQualityChecker.testInterceptor = okhttp3.Interceptor { chain ->
+            Thread.sleep(500) // delay to ensure we can cancel while suspended
+            chain.proceed(chain.request())
+        }
+
+        var caughtException: Throwable? = null
+        val job = launch {
+            try {
+                checker.check()
+            } catch (e: Throwable) {
+                caughtException = e
+            }
+        }
+
+        kotlinx.coroutines.delay(100)
+        job.cancel()
+        job.join()
+
+        org.junit.Assert.assertTrue(caughtException is kotlinx.coroutines.CancellationException)
     }
 
     private fun setupNetworkForPing() {
