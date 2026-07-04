@@ -54,6 +54,11 @@ class EncryptedPrefsManagerTest {
 
     @Implements(androidx.security.crypto.MasterKey.Builder::class)
     class ShadowMasterKeyBuilder {
+        companion object {
+            var throwGeneralSecurityException = false
+            var throwIOException = false
+            var throwException = false
+        }
 
         @org.robolectric.annotation.RealObject
         lateinit var realObject: androidx.security.crypto.MasterKey.Builder
@@ -65,6 +70,16 @@ class EncryptedPrefsManagerTest {
 
         @Implementation
         fun build(): androidx.security.crypto.MasterKey {
+            if (throwGeneralSecurityException) {
+                throw java.security.GeneralSecurityException("Mocked GeneralSecurityException")
+            }
+            if (throwIOException) {
+                throw java.io.IOException("Mocked IOException")
+            }
+            if (throwException) {
+                throw java.lang.Exception("Mocked Exception")
+            }
+
             val cls = androidx.security.crypto.MasterKey::class.java
             val constructor = cls.declaredConstructors.firstOrNull { it.parameterTypes.size == 2 }
                  ?: error("Expected 2-param MasterKey constructor, found: ${cls.declaredConstructors.map { it.parameterTypes.size }}")
@@ -89,6 +104,33 @@ class EncryptedPrefsManagerTest {
         ShadowEncryptedSharedPreferences.throwGeneralSecurityException = false
         ShadowEncryptedSharedPreferences.throwIOException = false
         ShadowEncryptedSharedPreferences.throwException = false
+        ShadowMasterKeyBuilder.throwGeneralSecurityException = false
+        ShadowMasterKeyBuilder.throwIOException = false
+        ShadowMasterKeyBuilder.throwException = false
+    }
+
+    @Test
+    fun testCreateOrGet_masterKeyThrowsException() {
+        ShadowMasterKeyBuilder.throwException = true
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val prefs = EncryptedPrefsManager.createOrGet(context, "test_prefs_master_exception_fail")
+        org.junit.Assert.assertNull(prefs)
+    }
+
+    @Test
+    fun testCreateOrGet_masterKeyThrowsGeneralSecurityException() {
+        ShadowMasterKeyBuilder.throwGeneralSecurityException = true
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val prefs = EncryptedPrefsManager.createOrGet(context, "test_prefs_master_sec_fail")
+        org.junit.Assert.assertNull(prefs)
+    }
+
+    @Test
+    fun testCreateOrGet_masterKeyThrowsIOException() {
+        ShadowMasterKeyBuilder.throwIOException = true
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val prefs = EncryptedPrefsManager.createOrGet(context, "test_prefs_master_io_fail")
+        org.junit.Assert.assertNull(prefs)
     }
 
     @Test
