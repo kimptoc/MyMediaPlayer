@@ -164,4 +164,52 @@ class MediaItemBuildersTest {
         assertEquals("Pop/Dance", result[1].description.title)
     }
 
+    @Test
+    fun buildCategoryListItems_emptyCategories_returnsEmptyList() {
+        val result = buildCategoryListItems(emptyList(), "prefix")
+        assertEquals(0, result.size)
+    }
+
+    @Test
+    fun buildCategoryListItems_withCountsMissingCategory_doesNotSetSubtitle() {
+        val categories = listOf("Rock", "Pop")
+        val prefix = "category_prefix/"
+        val counts = mapOf("Rock" to 10) // Missing "Pop"
+
+        val result = buildCategoryListItems(categories, prefix, counts = counts)
+
+        assertEquals(2, result.size)
+
+        assertEquals("Rock", result[0].description.title)
+        assertEquals("10 songs", result[0].description.subtitle)
+
+        assertEquals("Pop", result[1].description.title)
+        assertNull(result[1].description.subtitle)
+    }
+
+    @Test
+    fun buildCategoryListItems_withZeroCount_showsZeroSongs() {
+        val categories = listOf("EmptyGenre")
+        val prefix = "category_prefix/"
+        val counts = mapOf("EmptyGenre" to 0)
+
+        val result = buildCategoryListItems(categories, prefix, counts = counts)
+
+        assertEquals(1, result.size)
+        assertEquals("EmptyGenre", result[0].description.title)
+        assertEquals("0 songs", result[0].description.subtitle)
+    }
+
+    @Test
+    fun buildCategoryListItems_withEmptyCategory_handlesEmptyString() {
+        val categories = listOf("")
+        val prefix = "category_prefix/"
+
+        val result = buildCategoryListItems(categories, prefix)
+
+        assertEquals(1, result.size)
+        assertEquals("category_prefix/", result[0].mediaId)
+        assertEquals("", result[0].description.title)
+    }
+
 }
