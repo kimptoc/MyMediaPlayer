@@ -65,7 +65,7 @@ class PlaylistServiceDeleteTest {
         val providerInfo = ProviderInfo().apply {
             authority = "test"
         }
-        Robolectric.buildContentProvider(MockDocumentProviderException::class.java).create(providerInfo)
+        Robolectric.buildContentProvider(MockDocumentProviderException::class.java).create(providerInfo).get()
 
         val uri = Uri.parse("content://test/playlist.m3u")
         val service = PlaylistService()
