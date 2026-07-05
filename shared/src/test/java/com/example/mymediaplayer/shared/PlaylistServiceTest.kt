@@ -8,6 +8,7 @@ import java.io.IOException
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -260,6 +261,43 @@ class PlaylistServiceTest {
         val result = service.writePlaylistWithName(baseContext, treeUri, files, "   ")
 
         assertNull(result)
+    }
+
+    @Test
+    fun generateM3uContent_withEmptyList_returnsOnlyHeader() {
+        val service = PlaylistService()
+        val content = service.generateM3uContent(emptyList())
+        assertEquals("#EXTM3U\n", content)
+    }
+
+    @Test
+    fun generateM3uContent_withEmptyStrings_handlesGracefully() {
+        val service = PlaylistService()
+        val files = listOf(
+            MediaFileInfo(
+                uriString = "",
+                displayName = "",
+                sizeBytes = 0L,
+                durationMs = -1000L
+            )
+        )
+        val content = service.generateM3uContent(files)
+        assertEquals("#EXTM3U\n#EXTINF:-1,\n\n", content)
+    }
+
+    @Test
+    fun generateM3uContent_withSpecialCharacters_preservesThem() {
+        val service = PlaylistService()
+        val files = listOf(
+            MediaFileInfo(
+                uriString = "content://test/🎵",
+                displayName = "Song 🎵 漢字",
+                sizeBytes = 1L,
+                durationMs = -1000L
+            )
+        )
+        val content = service.generateM3uContent(files)
+        assertEquals("#EXTM3U\n#EXTINF:-1,Song 🎵 漢字\ncontent://test/🎵\n", content)
     }
 
     @Test
