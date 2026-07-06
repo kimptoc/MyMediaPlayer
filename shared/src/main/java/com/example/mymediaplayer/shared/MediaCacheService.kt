@@ -227,7 +227,8 @@ class MediaCacheService {
         }
     }
 
-    private fun loadWholeDriveGenres(context: Context, audioIds: Set<Long>): Map<Long, String> {
+    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    internal fun loadWholeDriveGenres(context: Context, audioIds: Set<Long>): Map<Long, String> {
         if (audioIds.isEmpty()) return emptyMap()
         val resolver = context.contentResolver
         // Collect ALL genre assignments per audio ID, then pick the best one
