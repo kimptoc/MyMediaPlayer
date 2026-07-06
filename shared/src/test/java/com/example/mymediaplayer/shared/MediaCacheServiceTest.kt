@@ -18,6 +18,14 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
+import android.content.ContentProvider
+import android.content.ContentValues
+import android.content.pm.ProviderInfo
+import android.database.Cursor
+import android.database.MatrixCursor
+import android.provider.MediaStore
+import org.robolectric.Robolectric
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class MediaCacheServiceTest {
@@ -468,5 +476,94 @@ class MediaCacheServiceTest {
             phoneInstance.recordLoadFinished(context)
             serviceInstance.recordLoadFinished(context)
         }
+    }
+
+    @Test
+    fun loadWholeDriveGenres_withEmptyAudioIds_returnsEmptyMap() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val service = MediaCacheService()
+
+        val result = service.loadWholeDriveGenres(context, emptySet())
+
+        assertTrue("Result should be empty when audioIds is empty", result.isEmpty())
+    }
+
+    class MockMediaStoreProvider : android.content.ContentProvider() {
+        var genres = emptyList<Pair<Long, String>>()
+        var members = emptyMap<Long, List<Long>>()
+
+        override fun onCreate() = true
+
+        override fun query(uri: Uri, projection: Array<out String>?, selection: String?, selectionArgs: Array<out String>?, sortOrder: String?): android.database.Cursor? {
+            if (uri == android.provider.MediaStore.Audio.Genres.EXTERNAL_CONTENT_URI) {
+                val cursor = android.database.MatrixCursor(arrayOf(android.provider.MediaStore.Audio.Genres._ID, android.provider.MediaStore.Audio.Genres.NAME))
+                genres.forEach { (id, name) -> cursor.addRow(arrayOf<Any>(id, name)) }
+                return cursor
+            } else if (uri.toString().contains("members")) {
+                val pathSegments = uri.pathSegments
+                val genreId = pathSegments[pathSegments.size - 2].toLongOrNull() ?: return null
+                val cursor = android.database.MatrixCursor(arrayOf(android.provider.MediaStore.Audio.Genres.Members.AUDIO_ID))
+                members[genreId]?.forEach { audioId -> cursor.addRow(arrayOf<Any>(audioId)) }
+                return cursor
+            }
+            return null
+        }
+
+        override fun getType(uri: Uri) = null
+        override fun insert(uri: Uri, values: android.content.ContentValues?) = null
+        override fun delete(uri: Uri, selection: String?, selectionArgs: Array<out String>?) = 0
+        override fun update(uri: Uri, values: android.content.ContentValues?, selection: String?, selectionArgs: Array<out String>?) = 0
+    }
+
+    private fun setupProvider(genres: List<Pair<Long, String>>, members: Map<Long, List<Long>>) {
+        val providerInfo = android.content.pm.ProviderInfo().apply { authority = android.provider.MediaStore.AUTHORITY }
+        val controller = org.robolectric.Robolectric.buildContentProvider(MockMediaStoreProvider::class.java).create(providerInfo)
+        val provider = controller.get() as MockMediaStoreProvider
+        provider.genres = genres
+        provider.members = members
+    }
+
+    @Test
+    fun loadWholeDriveGenres_withValidAudioIds_returnsMappedGenres() {
+        setupProvider(
+            genres = listOf(1L to "Rock", 2L to "Pop"),
+            members = mapOf(1L to listOf(100L), 2L to listOf(200L))
+        )
+
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val service = MediaCacheService()
+        val result = service.loadWholeDriveGenres(context, setOf(100L, 200L))
+
+        assertEquals(2, result.size)
+        assertEquals("Rock", result[100L])
+        assertEquals("Pop", result[200L])
+    }
+
+    @Test
+    fun loadWholeDriveGenres_withConflictingBuckets_returnsNoGenreForAudioId() {
+        setupProvider(
+            genres = listOf(1L to "Rock", 2L to "Jazz"),
+            members = mapOf(1L to listOf(100L), 2L to listOf(100L))
+        )
+
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val service = MediaCacheService()
+        val result = service.loadWholeDriveGenres(context, setOf(100L))
+
+        assertTrue("Conflicting genres should cause fallback to empty map", result.isEmpty())
+    }
+
+    @Test
+    fun loadWholeDriveGenres_withEmptyGenreName_ignoresGenre() {
+        setupProvider(
+            genres = listOf(1L to "   "),
+            members = mapOf(1L to listOf(100L))
+        )
+
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val service = MediaCacheService()
+        val result = service.loadWholeDriveGenres(context, setOf(100L))
+
+        assertTrue(result.isEmpty())
     }
 }

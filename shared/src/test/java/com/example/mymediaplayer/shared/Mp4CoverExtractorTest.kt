@@ -104,6 +104,89 @@ class Mp4CoverExtractorTest {
         assertNull(result)
     }
 
+    @Test
+    fun extractCoverArt_withEmptyUri_returnsNull() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val result = Mp4CoverExtractor.extractCoverArt(context, "")
+        assertNull(result)
+    }
+
+    @Test
+    fun extractCoverArt_withPartialIOReads_returnsImageBytes() {
+        val imageBytes = byteArrayOf(1, 2, 3, 4)
+        val mp4 = atom("moov", meta(ilst(covr(imageBytes))))
+
+        val partialReadStream = object : java.io.InputStream() {
+            var index = 0
+            override fun read(): Int {
+                if (index < mp4.size) {
+                    return mp4[index++].toInt() and 0xFF
+                }
+                return -1
+            }
+            override fun read(b: ByteArray, off: Int, len: Int): Int {
+                if (index >= mp4.size) return -1
+                val toRead = minOf(1, len, mp4.size - index)
+                if (toRead <= 0) return 0
+                b[off] = mp4[index++]
+                return toRead
+            }
+        }
+
+        val result = Mp4CoverExtractor.extractCoverArt(partialReadStream)
+
+        assertNotNull(result)
+        assertArrayEquals(imageBytes, result!!)
+    }
+
+    @Test
+    fun extractCoverArt_withIoExceptionMidStream_throwsException() {
+        val mp4 = atom("moov", meta(ilst(covr(byteArrayOf(1, 2, 3, 4)))))
+        val exceptionStream = object : java.io.InputStream() {
+            var index = 0
+            override fun read(): Int {
+                if (index < 10) {
+                    return mp4[index++].toInt() and 0xFF
+                }
+                throw java.io.IOException("Test Exception")
+            }
+            override fun read(b: ByteArray, off: Int, len: Int): Int {
+                var bytesRead = 0
+                while (bytesRead < len) {
+                    val r = read()
+                    if (r == -1) {
+                        return if (bytesRead == 0) -1 else bytesRead
+                    }
+                    b[off + bytesRead] = r.toByte()
+                    bytesRead++
+                }
+                return bytesRead
+            }
+        }
+
+        org.junit.Assert.assertThrows(java.io.IOException::class.java) {
+            Mp4CoverExtractor.extractCoverArt(exceptionStream)
+        }
+    }
+
+    @Test
+    fun extractCoverArt_withUdtaWithoutMeta_returnsNull() {
+        val mp4 = atom("moov", atom("udta", atom("free", byteArrayOf(1, 2))))
+        val result = Mp4CoverExtractor.extractCoverArt(ByteArrayInputStream(mp4))
+        assertNull(result)
+    }
+
+    @Test
+    fun extractCoverArt_withMoovWithOtherAtomsBeforeMeta_returnsImageBytes() {
+        val imageBytes = byteArrayOf(1, 2, 3, 4)
+        val mp4 = atom("moov", atom("free", byteArrayOf(1, 2)) + meta(ilst(covr(imageBytes))))
+
+        val result = Mp4CoverExtractor.extractCoverArt(ByteArrayInputStream(mp4))
+
+        assertNotNull(result)
+        assertArrayEquals(imageBytes, result!!)
+    }
+
     private fun meta(vararg children: ByteArray): ByteArray {
         return atom("meta", byteArrayOf(0, 0, 0, 0) + concat(*children))
     }
