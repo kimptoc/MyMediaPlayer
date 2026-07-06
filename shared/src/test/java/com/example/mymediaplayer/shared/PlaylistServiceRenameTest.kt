@@ -15,98 +15,76 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.Implementation
 import org.robolectric.annotation.Implements
 
-@Implements(className = "androidx.documentfile.provider.SingleDocumentFile")
-class ShadowSingleDocumentFileRenameSecurityException {
-    @Implementation
-    fun renameTo(displayName: String?): Boolean {
-        throw SecurityException("Mock SecurityException")
-    }
+/**
+ * Controls what the shadowed `renameTo` call does for the currently running test.
+ * Robolectric instantiates shadow classes itself, so behavior is threaded through
+ * via this companion rather than a constructor argument.
+ */
+sealed class RenameToBehavior {
+    object ReturnFalse : RenameToBehavior()
+    object ReturnTrue : RenameToBehavior()
+    data class Throw(val exception: RuntimeException) : RenameToBehavior()
 }
 
 @Implements(className = "androidx.documentfile.provider.SingleDocumentFile")
-class ShadowSingleDocumentFileRenameException {
-    @Implementation
-    fun renameTo(displayName: String?): Boolean {
-        throw RuntimeException("Mock Exception")
+class ShadowSingleDocumentFileRename {
+    companion object {
+        var behavior: RenameToBehavior = RenameToBehavior.ReturnTrue
     }
-}
 
-@Implements(className = "androidx.documentfile.provider.SingleDocumentFile")
-class ShadowSingleDocumentFileRenameFalse {
     @Implementation
     fun renameTo(displayName: String?): Boolean {
-        return false
-    }
-}
-
-@Implements(className = "androidx.documentfile.provider.SingleDocumentFile")
-class ShadowSingleDocumentFileRenameSuccess {
-    @Implementation
-    fun renameTo(displayName: String?): Boolean {
-        return true
+        return when (val current = behavior) {
+            is RenameToBehavior.ReturnFalse -> false
+            is RenameToBehavior.ReturnTrue -> true
+            is RenameToBehavior.Throw -> throw current.exception
+        }
     }
 }
 
 @RunWith(RobolectricTestRunner::class)
+@Config(shadows = [ShadowSingleDocumentFileRename::class])
 class PlaylistServiceRenameTest {
 
+    private fun renamePlaylistWith(authority: String, behavior: RenameToBehavior): PlaylistInfo? {
+        ShadowSingleDocumentFileRename.behavior = behavior
+        val baseContext = ApplicationProvider.getApplicationContext<Context>()
+        val providerInfo = android.content.pm.ProviderInfo().apply {
+            this.authority = authority
+        }
+        Robolectric.buildContentProvider(MockDocumentProvider::class.java).create(providerInfo).get()
+        val uri = DocumentsContract.buildDocumentUri(authority, "123")
+
+        return PlaylistService().renamePlaylist(baseContext, uri, "new_name")
+    }
+
     @Test
-    @Config(shadows = [ShadowSingleDocumentFileRenameSecurityException::class])
     fun renamePlaylist_catchesSecurityException() {
-        val baseContext = ApplicationProvider.getApplicationContext<Context>()
-        val providerInfo = android.content.pm.ProviderInfo().apply {
-            authority = "mock.documents.rename.sec"
-        }
-        Robolectric.buildContentProvider(MockDocumentProvider::class.java).create(providerInfo).get()
-        val uri = DocumentsContract.buildDocumentUri("mock.documents.rename.sec", "123")
-
-        val service = PlaylistService()
-        val result = service.renamePlaylist(baseContext, uri, "new_name")
+        val result = renamePlaylistWith(
+            "mock.documents.rename.sec",
+            RenameToBehavior.Throw(SecurityException("Mock SecurityException"))
+        )
         assertNull(result)
     }
 
     @Test
-    @Config(shadows = [ShadowSingleDocumentFileRenameException::class])
-    fun renamePlaylist_catchesException() {
-        val baseContext = ApplicationProvider.getApplicationContext<Context>()
-        val providerInfo = android.content.pm.ProviderInfo().apply {
-            authority = "mock.documents.rename.exc"
-        }
-        Robolectric.buildContentProvider(MockDocumentProvider::class.java).create(providerInfo).get()
-        val uri = DocumentsContract.buildDocumentUri("mock.documents.rename.exc", "123")
-
-        val service = PlaylistService()
-        val result = service.renamePlaylist(baseContext, uri, "new_name")
+    fun renamePlaylist_catchesRuntimeException() {
+        val result = renamePlaylistWith(
+            "mock.documents.rename.exc",
+            RenameToBehavior.Throw(RuntimeException("Mock Exception"))
+        )
         assertNull(result)
     }
 
     @Test
-    @Config(shadows = [ShadowSingleDocumentFileRenameFalse::class])
     fun renamePlaylist_returnsNullWhenRenameToReturnsFalse() {
-        val baseContext = ApplicationProvider.getApplicationContext<Context>()
-        val providerInfo = android.content.pm.ProviderInfo().apply {
-            authority = "mock.documents.rename.false"
-        }
-        Robolectric.buildContentProvider(MockDocumentProvider::class.java).create(providerInfo).get()
-        val uri = DocumentsContract.buildDocumentUri("mock.documents.rename.false", "123")
-
-        val service = PlaylistService()
-        val result = service.renamePlaylist(baseContext, uri, "new_name")
+        val result = renamePlaylistWith("mock.documents.rename.false", RenameToBehavior.ReturnFalse)
         assertNull(result)
     }
 
     @Test
-    @Config(shadows = [ShadowSingleDocumentFileRenameSuccess::class])
     fun renamePlaylist_returnsPlaylistInfoWhenRenameToReturnsTrue() {
-        val baseContext = ApplicationProvider.getApplicationContext<Context>()
-        val providerInfo = android.content.pm.ProviderInfo().apply {
-            authority = "mock.documents.rename.true"
-        }
-        Robolectric.buildContentProvider(MockDocumentProvider::class.java).create(providerInfo).get()
-        val uri = DocumentsContract.buildDocumentUri("mock.documents.rename.true", "123")
-
-        val service = PlaylistService()
-        val result = service.renamePlaylist(baseContext, uri, "new_name")
+        val result = renamePlaylistWith("mock.documents.rename.true", RenameToBehavior.ReturnTrue)
 
         assertNotNull(result)
         assertEquals("new_name.m3u", result?.displayName)
