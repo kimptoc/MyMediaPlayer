@@ -1,6 +1,9 @@
 package com.example.mymediaplayer.shared
 
+import android.content.ContentProvider
+import android.content.ContentValues
 import android.content.Context
+import android.database.Cursor
 import android.net.Uri
 import android.provider.DocumentsContract
 import androidx.test.core.app.ApplicationProvider
@@ -14,6 +17,20 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.Implementation
 import org.robolectric.annotation.Implements
+
+/**
+ * Minimal ContentProvider stub so DocumentFile.fromSingleUri can resolve a document
+ * URI in these tests. Kept local to this file rather than reused from another test
+ * class, since the actual rename behavior comes entirely from [ShadowSingleDocumentFileRename].
+ */
+private class RenameMockDocumentProvider : ContentProvider() {
+    override fun onCreate() = true
+    override fun query(uri: Uri, projection: Array<out String>?, selection: String?, selectionArgs: Array<out String>?, sortOrder: String?): Cursor? = null
+    override fun getType(uri: Uri): String? = null
+    override fun insert(uri: Uri, values: ContentValues?): Uri? = null
+    override fun delete(uri: Uri, selection: String?, selectionArgs: Array<out String>?): Int = 0
+    override fun update(uri: Uri, values: ContentValues?, selection: String?, selectionArgs: Array<out String>?): Int = 0
+}
 
 /**
  * Controls what the shadowed `renameTo` call does for the currently running test.
@@ -52,7 +69,7 @@ class PlaylistServiceRenameTest {
         val providerInfo = android.content.pm.ProviderInfo().apply {
             this.authority = authority
         }
-        Robolectric.buildContentProvider(MockDocumentProvider::class.java).create(providerInfo).get()
+        Robolectric.buildContentProvider(RenameMockDocumentProvider::class.java).create(providerInfo).get()
         val uri = DocumentsContract.buildDocumentUri(authority, "123")
 
         return PlaylistService().renamePlaylist(baseContext, uri, "new_name")
