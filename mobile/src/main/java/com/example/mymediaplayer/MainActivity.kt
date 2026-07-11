@@ -389,7 +389,13 @@ private fun handleToggleRepeat(repeatMode: Int) {
         playUiList(
             songs = songs,
             shuffle = false,
-            queueTitle = queueTitleForCurrentUiList(viewModel.uiState.value)
+private fun handlePlaySongs(uiState: MainUiState, songs: List<com.example.mymediaplayer.shared.MediaFileInfo>) {
+    playUiList(
+        songs = songs,
+        shuffle = false,
+        queueTitle = queueTitleForCurrentUiList(uiState)
+    )
+}
         )
     }
 
