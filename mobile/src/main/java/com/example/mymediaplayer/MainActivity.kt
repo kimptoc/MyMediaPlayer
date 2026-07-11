@@ -289,7 +289,7 @@ class MainActivity : ComponentActivity() {
     }
 
     @androidx.compose.runtime.Composable
-    fun MediaPlayerAppContent() {
+    private fun MediaPlayerAppContent() {
         MaterialTheme {
             val uiState = viewModel.uiState.collectAsState()
             if (showSettings.value) {
@@ -338,7 +338,7 @@ class MainActivity : ComponentActivity() {
         openDocumentTree.launch(null)
     }
 
-    fun playPlaylist(
+    private fun playPlaylist(
         playlist: com.example.mymediaplayer.shared.PlaylistInfo,
         scannedFiles: List<com.example.mymediaplayer.shared.MediaFileInfo>,
         discoveredPlaylists: List<com.example.mymediaplayer.shared.PlaylistInfo>
@@ -349,7 +349,7 @@ class MainActivity : ComponentActivity() {
         mediaController?.transportControls?.playFromMediaId(mediaId, null)
     }
 
-    fun shufflePlaylistSongs(
+    private fun shufflePlaylistSongs(
         playlist: com.example.mymediaplayer.shared.PlaylistInfo,
         songs: List<com.example.mymediaplayer.shared.MediaFileInfo>,
         scannedFiles: List<com.example.mymediaplayer.shared.MediaFileInfo>,
