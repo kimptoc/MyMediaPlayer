@@ -374,7 +374,9 @@ private fun handleFileClick(uiState: MainUiState, file: com.example.mymediaplaye
     }
 
     private fun handlePlayPause() {
-        togglePlayPause(viewModel.uiState.value.playback.isPlaying)
+private fun handlePlayPause(isPlaying: Boolean) {
+    togglePlayPause(isPlaying)
+}
     }
 
     private fun handleToggleRepeat() {
