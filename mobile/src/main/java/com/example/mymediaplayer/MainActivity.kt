@@ -403,7 +403,13 @@ private fun handlePlaySongs(uiState: MainUiState, songs: List<com.example.mymedi
         playUiList(
             songs = songs,
             shuffle = true,
-            queueTitle = queueTitleForCurrentUiList(viewModel.uiState.value)
+private fun handleShuffleSongs(uiState: MainUiState, songs: List<com.example.mymediaplayer.shared.MediaFileInfo>) {
+    playUiList(
+        songs = songs,
+        shuffle = true,
+        queueTitle = queueTitleForCurrentUiList(uiState)
+    )
+}
         )
     }
 
