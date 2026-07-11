@@ -109,7 +109,18 @@ object ApiKeyStore {
                         }
                     }
 
-                    override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
+override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
+    response.use { response ->
+        response.body!!.string() // Consume the body even if we don't use it
+        if (continuation.isActive) {
+            if (response.code != 200) {
+                continuation.resume(ValidationResult.Error("HTTP ${response.code}: API request failed"))
+            } else {
+                continuation.resume(ValidationResult.Success)
+            }
+        }
+    }
+}
                         response.use {
                             if (continuation.isActive) {
                                 if (it.code != 200) {
