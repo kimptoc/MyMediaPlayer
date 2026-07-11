@@ -5,16 +5,9 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.util.Log
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.suspendCancellableCoroutine
-import okhttp3.Call
-import okhttp3.Callback
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.Response
-import java.io.IOException
 import java.util.concurrent.TimeUnit
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 
 internal class NetworkQualityChecker(private val context: Context) {
 
@@ -56,9 +49,9 @@ internal class NetworkQualityChecker(private val context: Context) {
                 .head()
                 .build()
 
-            val response = okHttpClient.newCall(request).await()
-            val mockLatency = response.header("X-Mock-Latency")?.toLongOrNull()
-            response.close()
+            val mockLatency = okHttpClient.newCall(request).await { response ->
+                response.header("X-Mock-Latency")?.toLongOrNull()
+            }
 
             mockLatency ?: (System.currentTimeMillis() - start)
         }.getOrElse { e ->
