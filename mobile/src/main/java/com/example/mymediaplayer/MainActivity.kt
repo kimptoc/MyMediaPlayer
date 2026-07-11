@@ -365,7 +365,9 @@ class MainActivity : ComponentActivity() {
 
     private fun launchOpenPlaylistDocumentTree() {
         openPlaylistDocumentTree.launch(null)
-    }
+private fun handleFileClick(uiState: MainUiState, file: com.example.mymediaplayer.shared.MediaFileInfo) {
+    playFile(file, uiState.scan.scannedFiles)
+}
 
     private fun handleFileClick(file: com.example.mymediaplayer.shared.MediaFileInfo) {
         playFile(file, viewModel.uiState.value.scan.scannedFiles)
