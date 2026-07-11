@@ -301,7 +301,7 @@ class MainActivity : ComponentActivity() {
     }
 
     @androidx.compose.runtime.Composable
-    fun SettingsAppContent() {
+    private fun SettingsAppContent() {
         SettingsScreen(
             trackVoiceIntroEnabled = trackVoiceIntroEnabled.value,
             trackVoiceOutroEnabled = trackVoiceOutroEnabled.value,
@@ -332,7 +332,7 @@ class MainActivity : ComponentActivity() {
     }
 
 
-    fun handleSelectFolderWithLimit(limit: Int, deepScan: Boolean) {
+    private fun handleSelectFolderWithLimit(limit: Int, deepScan: Boolean) {
         pendingScanLimit = limit
         pendingDeepScan = deepScan
         openDocumentTree.launch(null)
@@ -365,21 +365,15 @@ class MainActivity : ComponentActivity() {
 
     private fun launchOpenPlaylistDocumentTree() {
         openPlaylistDocumentTree.launch(null)
-private fun handleFileClick(uiState: MainUiState, file: com.example.mymediaplayer.shared.MediaFileInfo) {
-    playFile(file, uiState.scan.scannedFiles)
-}
+    }
 
     private fun handleFileClick(file: com.example.mymediaplayer.shared.MediaFileInfo) {
         playFile(file, viewModel.uiState.value.scan.scannedFiles)
-private fun handlePlayPause(uiState: MainUiState) {
-    togglePlayPause(uiState.playback.isPlaying)
-}
+    }
 
     private fun handlePlayPause() {
         togglePlayPause(viewModel.uiState.value.playback.isPlaying)
-private fun handleToggleRepeat(uiState: MainUiState) {
-    toggleRepeatMode(uiState.playback.repeatMode)
-}
+    }
 
     private fun handleToggleRepeat() {
         toggleRepeatMode(viewModel.uiState.value.playback.repeatMode)
@@ -394,13 +388,7 @@ private fun handleToggleRepeat(uiState: MainUiState) {
     }
 
     private fun handleShuffleSongs(songs: List<com.example.mymediaplayer.shared.MediaFileInfo>) {
-private fun handleShuffleSongs(uiState: MainUiState, songs: List<com.example.mymediaplayer.shared.MediaFileInfo>) {
-    playUiList(
-        songs = songs,
-        shuffle = true,
-        queueTitle = queueTitleForCurrentUiList(uiState)
-    )
-}
+        playUiList(
             songs = songs,
             shuffle = true,
             queueTitle = queueTitleForCurrentUiList(viewModel.uiState.value)
@@ -430,22 +418,18 @@ private fun handleShuffleSongs(uiState: MainUiState, songs: List<com.example.mym
 
     private fun handleOpenSettings() {
         showSettings.value = true
-private fun handlePlayPlaylist(uiState: MainUiState, playlist: com.example.mymediaplayer.shared.PlaylistInfo) {
-    playPlaylist(playlist, uiState.scan.scannedFiles, uiState.scan.discoveredPlaylists)
-}
+    }
 
     private fun handlePlayPlaylist(playlist: com.example.mymediaplayer.shared.PlaylistInfo) {
         playPlaylist(playlist, viewModel.uiState.value.scan.scannedFiles, viewModel.uiState.value.scan.discoveredPlaylists)
-private fun handleShufflePlaylistSongs(uiState: MainUiState, playlist: com.example.mymediaplayer.shared.PlaylistInfo, songs: List<com.example.mymediaplayer.shared.MediaFileInfo>) {
-    shufflePlaylistSongs(playlist, songs, uiState.scan.scannedFiles, uiState.scan.discoveredPlaylists)
-}
+    }
 
     private fun handleShufflePlaylistSongs(playlist: com.example.mymediaplayer.shared.PlaylistInfo, songs: List<com.example.mymediaplayer.shared.MediaFileInfo>) {
         shufflePlaylistSongs(playlist, songs, viewModel.uiState.value.scan.scannedFiles, viewModel.uiState.value.scan.discoveredPlaylists)
     }
 
     @androidx.compose.runtime.Composable
-    fun MainAppContent(uiState: MainUiState) {
+    private fun MainAppContent(uiState: MainUiState) {
         MainScreen(
             uiState = uiState,
             onSelectFolderWithLimit = ::handleSelectFolderWithLimit,
@@ -494,7 +478,7 @@ private fun handleShufflePlaylistSongs(uiState: MainUiState, playlist: com.examp
         )
     }
 
-    fun playFile(
+    private fun playFile(
         file: com.example.mymediaplayer.shared.MediaFileInfo,
         scannedFiles: List<com.example.mymediaplayer.shared.MediaFileInfo>
     ) {
@@ -502,7 +486,7 @@ private fun handleShufflePlaylistSongs(uiState: MainUiState, playlist: com.examp
         mediaController?.transportControls?.playFromMediaId(file.uriString, null)
     }
 
-    fun togglePlayPause(isPlaying: Boolean) {
+    private fun togglePlayPause(isPlaying: Boolean) {
         if (isPlaying) {
             mediaController?.transportControls?.pause()
         } else {
@@ -510,19 +494,19 @@ private fun handleShufflePlaylistSongs(uiState: MainUiState, playlist: com.examp
         }
     }
 
-    fun stopPlayback() {
+    private fun stopPlayback() {
         mediaController?.transportControls?.stop()
     }
 
-    fun skipToNext() {
+    private fun skipToNext() {
         mediaController?.transportControls?.skipToNext()
     }
 
-    fun skipToPrevious() {
+    private fun skipToPrevious() {
         mediaController?.transportControls?.skipToPrevious()
     }
 
-    fun toggleRepeatMode(currentMode: Int) {
+    private fun toggleRepeatMode(currentMode: Int) {
         val nextMode = when (currentMode) {
             PlaybackStateCompat.REPEAT_MODE_ALL -> PlaybackStateCompat.REPEAT_MODE_ONE
             PlaybackStateCompat.REPEAT_MODE_ONE -> PlaybackStateCompat.REPEAT_MODE_NONE
@@ -531,15 +515,15 @@ private fun handleShufflePlaylistSongs(uiState: MainUiState, playlist: com.examp
         mediaController?.transportControls?.setRepeatMode(nextMode)
     }
 
-    fun skipToQueueItem(queueId: Long) {
+    private fun skipToQueueItem(queueId: Long) {
         mediaController?.transportControls?.skipToQueueItem(queueId)
     }
 
-    fun seekTo(positionMs: Long) {
+    private fun seekTo(positionMs: Long) {
         mediaController?.transportControls?.seekTo(positionMs)
     }
 
-    fun observeViewModel() {
+    private fun observeViewModel() {
         lifecycleScope.launch {
             viewModel.uiState.collect { state ->
                 if (state.scan.scannedFiles.isNotEmpty()) {
@@ -552,7 +536,7 @@ private fun handleShufflePlaylistSongs(uiState: MainUiState, playlist: com.examp
         }
     }
 
-    fun setupMediaBrowser() {
+    private fun setupMediaBrowser() {
         mediaBrowser = MediaBrowserCompat(
             this,
             ComponentName(this, MyMusicService::class.java),
@@ -561,7 +545,7 @@ private fun handleShufflePlaylistSongs(uiState: MainUiState, playlist: com.examp
         ).apply { connect() }
     }
 
-    fun loadPreferences() {
+    private fun loadPreferences() {
         bluetoothAutoPlayEnabled.value = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
             .getBoolean(KEY_BT_AUTOPLAY_ENABLED, false)
         trackVoiceIntroEnabled.value = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
@@ -577,7 +561,7 @@ private fun handleShufflePlaylistSongs(uiState: MainUiState, playlist: com.examp
             ?.getString(com.example.mymediaplayer.shared.ApiKeyStore.KEY_CLOUD_TTS, "") ?: ""
     }
 
-    fun maybeRequestPostNotifications() {
+    private fun maybeRequestPostNotifications() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
         val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         if (
@@ -629,7 +613,7 @@ private fun handleShufflePlaylistSongs(uiState: MainUiState, playlist: com.examp
         handleIncomingIntent(intent)
     }
 
-    fun pushPlaybackState() {
+    private fun pushPlaybackState() {
         val state = lastPlaybackState?.state ?: PlaybackStateCompat.STATE_NONE
         val mediaId = lastMetadata?.getString(MediaMetadataCompat.METADATA_KEY_MEDIA_ID)
         val trackName = lastMetadata?.getString(MediaMetadataCompat.METADATA_KEY_TITLE)
@@ -665,7 +649,7 @@ private fun handleShufflePlaylistSongs(uiState: MainUiState, playlist: com.examp
         )
     }
 
-    fun pushQueueState() {
+    private fun pushQueueState() {
         val controller = mediaController ?: return
         val queueTitle = controller.queueTitle?.toString()
 
@@ -690,7 +674,7 @@ private fun handleShufflePlaylistSongs(uiState: MainUiState, playlist: com.examp
         viewModel.updateQueueState(queueTitle, queueItems, activeQueueId)
     }
 
-    fun restoreLastTreeUri() {
+    private fun restoreLastTreeUri() {
         val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         val playlistUriString = prefs.getString(KEY_PLAYLIST_TREE_URI, null)
         if (playlistUriString != null) {
@@ -731,7 +715,7 @@ private fun handleShufflePlaylistSongs(uiState: MainUiState, playlist: com.examp
         viewModel.onDirectorySelected(uri, limit, deepScan = deepScan)
     }
 
-    fun sendFilesToServiceIfNeeded(files: List<com.example.mymediaplayer.shared.MediaFileInfo>) {
+    private fun sendFilesToServiceIfNeeded(files: List<com.example.mymediaplayer.shared.MediaFileInfo>) {
         val controller = mediaController ?: return
         if (files.size > MAX_MEDIA_FILES_FOR_BUNDLE) {
             if (lastSentLargeLibraryCount == files.size) return
@@ -783,7 +767,7 @@ private fun handleShufflePlaylistSongs(uiState: MainUiState, playlist: com.examp
         lastSentLargeLibraryCount = null
     }
 
-    fun sendPlaylistsToServiceIfNeeded(playlists: List<PlaylistInfo>) {
+    private fun sendPlaylistsToServiceIfNeeded(playlists: List<PlaylistInfo>) {
         val controller = mediaController ?: return
         val uris = playlists.mapTo(ArrayList<String>(playlists.size)) { it.uriString }
         if (uris == lastSentPlaylistUris) return
@@ -796,7 +780,7 @@ private fun handleShufflePlaylistSongs(uiState: MainUiState, playlist: com.examp
         lastSentPlaylistUris = uris
     }
 
-    fun playSearchResults(songs: List<com.example.mymediaplayer.shared.MediaFileInfo>, shuffle: Boolean) {
+    private fun playSearchResults(songs: List<com.example.mymediaplayer.shared.MediaFileInfo>, shuffle: Boolean) {
         val controller = mediaController ?: return
         if (songs.isEmpty()) return
         if (songs.size > MAX_MEDIA_FILES_FOR_BUNDLE) {
@@ -813,7 +797,7 @@ private fun handleShufflePlaylistSongs(uiState: MainUiState, playlist: com.examp
         controller.transportControls.sendCustomAction(ACTION_PLAY_SEARCH_LIST, bundle)
     }
 
-    fun playUiList(
+    private fun playUiList(
         songs: List<com.example.mymediaplayer.shared.MediaFileInfo>,
         shuffle: Boolean,
         queueTitle: String
@@ -843,7 +827,7 @@ private fun handleShufflePlaylistSongs(uiState: MainUiState, playlist: com.examp
         controller.transportControls.sendCustomAction(ACTION_PLAY_UI_LIST, bundle)
     }
 
-    fun queueTitleForCurrentUiList(state: MainUiState): String {
+    private fun queueTitleForCurrentUiList(state: MainUiState): String {
         val lib = state.library
         return when (lib.selectedTab) {
             LibraryTab.Albums -> lib.selectedAlbum ?: "Albums"
@@ -853,7 +837,7 @@ private fun handleShufflePlaylistSongs(uiState: MainUiState, playlist: com.examp
         }
     }
 
-    fun sendTrackVoiceIntroSettingToService() {
+    private fun sendTrackVoiceIntroSettingToService() {
         val controller = mediaController ?: return
         val bundle = Bundle().apply {
             putBoolean(EXTRA_TRACK_VOICE_INTRO_ENABLED, trackVoiceIntroEnabled.value)
@@ -861,7 +845,7 @@ private fun handleShufflePlaylistSongs(uiState: MainUiState, playlist: com.examp
         controller.transportControls.sendCustomAction(ACTION_SET_TRACK_VOICE_INTRO, bundle)
     }
 
-    fun sendTrackVoiceOutroSettingToService() {
+    private fun sendTrackVoiceOutroSettingToService() {
         val controller = mediaController ?: return
         val bundle = Bundle().apply {
             putBoolean(EXTRA_TRACK_VOICE_OUTRO_ENABLED, trackVoiceOutroEnabled.value)
@@ -869,7 +853,7 @@ private fun handleShufflePlaylistSongs(uiState: MainUiState, playlist: com.examp
         controller.transportControls.sendCustomAction(ACTION_SET_TRACK_VOICE_OUTRO, bundle)
     }
 
-    fun sendDebugCloudSettingToService(enabled: Boolean) {
+    private fun sendDebugCloudSettingToService(enabled: Boolean) {
         val controller = mediaController ?: return
         val bundle = Bundle().apply {
             putBoolean("debug_cloud_enabled", enabled)
@@ -877,7 +861,7 @@ private fun handleShufflePlaylistSongs(uiState: MainUiState, playlist: com.examp
         controller.transportControls.sendCustomAction(ACTION_SET_DEBUG_CLOUD, bundle)
     }
 
-    fun handleIncomingIntent(intent: Intent?) {
+    private fun handleIncomingIntent(intent: Intent?) {
         if (intent?.action != ACTION_MEDIA_PLAY_FROM_SEARCH) return
 
         val rawQuery = try {
@@ -913,7 +897,7 @@ private fun handleShufflePlaylistSongs(uiState: MainUiState, playlist: com.examp
         dispatchPendingVoiceSearchIfNeeded()
     }
 
-    fun dispatchPendingVoiceSearchIfNeeded() {
+    private fun dispatchPendingVoiceSearchIfNeeded() {
         val controller = mediaController ?: return
         val query = pendingVoiceSearchQuery ?: return
         val extras = pendingVoiceSearchExtras ?: Bundle()
@@ -922,7 +906,7 @@ private fun handleShufflePlaylistSongs(uiState: MainUiState, playlist: com.examp
         pendingVoiceSearchExtras = null
     }
 
-    fun handleScanWholeDriveWithLimit(limit: Int) {
+    private fun handleScanWholeDriveWithLimit(limit: Int) {
         if (hasMediaReadPermission()) {
             getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit {
                 putInt(KEY_SCAN_LIMIT, limit)
@@ -935,7 +919,7 @@ private fun handleShufflePlaylistSongs(uiState: MainUiState, playlist: com.examp
         }
     }
 
-    fun toggleBluetoothAutoPlay() {
+    private fun toggleBluetoothAutoPlay() {
         if (!hasBluetoothConnectPermission()) {
             requestBluetoothConnectPermission()
             return
@@ -952,7 +936,7 @@ private fun handleShufflePlaylistSongs(uiState: MainUiState, playlist: com.examp
         ).show()
     }
 
-    fun toggleTrackVoiceIntro() {
+    private fun toggleTrackVoiceIntro() {
         trackVoiceIntroEnabled.value = !trackVoiceIntroEnabled.value
         getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit {
             putBoolean(KEY_TRACK_VOICE_INTRO_ENABLED, trackVoiceIntroEnabled.value)
@@ -965,7 +949,7 @@ private fun handleShufflePlaylistSongs(uiState: MainUiState, playlist: com.examp
         ).show()
     }
 
-    fun toggleTrackVoiceOutro() {
+    private fun toggleTrackVoiceOutro() {
         trackVoiceOutroEnabled.value = !trackVoiceOutroEnabled.value
         getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit {
             putBoolean(KEY_TRACK_VOICE_OUTRO_ENABLED, trackVoiceOutroEnabled.value)
@@ -979,7 +963,7 @@ private fun handleShufflePlaylistSongs(uiState: MainUiState, playlist: com.examp
     }
 
     @android.annotation.SuppressLint("MissingPermission")
-    fun addCurrentBluetoothDeviceToAllowlist() {
+    private fun addCurrentBluetoothDeviceToAllowlist() {
         if (!hasBluetoothConnectPermission()) {
             requestBluetoothConnectPermission()
             return
@@ -1010,7 +994,7 @@ private fun handleShufflePlaylistSongs(uiState: MainUiState, playlist: com.examp
         Toast.makeText(this, "Trusted ${additions.size} Bluetooth device(s)", Toast.LENGTH_SHORT).show()
     }
 
-    fun removeTrustedBluetoothDevice(address: String) {
+    private fun removeTrustedBluetoothDevice(address: String) {
         val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         val existing = readTrustedBluetoothDevices(prefs).toMutableMap()
         if (existing.remove(address) == null) return
@@ -1019,20 +1003,20 @@ private fun handleShufflePlaylistSongs(uiState: MainUiState, playlist: com.examp
         Toast.makeText(this, "Removed trusted device", Toast.LENGTH_SHORT).show()
     }
 
-    fun clearTrustedBluetoothDevices() {
+    private fun clearTrustedBluetoothDevices() {
         val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         persistTrustedBluetoothDevices(prefs, emptyMap())
         refreshBluetoothState()
         Toast.makeText(this, "Cleared trusted devices", Toast.LENGTH_SHORT).show()
     }
 
-    fun requestBluetoothConnectPermission() {
+    private fun requestBluetoothConnectPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             bluetoothPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
         }
     }
 
-    fun hasBluetoothConnectPermission(): Boolean {
+    private fun hasBluetoothConnectPermission(): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
         return ContextCompat.checkSelfPermission(
             this,
@@ -1040,7 +1024,7 @@ private fun handleShufflePlaylistSongs(uiState: MainUiState, playlist: com.examp
         ) == android.content.pm.PackageManager.PERMISSION_GRANTED
     }
 
-    fun requiredMediaReadPermission(): String {
+    private fun requiredMediaReadPermission(): String {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             Manifest.permission.READ_MEDIA_AUDIO
         } else {
@@ -1048,14 +1032,14 @@ private fun handleShufflePlaylistSongs(uiState: MainUiState, playlist: com.examp
         }
     }
 
-    fun hasMediaReadPermission(): Boolean {
+    private fun hasMediaReadPermission(): Boolean {
         return ContextCompat.checkSelfPermission(
             this,
             requiredMediaReadPermission()
         ) == android.content.pm.PackageManager.PERMISSION_GRANTED
     }
 
-    fun hasValidPlaylistSaveFolder(): Boolean {
+    private fun hasValidPlaylistSaveFolder(): Boolean {
         val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         val uriString = prefs.getString(KEY_PLAYLIST_TREE_URI, null) ?: return false
         val uri = uriString.toUri()
@@ -1064,7 +1048,7 @@ private fun handleShufflePlaylistSongs(uiState: MainUiState, playlist: com.examp
         }
     }
 
-    fun refreshBluetoothState() {
+    private fun refreshBluetoothState() {
         val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         trustedBluetoothDevices.value = readTrustedBluetoothDevices(prefs)
             .map { (address, name) -> TrustedBluetoothDevice(address = address, name = name) }
@@ -1100,7 +1084,7 @@ private fun handleShufflePlaylistSongs(uiState: MainUiState, playlist: com.examp
         }
     }
 
-    fun getPlaylistMediaId(uriString: String): String {
+    private fun getPlaylistMediaId(uriString: String): String {
         return if (uriString.startsWith(MainViewModel.SMART_PREFIX)) {
             val smartId = uriString.removePrefix(MainViewModel.SMART_PREFIX)
             SMART_PLAYLIST_PREFIX + Uri.encode(smartId)
@@ -1109,7 +1093,7 @@ private fun handleShufflePlaylistSongs(uiState: MainUiState, playlist: com.examp
         }
     }
 
-    fun getPlaylistShuffleMediaId(uriString: String): String {
+    private fun getPlaylistShuffleMediaId(uriString: String): String {
         val listKey = if (uriString.startsWith(MainViewModel.SMART_PREFIX)) {
             val smartId = uriString.removePrefix(MainViewModel.SMART_PREFIX)
             SMART_PLAYLIST_PREFIX + Uri.encode(smartId)
@@ -1119,7 +1103,7 @@ private fun handleShufflePlaylistSongs(uiState: MainUiState, playlist: com.examp
         return ACTION_SHUFFLE_PREFIX + listKey
     }
 
-    fun formatElapsed(elapsedMs: Long): String {
+    private fun formatElapsed(elapsedMs: Long): String {
         val totalSeconds = elapsedMs / 1000
         val hours = totalSeconds / 3600
         val minutes = (totalSeconds % 3600) / 60
@@ -1127,7 +1111,7 @@ private fun handleShufflePlaylistSongs(uiState: MainUiState, playlist: com.examp
         return String.format(Locale.US, "%02d:%02d:%02d", hours, minutes, seconds)
     }
 
-    fun readTrustedBluetoothDevices(
+    private fun readTrustedBluetoothDevices(
         prefs: android.content.SharedPreferences
     ): Map<String, String?> {
         val raw = prefs.getString(KEY_BT_AUTOPLAY_DEVICES, null).orEmpty()
@@ -1151,7 +1135,7 @@ private fun handleShufflePlaylistSongs(uiState: MainUiState, playlist: com.examp
         return decoded
     }
 
-    fun saveCloudAnnouncementKeys(kilo: String, tts: String, onValidated: () -> Unit) {
+    private fun saveCloudAnnouncementKeys(kilo: String, tts: String, onValidated: () -> Unit) {
         cloudAnnouncementKiloKey.value = kilo
         cloudAnnouncementTtsKey.value = tts
         ApiKeyStore.getPrefs(this)?.edit {
@@ -1173,7 +1157,7 @@ private fun handleShufflePlaylistSongs(uiState: MainUiState, playlist: com.examp
         }
     }
 
-    fun persistTrustedBluetoothDevices(
+    private fun persistTrustedBluetoothDevices(
         prefs: android.content.SharedPreferences,
         devices: Map<String, String?>
     ) {
