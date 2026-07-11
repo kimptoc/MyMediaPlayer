@@ -371,7 +371,9 @@ private fun handleFileClick(uiState: MainUiState, file: com.example.mymediaplaye
 
     private fun handleFileClick(file: com.example.mymediaplayer.shared.MediaFileInfo) {
         playFile(file, viewModel.uiState.value.scan.scannedFiles)
-    }
+private fun handlePlayPause(uiState: MainUiState) {
+    togglePlayPause(uiState.playback.isPlaying)
+}
 
     private fun handlePlayPause() {
         togglePlayPause(viewModel.uiState.value.playback.isPlaying)
