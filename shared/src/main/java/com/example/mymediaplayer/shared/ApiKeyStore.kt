@@ -5,11 +5,16 @@ import android.content.SharedPreferences
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.CancellationException
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import kotlin.coroutines.resume
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.OutputStreamWriter
 import java.net.URL
-import javax.net.ssl.HttpsURLConnection
 
 /**
  * Secure storage for API keys used by [AnnouncementPreGenerator].
@@ -27,6 +32,17 @@ object ApiKeyStore {
 
     private const val TAG = "ApiKeyStore"
     private const val ENCRYPTED_PREFS_NAME = "mymediaplayer_api_keys"
+
+
+    internal var testInterceptor: okhttp3.Interceptor? = null
+
+    private val okHttpClient by lazy {
+        OkHttpClient.Builder()
+            .connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
+            .apply { testInterceptor?.let { addInterceptor(it) } }
+            .build()
+    }
 
     sealed class ValidationResult {
         data object Success : ValidationResult()
@@ -63,15 +79,8 @@ object ApiKeyStore {
             if (!"https".equals(url.protocol, ignoreCase = true)) {
                 return@withContext ValidationResult.Error("Endpoint must use HTTPS")
             }
-            val conn = url.openConnection() as HttpsURLConnection
-            conn.connectTimeout = 5_000
-            conn.readTimeout = 8_000
-            conn.requestMethod = "POST"
-            conn.setRequestProperty("Authorization", "Bearer $apiKey")
-            conn.setRequestProperty("content-type", "application/json")
-            conn.doOutput = true
 
-            val body = JSONObject().apply {
+            val bodyStr = JSONObject().apply {
                 put("model", "kilo/auto")
                 put("max_tokens", 10)
                 put("messages", JSONArray().put(
@@ -82,14 +91,39 @@ object ApiKeyStore {
                 ))
             }.toString()
 
-            OutputStreamWriter(conn.outputStream).use { it.write(body) }
+            val request = Request.Builder()
+                .url(url)
+                .header("Authorization", "Bearer $apiKey")
+                .post(bodyStr.toRequestBody("application/json".toMediaType()))
+                .build()
 
-            if (conn.responseCode != 200) {
-                return@withContext ValidationResult.Error("HTTP ${conn.responseCode}: API request failed")
+            suspendCancellableCoroutine<ValidationResult> { continuation ->
+                val call = okHttpClient.newCall(request)
+                continuation.invokeOnCancellation {
+                    call.cancel()
+                }
+                call.enqueue(object : okhttp3.Callback {
+                    override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
+                        if (continuation.isActive) {
+                            continuation.resume(ValidationResult.Error("Connection failed: ${e.message}"))
+                        }
+                    }
+
+                    override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
+                        response.use {
+                            if (continuation.isActive) {
+                                if (it.code != 200) {
+                                    continuation.resume(ValidationResult.Error("HTTP ${it.code}: API request failed"))
+                                } else {
+                                    continuation.resume(ValidationResult.Success)
+                                }
+                            }
+                        }
+                    }
+                })
             }
-
-            ValidationResult.Success
         }.getOrElse { e ->
+            if (e is CancellationException) throw e
             ValidationResult.Error("Connection failed: ${e.message}")
         }
     }
@@ -100,15 +134,8 @@ object ApiKeyStore {
             if (!"https".equals(url.protocol, ignoreCase = true)) {
                 return@withContext ValidationResult.Error("Endpoint must use HTTPS")
             }
-            val conn = url.openConnection() as HttpsURLConnection
-            conn.connectTimeout = 5_000
-            conn.readTimeout = 8_000
-            conn.requestMethod = "POST"
-            conn.setRequestProperty("content-type", "application/json")
-            conn.setRequestProperty("X-Goog-Api-Key", apiKey)
-            conn.doOutput = true
 
-            val body = JSONObject().apply {
+            val bodyStr = JSONObject().apply {
                 put("input", JSONObject().put("text", "test"))
                 put("voice", JSONObject().apply {
                     put("languageCode", "en-US")
@@ -119,14 +146,39 @@ object ApiKeyStore {
                 })
             }.toString()
 
-            OutputStreamWriter(conn.outputStream).use { it.write(body) }
+            val request = Request.Builder()
+                .url(url)
+                .header("X-Goog-Api-Key", apiKey)
+                .post(bodyStr.toRequestBody("application/json".toMediaType()))
+                .build()
 
-            if (conn.responseCode != 200) {
-                return@withContext ValidationResult.Error("HTTP ${conn.responseCode}: API request failed")
+            suspendCancellableCoroutine<ValidationResult> { continuation ->
+                val call = okHttpClient.newCall(request)
+                continuation.invokeOnCancellation {
+                    call.cancel()
+                }
+                call.enqueue(object : okhttp3.Callback {
+                    override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
+                        if (continuation.isActive) {
+                            continuation.resume(ValidationResult.Error("Connection failed: ${e.message}"))
+                        }
+                    }
+
+                    override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
+                        response.use {
+                            if (continuation.isActive) {
+                                if (it.code != 200) {
+                                    continuation.resume(ValidationResult.Error("HTTP ${it.code}: API request failed"))
+                                } else {
+                                    continuation.resume(ValidationResult.Success)
+                                }
+                            }
+                        }
+                    }
+                })
             }
-
-            ValidationResult.Success
         }.getOrElse { e ->
+            if (e is CancellationException) throw e
             ValidationResult.Error("Connection failed: ${e.message}")
         }
     }
