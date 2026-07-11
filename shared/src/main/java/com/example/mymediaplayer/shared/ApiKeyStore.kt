@@ -7,9 +7,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.OutputStreamWriter
 import java.net.URL
-import javax.net.ssl.HttpsURLConnection
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
+import java.util.concurrent.TimeUnit
 
 /**
  * Secure storage for API keys used by [AnnouncementPreGenerator].
@@ -27,6 +30,13 @@ object ApiKeyStore {
 
     private const val TAG = "ApiKeyStore"
     private const val ENCRYPTED_PREFS_NAME = "mymediaplayer_api_keys"
+
+    private val okHttpClient by lazy {
+        OkHttpClient.Builder()
+            .connectTimeout(5, TimeUnit.SECONDS)
+            .readTimeout(8, TimeUnit.SECONDS)
+            .build()
+    }
 
     sealed class ValidationResult {
         data object Success : ValidationResult()
@@ -63,14 +73,6 @@ object ApiKeyStore {
             if (!"https".equals(url.protocol, ignoreCase = true)) {
                 return@withContext ValidationResult.Error("Endpoint must use HTTPS")
             }
-            val conn = url.openConnection() as HttpsURLConnection
-            conn.connectTimeout = 5_000
-            conn.readTimeout = 8_000
-            conn.requestMethod = "POST"
-            conn.setRequestProperty("Authorization", "Bearer $apiKey")
-            conn.setRequestProperty("content-type", "application/json")
-            conn.doOutput = true
-
             val body = JSONObject().apply {
                 put("model", "kilo/auto")
                 put("max_tokens", 10)
@@ -82,10 +84,17 @@ object ApiKeyStore {
                 ))
             }.toString()
 
-            OutputStreamWriter(conn.outputStream).use { it.write(body) }
+            val request = Request.Builder()
+                .url(url.toString())
+                .post(body.toRequestBody("application/json".toMediaType()))
+                .addHeader("Authorization", "Bearer $apiKey")
+                .build()
 
-            if (conn.responseCode != 200) {
-                return@withContext ValidationResult.Error("HTTP ${conn.responseCode}: API request failed")
+            val response = okHttpClient.newCall(request).awaitResponse()
+            response.use {
+                if (!it.isSuccessful) {
+                    return@withContext ValidationResult.Error("HTTP ${it.code}: API request failed")
+                }
             }
 
             ValidationResult.Success
@@ -100,14 +109,6 @@ object ApiKeyStore {
             if (!"https".equals(url.protocol, ignoreCase = true)) {
                 return@withContext ValidationResult.Error("Endpoint must use HTTPS")
             }
-            val conn = url.openConnection() as HttpsURLConnection
-            conn.connectTimeout = 5_000
-            conn.readTimeout = 8_000
-            conn.requestMethod = "POST"
-            conn.setRequestProperty("content-type", "application/json")
-            conn.setRequestProperty("X-Goog-Api-Key", apiKey)
-            conn.doOutput = true
-
             val body = JSONObject().apply {
                 put("input", JSONObject().put("text", "test"))
                 put("voice", JSONObject().apply {
@@ -119,10 +120,17 @@ object ApiKeyStore {
                 })
             }.toString()
 
-            OutputStreamWriter(conn.outputStream).use { it.write(body) }
+            val request = Request.Builder()
+                .url(url.toString())
+                .post(body.toRequestBody("application/json".toMediaType()))
+                .addHeader("X-Goog-Api-Key", apiKey)
+                .build()
 
-            if (conn.responseCode != 200) {
-                return@withContext ValidationResult.Error("HTTP ${conn.responseCode}: API request failed")
+            val response = okHttpClient.newCall(request).awaitResponse()
+            response.use {
+                if (!it.isSuccessful) {
+                    return@withContext ValidationResult.Error("HTTP ${it.code}: API request failed")
+                }
             }
 
             ValidationResult.Success
