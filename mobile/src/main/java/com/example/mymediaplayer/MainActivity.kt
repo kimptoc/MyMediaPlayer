@@ -368,7 +368,9 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleFileClick(file: com.example.mymediaplayer.shared.MediaFileInfo) {
-        playFile(file, viewModel.uiState.value.scan.scannedFiles)
+private fun handleFileClick(uiState: MainUiState, file: com.example.mymediaplayer.shared.MediaFileInfo) {
+    playFile(file, uiState.scan.scannedFiles)
+}
     }
 
     private fun handlePlayPause() {
