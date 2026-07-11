@@ -439,7 +439,9 @@ private fun handleShuffleSongs(uiState: MainUiState, songs: List<com.example.mym
     }
 
     private fun handlePlayPlaylist(playlist: com.example.mymediaplayer.shared.PlaylistInfo) {
-        playPlaylist(playlist, viewModel.uiState.value.scan.scannedFiles, viewModel.uiState.value.scan.discoveredPlaylists)
+private fun handlePlayPlaylist(uiState: MainUiState, playlist: com.example.mymediaplayer.shared.PlaylistInfo) {
+    playPlaylist(playlist, uiState.scan.scannedFiles, uiState.scan.discoveredPlaylists)
+}
     }
 
     private fun handleShufflePlaylistSongs(playlist: com.example.mymediaplayer.shared.PlaylistInfo, songs: List<com.example.mymediaplayer.shared.MediaFileInfo>) {
