@@ -377,7 +377,9 @@ private fun handlePlayPause(uiState: MainUiState) {
 
     private fun handlePlayPause() {
         togglePlayPause(viewModel.uiState.value.playback.isPlaying)
-    }
+private fun handleToggleRepeat(uiState: MainUiState) {
+    toggleRepeatMode(uiState.playback.repeatMode)
+}
 
     private fun handleToggleRepeat() {
         toggleRepeatMode(viewModel.uiState.value.playback.repeatMode)
