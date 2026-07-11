@@ -394,7 +394,13 @@ private fun handleToggleRepeat(uiState: MainUiState) {
     }
 
     private fun handleShuffleSongs(songs: List<com.example.mymediaplayer.shared.MediaFileInfo>) {
-        playUiList(
+private fun handleShuffleSongs(uiState: MainUiState, songs: List<com.example.mymediaplayer.shared.MediaFileInfo>) {
+    playUiList(
+        songs = songs,
+        shuffle = true,
+        queueTitle = queueTitleForCurrentUiList(uiState)
+    )
+}
             songs = songs,
             shuffle = true,
             queueTitle = queueTitleForCurrentUiList(viewModel.uiState.value)
