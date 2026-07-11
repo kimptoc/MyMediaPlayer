@@ -380,7 +380,9 @@ private fun handlePlayPause(isPlaying: Boolean) {
     }
 
     private fun handleToggleRepeat() {
-        toggleRepeatMode(viewModel.uiState.value.playback.repeatMode)
+private fun handleToggleRepeat(repeatMode: Int) {
+    toggleRepeatMode(repeatMode)
+}
     }
 
     private fun handlePlaySongs(songs: List<com.example.mymediaplayer.shared.MediaFileInfo>) {
