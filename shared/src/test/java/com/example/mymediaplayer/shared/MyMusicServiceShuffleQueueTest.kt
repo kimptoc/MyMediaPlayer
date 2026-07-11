@@ -70,8 +70,8 @@ class MyMusicServiceShuffleQueueTest {
      *
      * Note: playTrack() may trigger error recovery in the Robolectric test environment
      * (content:// URIs are unresolvable), which can advance currentQueueIndex. The key
-     * assertion is that the QUEUE LIST stays in shuffled order — this test verifies the
-     * implemented fix that guards against rebuilding it sequentially from lastBrowseParentId.
+     * assertion is that the QUEUE LIST stays in shuffled order — the fix guards against
+     * rebuilding it sequentially from lastBrowseParentId.
      */
     @Test
     fun handlePlaySingleItem_preservesShuffledQueueOrderWhenCurrentTrackRequested() = runBlocking {
