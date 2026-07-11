@@ -41,3 +41,24 @@ internal suspend fun Call.awaitStringOrNull(onNotSuccessful: ((Response) -> Unit
             }
         })
     }
+
+internal suspend fun Call.await(): Response = suspendCancellableCoroutine { continuation ->
+    continuation.invokeOnCancellation {
+        cancel()
+    }
+    enqueue(object : Callback {
+        override fun onFailure(call: Call, e: IOException) {
+            if (continuation.isActive) {
+                continuation.resumeWithException(e)
+            }
+        }
+
+        override fun onResponse(call: Call, response: Response) {
+            if (continuation.isActive) {
+                continuation.resume(response)
+            } else {
+                response.close()
+            }
+        }
+    })
+}

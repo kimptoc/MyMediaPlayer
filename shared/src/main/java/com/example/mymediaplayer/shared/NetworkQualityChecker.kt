@@ -56,36 +56,11 @@ internal class NetworkQualityChecker(private val context: Context) {
                 .head()
                 .build()
 
-            val diff = suspendCancellableCoroutine<Long> { continuation ->
-                val call = okHttpClient.newCall(request)
-                continuation.invokeOnCancellation {
-                    call.cancel()
-                }
-                call.enqueue(object : Callback {
-                    override fun onFailure(call: Call, e: IOException) {
-                        if (continuation.isActive) {
-                            continuation.resumeWithException(e)
-                        }
-                    }
+            val response = okHttpClient.newCall(request).await()
+            val mockLatency = response.header("X-Mock-Latency")?.toLongOrNull()
+            response.close()
 
-                    override fun onResponse(call: Call, response: Response) {
-                        // The test Interceptor injects elapsed header if it is set.
-                        // We use it specifically for Robolectric deterministic timing
-                        val mockLatency = response.header("X-Mock-Latency")?.toLongOrNull()
-                        response.close()
-                        if (continuation.isActive) {
-                            if (mockLatency != null) {
-                                continuation.resume(mockLatency)
-                            } else {
-                                val actualDiff = System.currentTimeMillis() - start
-                                continuation.resume(actualDiff)
-                            }
-                        }
-                    }
-                })
-            }
-
-            diff
+            mockLatency ?: (System.currentTimeMillis() - start)
         }.getOrElse { e ->
             if (e is CancellationException) throw e
             Log.d(TAG, "Network ping failed: ${e.message}")
