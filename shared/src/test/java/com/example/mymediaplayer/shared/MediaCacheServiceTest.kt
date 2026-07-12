@@ -341,12 +341,7 @@ class MediaCacheServiceTest {
 
     @Test
     fun addAllPlaylists_addsPlaylistsToCache() {
-@Test
-fun addAllPlaylists_withEmptyList_doesNothing() {
-    val service = MediaCacheService()
-    service.addAllPlaylists(emptyList())
-    assertTrue(service.discoveredPlaylists.isEmpty())
-}
+        val service = MediaCacheService()
         val playlists = listOf(
             PlaylistInfo("uri1", "Playlist 1"),
             PlaylistInfo("uri2", "Playlist 2")
@@ -358,6 +353,13 @@ fun addAllPlaylists_withEmptyList_doesNothing() {
         assertEquals("Playlist 1", discovered[0].displayName)
         assertEquals("uri2", discovered[1].uriString)
         assertEquals("Playlist 2", discovered[1].displayName)
+    }
+
+    @Test
+    fun addAllPlaylists_withEmptyList_doesNothing() {
+        val service = MediaCacheService()
+        service.addAllPlaylists(emptyList())
+        assertTrue(service.discoveredPlaylists.isEmpty())
     }
 
     @Test
