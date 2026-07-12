@@ -17,6 +17,7 @@ open class PlaylistService {
 
     companion object {
         private const val TAG = "PlaylistService"
+        private val SANITIZE_REGEX = Regex("[^a-zA-Z0-9]")
     }
 
     private fun StringBuilder.appendWithoutNewlines(str: String) {
@@ -54,7 +55,7 @@ open class PlaylistService {
 
         val root = DocumentFile.fromTreeUri(context, treeUri) ?: return null
         val rawBase = if (trimmed.endsWith(".m3u", ignoreCase = true)) trimmed.dropLast(4) else trimmed
-        val safeBase = rawBase.replace("/", "_").replace("\\", "_").replace(".", "_")
+        val safeBase = rawBase.replace(SANITIZE_REGEX, "_")
         val fileName = "$safeBase.m3u"
         val target = root.createFile("audio/x-mpegurl", fileName) ?: run {
             Log.e(TAG, "Failed to create playlist file: $fileName")
@@ -182,7 +183,7 @@ open class PlaylistService {
         val trimmed = newName.trim()
         if (trimmed.isEmpty()) return null
         val rawBase = if (trimmed.endsWith(".m3u", ignoreCase = true)) trimmed.dropLast(4) else trimmed
-        val safeBase = rawBase.replace("/", "_").replace("\\", "_").replace(".", "_")
+        val safeBase = rawBase.replace(SANITIZE_REGEX, "_")
         val finalName = "$safeBase.m3u"
 
         return try {
