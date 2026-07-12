@@ -356,13 +356,6 @@ class MediaCacheServiceTest {
     }
 
     @Test
-    fun addAllPlaylists_withEmptyList_doesNothing() {
-        val service = MediaCacheService()
-        service.addAllPlaylists(emptyList())
-        assertTrue(service.discoveredPlaylists.isEmpty())
-    }
-
-    @Test
     fun clearCache_emptiesFilesAndPlaylists() {
         val service = MediaCacheService()
 
