@@ -53,12 +53,10 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.Checkbox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
@@ -1560,7 +1558,7 @@ private fun PlaylistDetails(
     val (isEditing, setIsEditing) = remember(selectedPlaylist.uriString) { mutableStateOf(false) }
     val (editableSongs, setEditableSongs) = remember(selectedPlaylist.uriString) { mutableStateOf<List<MediaFileInfo>>(emptyList()) }
     val (draggingIndex, setDraggingIndex) = remember(selectedPlaylist.uriString) { mutableStateOf<Int?>(null) }
-    var draggingOffsetY by remember(selectedPlaylist.uriString) { mutableFloatStateOf(0f) }
+    val (draggingOffsetY, setDraggingOffsetY) = remember(selectedPlaylist.uriString) { mutableFloatStateOf(0f) }
     val (dedupeOnSave, setDedupeOnSave) = remember(selectedPlaylist.uriString) { mutableStateOf(false) }
     val (editSearchQuery, setEditSearchQuery) = remember(selectedPlaylist.uriString) { mutableStateOf("") }
     val (showDiscardChangesDialog, setShowDiscardChangesDialog) = remember(selectedPlaylist.uriString) { mutableStateOf(false) }
@@ -1594,7 +1592,7 @@ private fun PlaylistDetails(
                 setIsEditing = setIsEditing,
                 setEditableSongs = setEditableSongs,
                 setDraggingIndex = setDraggingIndex,
-                setDraggingOffsetY = { draggingOffsetY = it },
+                setDraggingOffsetY = setDraggingOffsetY,
                 setDedupeOnSave = setDedupeOnSave,
                 setEditSearchQuery = setEditSearchQuery,
                 onSavePlaylistEdits = onSavePlaylistEdits
@@ -1643,7 +1641,7 @@ private fun PlaylistDetails(
                 draggingIndex = draggingIndex,
                 setDraggingIndex = setDraggingIndex,
                 draggingOffsetY = draggingOffsetY,
-                setDraggingOffsetY = { draggingOffsetY = it },
+                setDraggingOffsetY = setDraggingOffsetY,
                 dragSwapThresholdPx = dragSwapThresholdPx
             )
         }
@@ -2113,8 +2111,8 @@ fun ExpandedNowPlayingDialog(
     } else {
         projectedPositionMs.coerceAtLeast(0L)
     }
-    var isSeeking by remember { mutableStateOf(false) }
-    var seekValueMs by remember(
+    val (isSeeking, setIsSeeking) = remember { mutableStateOf(false) }
+    val (seekValueMs, setSeekValueMs) = remember(
         trackName,
         artistName,
         currentPositionMs,
@@ -2132,11 +2130,11 @@ fun ExpandedNowPlayingDialog(
             if (!isSeeking) {
                 val elapsed = (SystemClock.elapsedRealtime() - positionUpdatedAtElapsedMs).coerceAtLeast(0L)
                 val projected = currentPositionMs + (elapsed * playbackSpeed).toLong()
-                seekValueMs = if (durationSafe > 0L) {
+                setSeekValueMs(if (durationSafe > 0L) {
                     projected.coerceIn(0L, durationSafe).toFloat()
                 } else {
                     projected.coerceAtLeast(0L).toFloat()
-                }
+                })
             }
         }
     }
@@ -2172,12 +2170,12 @@ fun ExpandedNowPlayingDialog(
                     Slider(
                         value = seekValueMs.coerceIn(0f, durationSafe.toFloat()),
                         onValueChange = {
-                            isSeeking = true
-                            seekValueMs = it
+                            setIsSeeking(true)
+                            setSeekValueMs(it)
                         },
                         valueRange = 0f..durationSafe.toFloat(),
                         onValueChangeFinished = {
-                            isSeeking = false
+                            setIsSeeking(false)
                             onSeekTo(seekValueMs.toLong())
                         },
                         colors = SliderDefaults.colors(
