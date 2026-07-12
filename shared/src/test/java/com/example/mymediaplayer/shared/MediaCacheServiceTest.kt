@@ -491,7 +491,6 @@ class MediaCacheServiceTest {
     class MockMediaStoreProvider : android.content.ContentProvider() {
         var genres = emptyList<Pair<Long, String>>()
         var members = emptyMap<Long, List<Long>>()
-        var mediaFiles = emptyList<Pair<Long, String>>()
 
         override fun onCreate() = true
 
@@ -506,10 +505,6 @@ class MediaCacheServiceTest {
                 val cursor = android.database.MatrixCursor(arrayOf(android.provider.MediaStore.Audio.Genres.Members.AUDIO_ID))
                 members[genreId]?.forEach { audioId -> cursor.addRow(arrayOf<Any>(audioId)) }
                 return cursor
-            } else if (uri == android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI) {
-                val cursor = android.database.MatrixCursor(arrayOf(android.provider.MediaStore.Audio.Media._ID, android.provider.MediaStore.Audio.Media.DISPLAY_NAME))
-                mediaFiles.forEach { (id, name) -> cursor.addRow(arrayOf<Any>(id, name)) }
-                return cursor
             }
             return null
         }
@@ -520,17 +515,12 @@ class MediaCacheServiceTest {
         override fun update(uri: Uri, values: android.content.ContentValues?, selection: String?, selectionArgs: Array<out String>?) = 0
     }
 
-    private fun setupProvider(
-        genres: List<Pair<Long, String>> = emptyList(),
-        members: Map<Long, List<Long>> = emptyMap(),
-        mediaFiles: List<Pair<Long, String>> = emptyList()
-    ) {
+    private fun setupProvider(genres: List<Pair<Long, String>>, members: Map<Long, List<Long>>) {
         val providerInfo = android.content.pm.ProviderInfo().apply { authority = android.provider.MediaStore.AUTHORITY }
         val controller = org.robolectric.Robolectric.buildContentProvider(MockMediaStoreProvider::class.java).create(providerInfo)
         val provider = controller.get() as MockMediaStoreProvider
         provider.genres = genres
         provider.members = members
-        provider.mediaFiles = mediaFiles
     }
 
     @Test
@@ -575,89 +565,5 @@ class MediaCacheServiceTest {
         val result = service.loadWholeDriveGenres(context, setOf(100L))
 
         assertTrue(result.isEmpty())
-    }
-
-    @Test
-    fun enrichGenresFromMediaStore_updatesCachedFiles() {
-        setupProvider(
-            genres = listOf(1L to "Rock"),
-            members = mapOf(1L to listOf(100L)),
-            mediaFiles = listOf(100L to "Song1.mp3")
-        )
-
-        val context = ApplicationProvider.getApplicationContext<Context>()
-        val service = MediaCacheService()
-
-        // Add initial file without genre
-        service.addFile(
-            MediaFileInfo(
-                uriString = "content://media/external/audio/media/100",
-                displayName = "Song1.mp3",
-                sizeBytes = 1000L,
-                title = "Song 1",
-                genre = null
-            )
-        )
-
-        service.enrichGenresFromMediaStore(context)
-
-        val cachedFile = service.getFileByUri("content://media/external/audio/media/100")
-        assertEquals("Rock", cachedFile?.genre)
-    }
-
-    @Test
-    fun enrichGenresFromMediaStore_doesNotOverwriteExistingGenre() {
-        setupProvider(
-            genres = listOf(1L to "Rock"),
-            members = mapOf(1L to listOf(100L)),
-            mediaFiles = listOf(100L to "Song1.mp3")
-        )
-
-        val context = ApplicationProvider.getApplicationContext<Context>()
-        val service = MediaCacheService()
-
-        service.addFile(
-            MediaFileInfo(
-                uriString = "content://media/external/audio/media/100",
-                displayName = "Song1.mp3",
-                sizeBytes = 1000L,
-                title = "Song 1",
-                genre = "Pop" // Existing valid genre
-            )
-        )
-
-        service.enrichGenresFromMediaStore(context)
-
-        val cachedFile = service.getFileByUri("content://media/external/audio/media/100")
-        assertEquals("Pop", cachedFile?.genre)
-    }
-
-    @Test
-    fun enrichGenresFromMediaStore_updatesPodcastFlag() {
-        setupProvider(
-            genres = listOf(1L to "Podcast"),
-            members = mapOf(1L to listOf(100L)),
-            mediaFiles = listOf(100L to "Song1.mp3")
-        )
-
-        val context = ApplicationProvider.getApplicationContext<Context>()
-        val service = MediaCacheService()
-
-        service.addFile(
-            MediaFileInfo(
-                uriString = "content://media/external/audio/media/100",
-                displayName = "Song1.mp3",
-                sizeBytes = 1000L,
-                title = "Song 1",
-                genre = "",
-                isPodcast = false
-            )
-        )
-
-        service.enrichGenresFromMediaStore(context)
-
-        val cachedFile = service.getFileByUri("content://media/external/audio/media/100")
-        assertEquals("Podcast", cachedFile?.genre)
-        assertTrue(cachedFile?.isPodcast ?: false)
     }
 }

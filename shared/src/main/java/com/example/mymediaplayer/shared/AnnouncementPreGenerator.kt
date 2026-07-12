@@ -19,6 +19,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.security.SecureRandom
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.ConcurrentHashMap
@@ -43,6 +44,7 @@ internal class AnnouncementPreGenerator(
         private const val TAG = "AnnouncementPreGen"
         private const val KILO_MODEL_ANON = "kilo/auto-free"
         private const val READY_TIMEOUT_MS = 5000L
+        private val secureRandom = SecureRandom()
 
         @androidx.annotation.VisibleForTesting
         internal var testInterceptor: okhttp3.Interceptor? = null
@@ -318,7 +320,11 @@ internal class AnnouncementPreGenerator(
 
                 val audioBytes = Base64.decode(audioBase64, Base64.DEFAULT)
 
-                val file = File(context.cacheDir, "${UUID.randomUUID()}.mp3")
+                val randomBytes = ByteArray(16)
+                secureRandom.nextBytes(randomBytes)
+                val fileName = randomBytes.joinToString("") { "%02x".format(it) }
+
+                val file = File(context.cacheDir, "$fileName.mp3")
                 file.createNewFile()
                 file.writeBytes(audioBytes)
                 Log.d(TAG, "Saved pre-generated announcement to ${file.name} (${audioBytes.size} bytes)")
