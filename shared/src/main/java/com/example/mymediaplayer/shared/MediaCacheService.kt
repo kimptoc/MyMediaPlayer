@@ -213,18 +213,16 @@ class MediaCacheService {
         val genresByAudioId = loadWholeDriveGenres(context, outIds.toSet())
         if (genresByAudioId.isNotEmpty()) {
             val genreCache = mutableMapOf<String, String>()
-            val iterator = out.listIterator()
-            var index = 0
-            while (iterator.hasNext()) {
-                val existing = iterator.next()
-                val audioId = outIds[index++]
+            for (index in out.indices) {
+                val audioId = outIds[index]
                 val mappedGenre = genresByAudioId[audioId] ?: continue
                 val normalized = genreCache.getOrPut(mappedGenre) { normalizeGenre(mappedGenre) }
-                iterator.set(existing.copy(
+                val existing = out[index]
+                out[index] = existing.copy(
                     genre = normalized,
                     isPodcast = existing.isPodcast ||
                         isPodcastMedia(mappedGenre, existing.uriString)
-                ))
+                )
             }
         }
     }
