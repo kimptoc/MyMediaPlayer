@@ -791,7 +791,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 rawQuery
             }
             val query = truncatedQuery.replace(SEARCH_INTENT_SANITIZE_REGEX, "")
-                .replace("\n", "")
+            .replace('\n', "")
                 .replace("\r", "")
 
             val extras = Bundle().apply {
