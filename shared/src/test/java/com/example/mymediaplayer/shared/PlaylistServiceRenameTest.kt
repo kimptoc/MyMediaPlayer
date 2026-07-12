@@ -18,11 +18,6 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.Implementation
 import org.robolectric.annotation.Implements
 
-/**
- * Minimal ContentProvider stub so DocumentFile.fromSingleUri can resolve a document
- * URI in these tests. Kept local to this file rather than reused from another test
- * class, since the actual rename behavior comes entirely from [ShadowSingleDocumentFileRename].
- */
 private class RenameMockDocumentProvider : ContentProvider() {
     override fun onCreate() = true
     override fun query(uri: Uri, projection: Array<out String>?, selection: String?, selectionArgs: Array<out String>?, sortOrder: String?): Cursor? = null
@@ -32,11 +27,6 @@ private class RenameMockDocumentProvider : ContentProvider() {
     override fun update(uri: Uri, values: ContentValues?, selection: String?, selectionArgs: Array<out String>?): Int = 0
 }
 
-/**
- * Controls what the shadowed `renameTo` call does for the currently running test.
- * Robolectric instantiates shadow classes itself, so behavior is threaded through
- * via this companion rather than a constructor argument.
- */
 sealed class RenameToBehavior {
     object ReturnFalse : RenameToBehavior()
     object ReturnTrue : RenameToBehavior()
@@ -47,10 +37,12 @@ sealed class RenameToBehavior {
 class ShadowSingleDocumentFileRename {
     companion object {
         var behavior: RenameToBehavior = RenameToBehavior.ReturnTrue
+        var lastRequestedName: String? = null
     }
 
     @Implementation
     fun renameTo(displayName: String?): Boolean {
+        lastRequestedName = displayName
         return when (val current = behavior) {
             is RenameToBehavior.ReturnFalse -> false
             is RenameToBehavior.ReturnTrue -> true
@@ -63,8 +55,9 @@ class ShadowSingleDocumentFileRename {
 @Config(shadows = [ShadowSingleDocumentFileRename::class])
 class PlaylistServiceRenameTest {
 
-    private fun renamePlaylistWith(authority: String, behavior: RenameToBehavior): PlaylistInfo? {
+    private fun renamePlaylistWith(authority: String, behavior: RenameToBehavior, newName: String = "new_name"): PlaylistInfo? {
         ShadowSingleDocumentFileRename.behavior = behavior
+        ShadowSingleDocumentFileRename.lastRequestedName = null
         val baseContext = ApplicationProvider.getApplicationContext<Context>()
         val providerInfo = android.content.pm.ProviderInfo().apply {
             this.authority = authority
@@ -72,7 +65,7 @@ class PlaylistServiceRenameTest {
         Robolectric.buildContentProvider(RenameMockDocumentProvider::class.java).create(providerInfo).get()
         val uri = DocumentsContract.buildDocumentUri(authority, "123")
 
-        return PlaylistService().renamePlaylist(baseContext, uri, "new_name")
+        return PlaylistService().renamePlaylist(baseContext, uri, newName)
     }
 
     @Test
@@ -105,5 +98,14 @@ class PlaylistServiceRenameTest {
 
         assertNotNull(result)
         assertEquals("new_name.m3u", result?.displayName)
+        assertEquals("new_name.m3u", ShadowSingleDocumentFileRename.lastRequestedName)
+    }
+
+    @Test
+    fun renamePlaylist_sanitizesPathTraversal() {
+        val result = renamePlaylistWith("mock.documents.rename.traverse", RenameToBehavior.ReturnTrue, "../../../etc/passwd")
+        assertNotNull(result)
+        assertEquals("_________etc_passwd.m3u", result?.displayName)
+        assertEquals("_________etc_passwd.m3u", ShadowSingleDocumentFileRename.lastRequestedName)
     }
 }
