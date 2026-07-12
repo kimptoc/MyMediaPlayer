@@ -793,7 +793,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 rawQuery
             }
             val query = truncatedQuery.replace(SEARCH_INTENT_SANITIZE_REGEX, "")
-            .replace('\n', "")
+                .replace("\n", "")
                 .replace("\r", "")
 
             val extras = Bundle().apply {
@@ -811,7 +811,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                         if (value != null) {
                             val truncatedValue = if (value.length > 500) value.substring(0, 500) else value
                             val sanitizedValue = truncatedValue.replace(SEARCH_INTENT_SANITIZE_REGEX, "")
-                                .replace('\n', "")
+                                .replace("\n", "")
                                 .replace("\r", "")
                             putString(key, sanitizedValue)
                         }
