@@ -41,3 +41,28 @@ internal suspend fun Call.awaitStringOrNull(onNotSuccessful: ((Response) -> Unit
             }
         })
     }
+
+internal suspend fun <T> Call.await(block: (Response) -> T): T =
+    suspendCancellableCoroutine { continuation ->
+        continuation.invokeOnCancellation {
+            cancel()
+        }
+        enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                if (continuation.isActive) {
+                    continuation.resumeWithException(e)
+                }
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                response.use {
+                    try {
+                        val result = block(it)
+                        if (continuation.isActive) continuation.resume(result)
+                    } catch (e: Exception) {
+                        if (continuation.isActive) continuation.resumeWithException(e)
+                    }
+                }
+            }
+        })
+    }
