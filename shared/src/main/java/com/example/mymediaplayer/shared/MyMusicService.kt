@@ -1963,19 +1963,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
     private fun pickTemplate(templates: List<String>, previousIndex: Int): Pair<Int, String> {
         if (templates.isEmpty()) return -1 to ""
         if (templates.size == 1) return 0 to templates[0]
-private companion object {
-    private val secureRandom = SecureRandom()
-}
-
-private fun pickTemplate(templates: List<String>, previousIndex: Int): Pair<Int, String> {
-    if (templates.isEmpty()) return -1 to ""
-    if (templates.size == 1) return 0 to templates[0]
-    var index = secureRandom.nextInt(templates.size)
-    if (index == previousIndex) {
-        index = (index + 1 + secureRandom.nextInt(templates.size - 1)) % templates.size
-    }
-    return index to templates[index]
-}
+        val secureRandom = SecureRandom()
         var index = secureRandom.nextInt(templates.size)
         if (index == previousIndex) {
             index = (index + 1 + secureRandom.nextInt(templates.size - 1)) % templates.size
