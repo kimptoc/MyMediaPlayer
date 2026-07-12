@@ -341,7 +341,12 @@ class MediaCacheServiceTest {
 
     @Test
     fun addAllPlaylists_addsPlaylistsToCache() {
-        val service = MediaCacheService()
+@Test
+fun addAllPlaylists_withEmptyList_doesNothing() {
+    val service = MediaCacheService()
+    service.addAllPlaylists(emptyList())
+    assertTrue(service.discoveredPlaylists.isEmpty())
+}
         val playlists = listOf(
             PlaylistInfo("uri1", "Playlist 1"),
             PlaylistInfo("uri2", "Playlist 2")
