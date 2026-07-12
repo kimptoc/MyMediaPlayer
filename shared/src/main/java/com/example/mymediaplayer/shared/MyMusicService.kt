@@ -18,7 +18,6 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
-import java.security.SecureRandom
 import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.speech.tts.TextToSpeech
@@ -58,6 +57,7 @@ import kotlinx.coroutines.guava.await
 import timber.log.Timber
 import java.io.File
 import java.io.InputStream
+import java.security.SecureRandom
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
@@ -236,6 +236,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
         private val SEARCH_PREFIX_REGEX = Regex("^(?:\\s*(?:play|shuffle)\\b\\s*)+")
         private val SHUFFLE_REGEX = Regex("\\bshuffle\\b")
+        private val secureRandom = SecureRandom()
     }
 
     private data class PendingSpeechAction(
@@ -1963,7 +1964,6 @@ class MyMusicService : MediaBrowserServiceCompat() {
     private fun pickTemplate(templates: List<String>, previousIndex: Int): Pair<Int, String> {
         if (templates.isEmpty()) return -1 to ""
         if (templates.size == 1) return 0 to templates[0]
-        val secureRandom = SecureRandom()
         var index = secureRandom.nextInt(templates.size)
         if (index == previousIndex) {
             index = (index + 1 + secureRandom.nextInt(templates.size - 1)) % templates.size
