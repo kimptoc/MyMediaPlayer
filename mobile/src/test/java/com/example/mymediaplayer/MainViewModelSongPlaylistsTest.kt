@@ -24,8 +24,10 @@ class MockSongPlaylistsPlaylistService : PlaylistService() {
     var failOverwrite: Boolean = false
     var failRead: Boolean = false
     var overwriteCallCount: Int = 0
+    var readDelayMs: Long = 0
 
     override fun readPlaylist(context: Context, playlistUri: Uri): List<MediaFileInfo> {
+        if (readDelayMs > 0) Thread.sleep(readDelayMs)
         if (failRead) return emptyList()
         return readPlaylists[playlistUri.toString()] ?: emptyList()
     }
@@ -68,6 +70,19 @@ class MainViewModelSongPlaylistsTest {
     @Test
     fun openSongPlaylistsDialog_setsSongAndLoadingTrue() {
         val song = MediaFileInfo(uriString = "content://song1", displayName = "song1.mp3", sizeBytes = 0L, title = "Song 1")
+        val playlist = PlaylistInfo(uriString = "content://test/playlist1.m3u", displayName = "playlist1.m3u")
+        // The scan happens on Dispatchers.IO; without a candidate playlist to read (and thus
+        // no I/O to wait on), that background work can race ahead of this thread and flip
+        // songPlaylistsLoading back to false before the assertion below runs. Seed a candidate
+        // and delay the mock's read so the scan is provably still in flight when we check.
+        val field = viewModel.javaClass.getDeclaredField("_uiState")
+        field.isAccessible = true
+        @Suppress("UNCHECKED_CAST")
+        val flow = field.get(viewModel) as kotlinx.coroutines.flow.MutableStateFlow<MainUiState>
+        flow.value = flow.value.copy(
+            scan = flow.value.scan.copy(discoveredPlaylists = listOf(playlist))
+        )
+        mockService.readDelayMs = 500
 
         viewModel.openSongPlaylistsDialog(song)
 
