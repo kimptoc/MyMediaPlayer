@@ -340,6 +340,22 @@ class MediaCacheServiceTest {
     }
 
     @Test
+    fun addAllPlaylists_addsPlaylistsToCache() {
+        val service = MediaCacheService()
+        val playlists = listOf(
+            PlaylistInfo("uri1", "Playlist 1"),
+            PlaylistInfo("uri2", "Playlist 2")
+        )
+        service.addAllPlaylists(playlists)
+        val discovered = service.discoveredPlaylists
+        assertEquals(2, discovered.size)
+        assertEquals("uri1", discovered[0].uriString)
+        assertEquals("Playlist 1", discovered[0].displayName)
+        assertEquals("uri2", discovered[1].uriString)
+        assertEquals("Playlist 2", discovered[1].displayName)
+    }
+
+    @Test
     fun clearCache_emptiesFilesAndPlaylists() {
         val service = MediaCacheService()
 
@@ -565,5 +581,37 @@ class MediaCacheServiceTest {
         val result = service.loadWholeDriveGenres(context, setOf(100L))
 
         assertTrue(result.isEmpty())
+    }
+
+    @Test
+    fun removePlaylistByUri_removesPlaylistFromDiscoveredPlaylists() {
+        val service = MediaCacheService()
+        val playlist1 = PlaylistInfo("content://playlist1", "Playlist 1")
+        val playlist2 = PlaylistInfo("content://playlist2", "Playlist 2")
+
+        service.addPlaylist(playlist1)
+        service.addPlaylist(playlist2)
+
+        assertEquals(2, service.discoveredPlaylists.size)
+
+        service.removePlaylistByUri("content://playlist1")
+
+        assertEquals(1, service.discoveredPlaylists.size)
+        assertEquals("content://playlist2", service.discoveredPlaylists[0].uriString)
+
+        service.removePlaylistByUri("content://playlist2")
+
+        assertTrue(service.discoveredPlaylists.isEmpty())
+    }
+
+    @Test
+    fun removePlaylistByUri_withUnknownUri_doesNothing() {
+        val service = MediaCacheService()
+        service.addPlaylist(PlaylistInfo("content://playlist1", "Playlist 1"))
+
+        service.removePlaylistByUri("content://does-not-exist")
+
+        assertEquals(1, service.discoveredPlaylists.size)
+        assertEquals("content://playlist1", service.discoveredPlaylists[0].uriString)
     }
 }
