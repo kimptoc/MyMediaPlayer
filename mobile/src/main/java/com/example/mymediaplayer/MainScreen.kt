@@ -152,6 +152,8 @@ fun MainScreen(
     val (showRenamePlaylistDialog, setShowRenamePlaylistDialog) = remember { mutableStateOf(false) }
     val (pendingRenamePlaylist, setPendingRenamePlaylist) = remember { mutableStateOf<PlaylistInfo?>(null) }
     val (renamePlaylistNameText, setRenamePlaylistNameText) = remember { mutableStateOf("") }
+    val (showRemovePlaylistSongDialog, setShowRemovePlaylistSongDialog) = remember { mutableStateOf(false) }
+    val (pendingRemoveSong, setPendingRemoveSong) = remember { mutableStateOf<MediaFileInfo?>(null) }
     val (showQueueDialog, setShowQueueDialog) = remember { mutableStateOf(false) }
     val (showExpandedNowPlayingDialog, setShowExpandedNowPlayingDialog) = remember { mutableStateOf(false) }
     val (songsFavoritesOnly, setSongsFavoritesOnly) = rememberSaveable { mutableStateOf(false) }
@@ -344,6 +346,8 @@ fun MainScreen(
             setShowRenamePlaylistDialog = setShowRenamePlaylistDialog,
             setPendingRenamePlaylist = setPendingRenamePlaylist,
             setRenamePlaylistNameText = setRenamePlaylistNameText,
+            setShowRemovePlaylistSongDialog = setShowRemovePlaylistSongDialog,
+            setPendingRemoveSong = setPendingRemoveSong,
             songsFavoritesOnly = songsFavoritesOnly,
             setSongsFavoritesOnly = setSongsFavoritesOnly,
             searchFavoritesOnly = searchFavoritesOnly,
@@ -384,7 +388,18 @@ fun MainScreen(
         setPendingRenamePlaylist = setPendingRenamePlaylist,
         renamePlaylistNameText = renamePlaylistNameText,
         setRenamePlaylistNameText = setRenamePlaylistNameText,
-        onRenamePlaylist = onRenamePlaylist
+        onRenamePlaylist = onRenamePlaylist,
+        showRemovePlaylistSongDialog = showRemovePlaylistSongDialog,
+        setShowRemovePlaylistSongDialog = setShowRemovePlaylistSongDialog,
+        pendingRemoveSong = pendingRemoveSong,
+        onConfirmRemoveSong = removeSong@{
+            val song = pendingRemoveSong ?: return@removeSong
+            val playlist = uiState.playlist.selectedPlaylist ?: return@removeSong
+            val updated = uiState.playlist.playlistSongs.filterNot { it.uriString == song.uriString }
+            if (updated.size == uiState.playlist.playlistSongs.size) return@removeSong
+            onSavePlaylistEdits(playlist, updated)
+        },
+        setPendingRemoveSong = setPendingRemoveSong
     )
 
     ScanDialogs(
@@ -467,6 +482,38 @@ fun DeletePlaylistDialogContent(
                 }
             ) {
                 Text("Delete", color = MaterialTheme.colorScheme.error)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismissRequest) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+fun RemovePlaylistSongDialogContent(
+    pendingRemoveSong: MediaFileInfo?,
+    onDismissRequest: () -> Unit,
+    onConfirmRemove: () -> Unit
+) {
+    val target = pendingRemoveSong
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismissRequest,
+        title = { Text("Remove song from playlist") },
+        text = {
+            Text(
+                "Remove \"${target?.cleanTitle ?: target?.displayName ?: "this song"}\" from the playlist?"
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    if (target != null) onConfirmRemove()
+                }
+            ) {
+                Text("Remove", color = MaterialTheme.colorScheme.error)
             }
         },
         dismissButton = {
@@ -1382,6 +1429,7 @@ private fun PlaylistsSection(
     onClearPlaylistSelection: () -> Unit,
     onRequestDeletePlaylist: (PlaylistInfo) -> Unit,
     onRequestRenamePlaylist: (PlaylistInfo) -> Unit,
+    onRequestRemoveSong: (MediaFileInfo) -> Unit,
     onSavePlaylistEdits: (PlaylistInfo, List<MediaFileInfo>) -> Unit,
     onPlayPlaylist: (PlaylistInfo) -> Unit,
     onShufflePlaylistSongs: (PlaylistInfo, List<MediaFileInfo>) -> Unit,
@@ -1418,6 +1466,7 @@ private fun PlaylistsSection(
             hasPrev = hasPrev,
             onClearPlaylistSelection = onClearPlaylistSelection,
             onSavePlaylistEdits = onSavePlaylistEdits,
+            onRequestRemoveSong = onRequestRemoveSong,
             onPlayPlaylist = onPlayPlaylist,
             onShufflePlaylistSongs = onShufflePlaylistSongs,
             onStop = onStop,
@@ -1474,6 +1523,7 @@ private fun PlaylistSongsContent(
     onFileClick: (MediaFileInfo) -> Unit,
     onAddToPlaylist: (MediaFileInfo) -> Unit,
     onToggleFavorite: (MediaFileInfo) -> Unit,
+    onRequestRemoveSong: ((MediaFileInfo) -> Unit)?,
     setEditableSongs: (List<MediaFileInfo>) -> Unit,
     draggingIndex: Int?,
     setDraggingIndex: (Int?) -> Unit,
@@ -1502,7 +1552,8 @@ private fun PlaylistSongsContent(
                 favoriteUris = favoriteUris,
                 onFileClick = onFileClick,
                 onAddToPlaylist = onAddToPlaylist,
-                onToggleFavorite = onToggleFavorite
+                onToggleFavorite = onToggleFavorite,
+                onRequestRemoveSong = onRequestRemoveSong
             )
         } else {
             val filteredRows = if (editSearchQuery.isNotBlank()) {
@@ -1546,6 +1597,7 @@ private fun PlaylistDetails(
     hasPrev: Boolean,
     onClearPlaylistSelection: () -> Unit,
     onSavePlaylistEdits: (PlaylistInfo, List<MediaFileInfo>) -> Unit,
+    onRequestRemoveSong: (MediaFileInfo) -> Unit,
     onPlayPlaylist: (PlaylistInfo) -> Unit,
     onShufflePlaylistSongs: (PlaylistInfo, List<MediaFileInfo>) -> Unit,
     onStop: () -> Unit,
@@ -1639,6 +1691,11 @@ private fun PlaylistDetails(
                 onFileClick = onFileClick,
                 onAddToPlaylist = onAddToPlaylist,
                 onToggleFavorite = onToggleFavorite,
+                onRequestRemoveSong = if (selectedPlaylist.uriString.startsWith(MainViewModel.SMART_PREFIX)) {
+                    null
+                } else {
+                    onRequestRemoveSong
+                },
                 setEditableSongs = setEditableSongs,
                 draggingIndex = draggingIndex,
                 setDraggingIndex = setDraggingIndex,
@@ -1827,7 +1884,8 @@ private fun PlaylistViewList(
     favoriteUris: Set<String>,
     onFileClick: (MediaFileInfo) -> Unit,
     onAddToPlaylist: (MediaFileInfo) -> Unit,
-    onToggleFavorite: (MediaFileInfo) -> Unit
+    onToggleFavorite: (MediaFileInfo) -> Unit,
+    onRequestRemoveSong: ((MediaFileInfo) -> Unit)?
 ) {
     LazyColumn {
         items(displayedSongs) { file ->
@@ -1837,7 +1895,8 @@ private fun PlaylistViewList(
                 onClick = { onFileClick(file) },
                 onAddToPlaylist = { onAddToPlaylist(file) },
                 isFavorite = file.uriString in favoriteUris,
-                onToggleFavorite = { onToggleFavorite(file) }
+                onToggleFavorite = { onToggleFavorite(file) },
+                onRemoveFromPlaylist = onRequestRemoveSong?.let { callback -> { callback(file) } }
             )
         }
     }
@@ -2328,7 +2387,8 @@ fun FileCard(
     onToggleFavorite: (() -> Unit)? = null,
     isSelectionEnabled: Boolean = false,
     isSelected: Boolean = false,
-    onSelectionToggle: (() -> Unit)? = null
+    onSelectionToggle: (() -> Unit)? = null,
+    onRemoveFromPlaylist: (() -> Unit)? = null
 ) {
     val colors = if (isCurrentTrack) {
         CardDefaults.cardColors(
@@ -2358,7 +2418,7 @@ fun FileCard(
                     style = MaterialTheme.typography.bodySmall
                 )
             }
-            if (onAddToPlaylist != null || onToggleFavorite != null || (isSelectionEnabled && onSelectionToggle != null)) {
+            if (onAddToPlaylist != null || onToggleFavorite != null || (isSelectionEnabled && onSelectionToggle != null) || onRemoveFromPlaylist != null) {
                 Spacer(modifier = Modifier.height(6.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -2379,6 +2439,11 @@ fun FileCard(
                     if (onAddToPlaylist != null) {
                         TextButton(onClick = onAddToPlaylist) {
                             Text("Add")
+                        }
+                    }
+                    if (onRemoveFromPlaylist != null) {
+                        TextButton(onClick = onRemoveFromPlaylist) {
+                            Text("Remove", color = MaterialTheme.colorScheme.error)
                         }
                     }
                 }
@@ -2597,6 +2662,8 @@ private fun MainScreenContent(
     setShowRenamePlaylistDialog: (Boolean) -> Unit,
     setPendingRenamePlaylist: (PlaylistInfo?) -> Unit,
     setRenamePlaylistNameText: (String) -> Unit,
+    setShowRemovePlaylistSongDialog: (Boolean) -> Unit,
+    setPendingRemoveSong: (MediaFileInfo?) -> Unit,
     songsFavoritesOnly: Boolean,
     setSongsFavoritesOnly: (Boolean) -> Unit,
     searchFavoritesOnly: Boolean,
@@ -2840,6 +2907,10 @@ private fun MainScreenContent(
                             setPendingRenamePlaylist(it)
                             setRenamePlaylistNameText(it.displayName.removeSuffix(".m3u"))
                             setShowRenamePlaylistDialog(true)
+                        },
+                        onRequestRemoveSong = { song ->
+                            setPendingRemoveSong(song)
+                            setShowRemovePlaylistSongDialog(true)
                         },
                         onSavePlaylistEdits = onSavePlaylistEdits,
                         onPlayPlaylist = onPlayPlaylist,

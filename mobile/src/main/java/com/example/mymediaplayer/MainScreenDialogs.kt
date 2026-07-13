@@ -42,7 +42,13 @@ fun PlaylistDialogs(
     setPendingRenamePlaylist: (PlaylistInfo?) -> Unit,
     renamePlaylistNameText: String,
     setRenamePlaylistNameText: (String) -> Unit,
-    onRenamePlaylist: (PlaylistInfo, String) -> Unit
+    onRenamePlaylist: (PlaylistInfo, String) -> Unit,
+
+    showRemovePlaylistSongDialog: Boolean,
+    setShowRemovePlaylistSongDialog: (Boolean) -> Unit,
+    pendingRemoveSong: MediaFileInfo?,
+    setPendingRemoveSong: (MediaFileInfo?) -> Unit,
+    onConfirmRemoveSong: () -> Unit
 ) {
     if (showPlaylistDialog) {
         CreateRandomPlaylistDialog(
@@ -114,6 +120,18 @@ fun PlaylistDialogs(
                 onRenamePlaylist(playlist, newName)
                 setShowRenamePlaylistDialog(false)
                 setPendingRenamePlaylist(null)
+            }
+        )
+    }
+
+    if (showRemovePlaylistSongDialog) {
+        RemovePlaylistSongDialogContent(
+            pendingRemoveSong = pendingRemoveSong,
+            onDismissRequest = { setShowRemovePlaylistSongDialog(false) },
+            onConfirmRemove = {
+                onConfirmRemoveSong()
+                setShowRemovePlaylistSongDialog(false)
+                setPendingRemoveSong(null)
             }
         )
     }
