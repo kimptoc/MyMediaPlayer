@@ -392,13 +392,14 @@ fun MainScreen(
         showRemovePlaylistSongDialog = showRemovePlaylistSongDialog,
         setShowRemovePlaylistSongDialog = setShowRemovePlaylistSongDialog,
         pendingRemoveSong = pendingRemoveSong,
-        onConfirmRemoveSong = {
-            val song = pendingRemoveSong ?: return@onConfirmRemoveSong
-            val playlist = uiState.playlist.selectedPlaylist ?: return@onConfirmRemoveSong
+        onConfirmRemoveSong = removeSong@{
+            val song = pendingRemoveSong ?: return@removeSong
+            val playlist = uiState.playlist.selectedPlaylist ?: return@removeSong
             val updated = uiState.playlist.playlistSongs.filterNot { it.uriString == song.uriString }
-            if (updated.size == uiState.playlist.playlistSongs.size) return@onConfirmRemoveSong
+            if (updated.size == uiState.playlist.playlistSongs.size) return@removeSong
             onSavePlaylistEdits(playlist, updated)
-        }
+        },
+        setPendingRemoveSong = setPendingRemoveSong
     )
 
     ScanDialogs(

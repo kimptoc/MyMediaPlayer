@@ -47,6 +47,7 @@ fun PlaylistDialogs(
     showRemovePlaylistSongDialog: Boolean,
     setShowRemovePlaylistSongDialog: (Boolean) -> Unit,
     pendingRemoveSong: MediaFileInfo?,
+    setPendingRemoveSong: (MediaFileInfo?) -> Unit,
     onConfirmRemoveSong: () -> Unit
 ) {
     if (showPlaylistDialog) {
