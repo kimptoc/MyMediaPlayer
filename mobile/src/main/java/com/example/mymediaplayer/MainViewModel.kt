@@ -593,7 +593,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (query.isBlank() && current.search.searchQuery.isNotBlank()) {
             recordSearchQuery(current.search.searchQuery)
         }
-        val results = applySearchResults(searchCorpusForCurrentContext(), query)
+        val results = applySearchResults(searchCorpusForCurrentContext(current), query)
         _uiState.value = current.copy(
             search = current.search.copy(
                 searchQuery = query,
@@ -1294,25 +1294,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
-    private fun searchCorpusForCurrentContext(): List<MediaFileInfo> {
-        val current = _uiState.value
-        val onPlaylistsTab = current.library.selectedTab == LibraryTab.Playlists
-        val selectedPlaylist = current.playlist.selectedPlaylist
+    private fun searchCorpusForCurrentContext(state: MainUiState): List<MediaFileInfo> {
+        val onPlaylistsTab = state.library.selectedTab == LibraryTab.Playlists
+        val selectedPlaylist = state.playlist.selectedPlaylist
         return if (onPlaylistsTab && selectedPlaylist != null) {
-            current.playlist.playlistSongs
+            state.playlist.playlistSongs
         } else {
-            current.scan.scannedFiles
+            state.scan.scannedFiles
         }
     }
 
     private fun rerunSearchWithCurrentQuery() {
-        val current = _uiState.value
-        val query = current.search.searchQuery
-        if (query.isBlank()) return
-        val results = applySearchResults(searchCorpusForCurrentContext(), query)
-        _uiState.value = current.copy(
-            search = current.search.copy(searchResults = results)
-        )
+        _uiState.update { current ->
+            val query = current.search.searchQuery
+            if (query.isBlank()) return@update current
+            val results = applySearchResults(searchCorpusForCurrentContext(current), query)
+            current.copy(search = current.search.copy(searchResults = results))
+        }
     }
 
     private fun applySearchResults(
