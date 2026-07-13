@@ -151,9 +151,10 @@ class MainViewModelSongPlaylistsTest {
     @Test
     fun removeSongFromPlaylists_failure_recordsFailureMessage() {
         val song = MediaFileInfo(uriString = "content://song1", displayName = "song1.mp3", sizeBytes = 0L, title = "Song 1")
+        val otherSong = MediaFileInfo(uriString = "content://song2", displayName = "song2.mp3", sizeBytes = 0L, title = "Song 2")
         val playlistUri = "content://test/playlist1.m3u"
         val playlist = PlaylistInfo(uriString = playlistUri, displayName = "playlist1.m3u")
-        mockService.readPlaylists[playlistUri] = listOf(song)
+        mockService.readPlaylists[playlistUri] = listOf(song, otherSong)
         mockService.failOverwrite = true
 
         viewModel.removeSongFromPlaylists(song, listOf(playlist))

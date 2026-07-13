@@ -977,7 +977,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun removeSongFromPlaylists(song: MediaFileInfo, playlists: List<PlaylistInfo>) {
         val targets = playlists.filterNot { it.uriString.startsWith(SMART_PREFIX) }
         if (targets.isEmpty()) return
-        val context = getApplication()
+        val context = getApplication<Application>()
         val updatedSelections = HashMap<String, List<MediaFileInfo>>()
         val affectedNames = mutableListOf<String>()
         val skippedNames = mutableListOf<String>()
@@ -1176,7 +1176,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             )
         )
         viewModelScope.launch(Dispatchers.IO) {
-            val context = getApplication()
+            val context = getApplication<Application>()
             val latest = _uiState.value
             val target = latest.playlist.songPlaylistsDialogSong
             if (target == null || target.uriString != song.uriString) return@launch

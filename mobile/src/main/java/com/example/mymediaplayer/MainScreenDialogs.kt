@@ -1,7 +1,6 @@
 package com.example.mymediaplayer
 
 import android.graphics.Bitmap
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -18,6 +17,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.mymediaplayer.shared.MediaFileInfo
 import com.example.mymediaplayer.shared.PlaylistInfo
@@ -188,7 +188,11 @@ fun SongPlaylistsDialogContent(
     onConfirm: () -> Unit
 ) {
     val target = song
-    val visiblePlaylists = allPlaylists.filterNot { it.uriString.startsWith(MainViewModel.SMART_PREFIX) }
+    // Remove-only feature: only list playlists that actually contain the song, since
+    // toggleSongPlaylistRemoval() is a no-op for playlists the song isn't already in.
+    val visiblePlaylists = allPlaylists
+        .filterNot { it.uriString.startsWith(MainViewModel.SMART_PREFIX) }
+        .filter { it.uriString in containingUris }
     val stateOverrides = remember { mutableStateMapOf<String, Boolean>() }
     AlertDialog(
         onDismissRequest = onDismissRequest,
