@@ -603,4 +603,15 @@ class MediaCacheServiceTest {
 
         assertTrue(service.discoveredPlaylists.isEmpty())
     }
+
+    @Test
+    fun removePlaylistByUri_withUnknownUri_doesNothing() {
+        val service = MediaCacheService()
+        service.addPlaylist(PlaylistInfo("content://playlist1", "Playlist 1"))
+
+        service.removePlaylistByUri("content://does-not-exist")
+
+        assertEquals(1, service.discoveredPlaylists.size)
+        assertEquals("content://playlist1", service.discoveredPlaylists[0].uriString)
+    }
 }
