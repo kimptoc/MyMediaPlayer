@@ -347,4 +347,112 @@ class MainViewModelTest {
             .clear()
             .commit()
     }
+
+    @Test
+    fun updateQueueState_withValidTitleAndSize_updatesStateCorrectly() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+
+        viewModel.updateQueueState(
+            queueTitle = "My Playlist",
+            queueSize = 10,
+            activeIndex = 4
+        )
+
+        val playbackState = viewModel.uiState.value.playback
+        assertTrue(playbackState.isPlayingPlaylist)
+        assertEquals("My Playlist", playbackState.queueTitle)
+        assertEquals("5/10", playbackState.queuePosition)
+        assertTrue(playbackState.hasPrev)
+        assertTrue(playbackState.hasNext)
+    }
+
+    @Test
+    fun updateQueueState_withNullTitle_resetsQueueFields() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+
+        viewModel.updateQueueState(
+            queueTitle = null,
+            queueSize = 10,
+            activeIndex = 4
+        )
+
+        val playbackState = viewModel.uiState.value.playback
+        assertFalse(playbackState.isPlayingPlaylist)
+        assertEquals(null, playbackState.queueTitle)
+        assertEquals(null, playbackState.queuePosition)
+        assertFalse(playbackState.hasPrev)
+        assertFalse(playbackState.hasNext)
+    }
+
+    @Test
+    fun updateQueueState_atBeginningOfQueue_hasNoPrev() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+
+        viewModel.updateQueueState(
+            queueTitle = "My Playlist",
+            queueSize = 10,
+            activeIndex = 0
+        )
+
+        val playbackState = viewModel.uiState.value.playback
+        assertTrue(playbackState.isPlayingPlaylist)
+        assertEquals("My Playlist", playbackState.queueTitle)
+        assertEquals("1/10", playbackState.queuePosition)
+        assertFalse(playbackState.hasPrev)
+        assertTrue(playbackState.hasNext)
+    }
+
+    @Test
+    fun updateQueueState_atEndOfQueue_hasNoNext() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+
+        viewModel.updateQueueState(
+            queueTitle = "My Playlist",
+            queueSize = 10,
+            activeIndex = 9
+        )
+
+        val playbackState = viewModel.uiState.value.playback
+        assertTrue(playbackState.isPlayingPlaylist)
+        assertEquals("My Playlist", playbackState.queueTitle)
+        assertEquals("10/10", playbackState.queuePosition)
+        assertTrue(playbackState.hasPrev)
+        assertFalse(playbackState.hasNext)
+    }
+
+    @Test
+    fun updateQueueState_withList_updatesStateCorrectly() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+
+        val queueItems = listOf(
+            QueueEntry(queueId = 1L, mediaId = "media1", title = "Song 1"),
+            QueueEntry(queueId = 2L, mediaId = "media2", title = "Song 2"),
+            QueueEntry(queueId = 3L, mediaId = "media3", title = "Song 3")
+        )
+
+        viewModel.updateQueueState(
+            queueTitle = "My Playlist",
+            queueItems = queueItems,
+            activeQueueId = 2L
+        )
+
+        val playbackState = viewModel.uiState.value.playback
+        assertTrue(playbackState.isPlayingPlaylist)
+        assertEquals("My Playlist", playbackState.queueTitle)
+        assertEquals("2/3", playbackState.queuePosition)
+        assertEquals(queueItems, playbackState.queueItems)
+        assertEquals(2L, playbackState.activeQueueId)
+        assertTrue(playbackState.hasPrev)
+        assertTrue(playbackState.hasNext)
+    }
 }
