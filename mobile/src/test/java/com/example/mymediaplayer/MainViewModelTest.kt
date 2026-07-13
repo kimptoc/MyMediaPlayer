@@ -305,6 +305,174 @@ class MainViewModelTest {
         )
     }
 
+    @Test
+    fun updateSearchQuery_onPlaylistsTab_scopesResultsToSelectedPlaylist() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+        val files = listOf(
+            MediaFileInfo(
+                uriString = "content://test/song1",
+                displayName = "Song One",
+                sizeBytes = 1L,
+                title = "hello in library"
+            ),
+            MediaFileInfo(
+                uriString = "content://test/song2",
+                displayName = "Song Two",
+                sizeBytes = 1L,
+                title = "hello in playlist"
+            ),
+            MediaFileInfo(
+                uriString = "content://test/song3",
+                displayName = "Song Three",
+                sizeBytes = 1L,
+                title = "unrelated"
+            )
+        )
+        val state = MainUiState(
+            scan = ScanState(
+                scannedFiles = files,
+                discoveredPlaylists = listOf(
+                    PlaylistInfo(
+                        uriString = MainViewModel.SMART_FAVORITES,
+                        displayName = "Favorites.m3u"
+                    )
+                ),
+                lastScanLimit = 10
+            ),
+            library = LibraryState(selectedTab = LibraryTab.Playlists),
+            playlist = PlaylistMgmtState(
+                selectedPlaylist = PlaylistInfo(
+                    uriString = MainViewModel.SMART_FAVORITES,
+                    displayName = "Favorites.m3u"
+                ),
+                playlistSongs = listOf(
+                    MediaFileInfo(
+                        uriString = "content://test/song2",
+                        displayName = "Song Two",
+                        sizeBytes = 1L,
+                        title = "hello in playlist"
+                    )
+                )
+            ),
+            isPreferencesLoading = false
+        )
+        seedUiState(viewModel, state)
+
+        viewModel.updateSearchQuery("hello")
+        val results = viewModel.uiState.value.search.searchResults
+
+        assertEquals(1, results.size)
+        assertEquals("content://test/song2", results.first().uriString)
+    }
+
+    @Test
+    fun updateSearchQuery_onOtherTabs_usesLibraryFiles() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+        val files = listOf(
+            MediaFileInfo(
+                uriString = "content://test/song1",
+                displayName = "Song One",
+                sizeBytes = 1L,
+                title = "hello library"
+            )
+        )
+        seedScanState(viewModel, files, emptyList())
+
+        viewModel.updateSearchQuery("hello")
+        val results = viewModel.uiState.value.search.searchResults
+
+        assertEquals(1, results.size)
+        assertEquals("content://test/song1", results.first().uriString)
+    }
+
+    @Test
+    fun selectTab_toPlaylistsWithSelectedPlaylist_rerunsSearch() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+        val files = listOf(
+            MediaFileInfo(
+                uriString = "content://test/song1",
+                displayName = "Song One",
+                sizeBytes = 1L,
+                title = "hello in library"
+            ),
+            MediaFileInfo(
+                uriString = "content://test/song2",
+                displayName = "Song Two",
+                sizeBytes = 1L,
+                title = "hello in playlist"
+            )
+        )
+        val state = MainUiState(
+            scan = ScanState(scannedFiles = files, lastScanLimit = 10),
+            library = LibraryState(selectedTab = LibraryTab.Songs),
+            playlist = PlaylistMgmtState(
+                selectedPlaylist = PlaylistInfo(
+                    uriString = MainViewModel.SMART_FAVORITES,
+                    displayName = "Favorites.m3u"
+                ),
+                playlistSongs = listOf(
+                    MediaFileInfo(
+                        uriString = "content://test/song2",
+                        displayName = "Song Two",
+                        sizeBytes = 1L,
+                        title = "hello in playlist"
+                    )
+                )
+            ),
+            isPreferencesLoading = false
+        )
+        seedUiState(viewModel, state)
+        viewModel.updateSearchQuery("hello")
+        val initialResults = viewModel.uiState.value.search.searchResults
+        assertEquals(2, initialResults.size)
+
+        viewModel.selectTab(LibraryTab.Playlists)
+        val scopedResults = viewModel.uiState.value.search.searchResults
+        assertEquals(1, scopedResults.size)
+        assertEquals("content://test/song2", scopedResults.first().uriString)
+    }
+
+    @Test
+    fun clearSelectedPlaylist_rerunsSearchAgainstLibrary() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+        val files = listOf(
+            MediaFileInfo(
+                uriString = "content://test/song1",
+                displayName = "Song One",
+                sizeBytes = 1L,
+                title = "hello library"
+            )
+        )
+        val state = MainUiState(
+            scan = ScanState(scannedFiles = files, lastScanLimit = 10),
+            library = LibraryState(selectedTab = LibraryTab.Playlists),
+            playlist = PlaylistMgmtState(
+                selectedPlaylist = PlaylistInfo(
+                    uriString = MainViewModel.SMART_FAVORITES,
+                    displayName = "Favorites.m3u"
+                ),
+                playlistSongs = emptyList()
+            ),
+            isPreferencesLoading = false
+        )
+        seedUiState(viewModel, state)
+        viewModel.updateSearchQuery("hello")
+        assertTrue(viewModel.uiState.value.search.searchResults.isEmpty())
+
+        viewModel.clearSelectedPlaylist()
+        val results = viewModel.uiState.value.search.searchResults
+        assertEquals(1, results.size)
+        assertEquals("content://test/song1", results.first().uriString)
+    }
+
     private fun seedScanState(
         viewModel: MainViewModel,
         files: List<MediaFileInfo>,

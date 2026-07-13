@@ -498,6 +498,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun selectTab(tab: LibraryTab) {
         val current = _uiState.value
         val lib = current.library
+        val previousTab = lib.selectedTab
         _uiState.value = current.copy(
             library = lib.copy(
                 selectedTab = tab,
@@ -515,6 +516,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             )
         )
+        if (previousTab != tab) {
+            rerunSearchWithCurrentQuery()
+        }
         if (
             tab == LibraryTab.Albums ||
             tab == LibraryTab.Genres ||
@@ -593,7 +597,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (query.isBlank() && current.search.searchQuery.isNotBlank()) {
             recordSearchQuery(current.search.searchQuery)
         }
-        val results = applySearchResults(current.scan.scannedFiles, query)
+        val results = applySearchResults(searchCorpusForCurrentContext(current), query)
         _uiState.value = current.copy(
             search = current.search.copy(
                 searchQuery = query,
@@ -1082,6 +1086,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     isPlaylistLoading = false
                 )
             )
+            rerunSearchWithCurrentQuery()
             return
         }
         val current = _uiState.value
@@ -1103,6 +1108,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     isPlaylistLoading = false
                 )
             )
+            rerunSearchWithCurrentQuery()
         }
     }
 
@@ -1115,6 +1121,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 isPlaylistLoading = false
             )
         )
+        rerunSearchWithCurrentQuery()
     }
 
     fun createRandomPlaylist(count: Int) {
@@ -1419,6 +1426,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = current.copy(
             library = lib.copy(filteredSongs = filtered)
         )
+    }
+
+    private fun searchCorpusForCurrentContext(state: MainUiState): List<MediaFileInfo> {
+        val onPlaylistsTab = state.library.selectedTab == LibraryTab.Playlists
+        val selectedPlaylist = state.playlist.selectedPlaylist
+        return if (onPlaylistsTab && selectedPlaylist != null) {
+            state.playlist.playlistSongs
+        } else {
+            state.scan.scannedFiles
+        }
+    }
+
+    private fun rerunSearchWithCurrentQuery() {
+        _uiState.update { current ->
+            val query = current.search.searchQuery
+            if (query.isBlank()) return@update current
+            val results = applySearchResults(searchCorpusForCurrentContext(current), query)
+            current.copy(search = current.search.copy(searchResults = results))
+        }
     }
 
     private fun applySearchResults(
