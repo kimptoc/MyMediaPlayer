@@ -12,6 +12,7 @@ import kotlinx.coroutines.withContext
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -613,5 +614,83 @@ class MediaCacheServiceTest {
 
         assertEquals(1, service.discoveredPlaylists.size)
         assertEquals("content://playlist1", service.discoveredPlaylists[0].uriString)
+    }
+
+    @Test
+    fun extractCandidateMetadata_whenRetrieverThrowsException_andRequiresProbe_returnsNull() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val uriString = "content://something/error_probe"
+        val uri = Uri.parse(uriString)
+
+        val dataSource = org.robolectric.shadows.util.DataSource.toDataSource(context, uri)
+        org.robolectric.shadows.ShadowMediaMetadataRetriever.addException(
+            dataSource,
+            IllegalArgumentException("Simulated failure")
+        )
+
+        val service = MediaCacheService()
+        val candidateClass = MediaCacheService::class.java.declaredClasses.find { it.simpleName == "FileCandidate" }!!
+        val constructor = candidateClass.declaredConstructors[0]
+        constructor.isAccessible = true
+        val candidate = constructor.newInstance(uri, "test_probe.mp3", 100L, 1000L, "testFolder", true)
+
+        val extractMethod = MediaCacheService::class.java.getDeclaredMethod(
+            "extractCandidateMetadata",
+            Context::class.java,
+            candidateClass,
+            kotlin.coroutines.Continuation::class.java
+        )
+        extractMethod.isAccessible = true
+
+        val result = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+             kotlin.coroutines.suspendCoroutine<Any?> { cont ->
+                 val direct = extractMethod.invoke(service, context, candidate, cont)
+                 if (direct != kotlin.coroutines.intrinsics.COROUTINE_SUSPENDED) {
+                     cont.resumeWith(Result.success(direct))
+                 }
+             }
+        } as MediaFileInfo?
+
+        assertNull("Expected null when requiresProbe is true and metadata extraction fails", result)
+    }
+
+    @Test
+    fun extractCandidateMetadata_whenRetrieverThrowsException_andDoesNotRequireProbe_returnsFallback() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val uriString = "content://something/error_no_probe"
+        val uri = Uri.parse(uriString)
+
+        val dataSource = org.robolectric.shadows.util.DataSource.toDataSource(context, uri)
+        org.robolectric.shadows.ShadowMediaMetadataRetriever.addException(
+            dataSource,
+            IllegalArgumentException("Simulated failure")
+        )
+
+        val service = MediaCacheService()
+        val candidateClass = MediaCacheService::class.java.declaredClasses.find { it.simpleName == "FileCandidate" }!!
+        val constructor = candidateClass.declaredConstructors[0]
+        constructor.isAccessible = true
+        val candidate = constructor.newInstance(uri, "test_fallback.mp3", 100L, 1000L, "testFolder", false)
+
+        val extractMethod = MediaCacheService::class.java.getDeclaredMethod(
+            "extractCandidateMetadata",
+            Context::class.java,
+            candidateClass,
+            kotlin.coroutines.Continuation::class.java
+        )
+        extractMethod.isAccessible = true
+
+        val result = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+             kotlin.coroutines.suspendCoroutine<Any?> { cont ->
+                 val direct = extractMethod.invoke(service, context, candidate, cont)
+                 if (direct != kotlin.coroutines.intrinsics.COROUTINE_SUSPENDED) {
+                     cont.resumeWith(Result.success(direct))
+                 }
+             }
+        } as MediaFileInfo?
+
+        assertNotNull("Expected fallback metadata when requiresProbe is false", result)
+        assertEquals("test_fallback", result?.title)
+        assertEquals("testFolder", result?.album)
     }
 }
