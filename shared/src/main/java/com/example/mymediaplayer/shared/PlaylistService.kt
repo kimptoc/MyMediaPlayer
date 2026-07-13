@@ -147,7 +147,7 @@ open class PlaylistService {
         }
     }
 
-    fun overwritePlaylist(
+    open fun overwritePlaylist(
         context: Context,
         playlistUri: Uri,
         files: List<MediaFileInfo>
@@ -250,7 +250,7 @@ open class PlaylistService {
         return match.delete()
     }
 
-    fun readPlaylist(context: Context, playlistUri: Uri): List<MediaFileInfo> {
+    open fun readPlaylist(context: Context, playlistUri: Uri): List<MediaFileInfo> {
         val results = mutableListOf<MediaFileInfo>()
         val inputStream = try {
             context.contentResolver.openInputStream(playlistUri)
