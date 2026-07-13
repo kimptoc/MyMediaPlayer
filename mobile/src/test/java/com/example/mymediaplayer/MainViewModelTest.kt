@@ -322,6 +322,17 @@ class MainViewModelTest {
         )
     }
 
+    @Test
+    fun updateRepeatMode_updatesRepeatModeInUiState() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+
+        viewModel.updateRepeatMode(PlaybackStateCompat.REPEAT_MODE_ONE)
+
+        assertEquals(PlaybackStateCompat.REPEAT_MODE_ONE, viewModel.uiState.value.playback.repeatMode)
+    }
+
     private fun seedUiState(viewModel: MainViewModel, state: MainUiState) {
         val field = viewModel.javaClass.getDeclaredField("_uiState")
         field.isAccessible = true
