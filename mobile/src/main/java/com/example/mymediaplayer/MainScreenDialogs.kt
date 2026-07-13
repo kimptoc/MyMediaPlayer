@@ -51,6 +51,7 @@ fun PlaylistDialogs(
     showDeletePlaylistDialog: Boolean,
     setShowDeletePlaylistDialog: (Boolean) -> Unit,
     pendingDeletePlaylist: PlaylistInfo?,
+    deletePlaylistReason: String?,
     onDeletePlaylist: (PlaylistInfo) -> Unit,
 
     showRenamePlaylistDialog: Boolean,
@@ -127,6 +128,7 @@ fun PlaylistDialogs(
     if (showDeletePlaylistDialog) {
         DeletePlaylistDialogContent(
             pendingDeletePlaylist = pendingDeletePlaylist,
+            reason = deletePlaylistReason,
             onDismissRequest = { setShowDeletePlaylistDialog(false) },
             onDeletePlaylist = { playlist ->
                 onDeletePlaylist(playlist)

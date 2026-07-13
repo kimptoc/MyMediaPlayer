@@ -153,6 +153,7 @@ fun MainScreen(
     val (selectedSearchUris, setSelectedSearchUris) = remember { mutableStateOf<Set<String>>(emptySet()) }
     val (showDeletePlaylistDialog, setShowDeletePlaylistDialog) = remember { mutableStateOf(false) }
     val (pendingDeletePlaylist, setPendingDeletePlaylist) = remember { mutableStateOf<PlaylistInfo?>(null) }
+    val (deletePlaylistReason, setDeletePlaylistReason) = remember { mutableStateOf<String?>(null) }
     val (showRenamePlaylistDialog, setShowRenamePlaylistDialog) = remember { mutableStateOf(false) }
     val (pendingRenamePlaylist, setPendingRenamePlaylist) = remember { mutableStateOf<PlaylistInfo?>(null) }
     val (renamePlaylistNameText, setRenamePlaylistNameText) = remember { mutableStateOf("") }
@@ -365,6 +366,7 @@ fun MainScreen(
             setSelectedSearchUris = setSelectedSearchUris,
             setShowDeletePlaylistDialog = setShowDeletePlaylistDialog,
             setPendingDeletePlaylist = setPendingDeletePlaylist,
+            setDeletePlaylistReason = setDeletePlaylistReason,
             setShowRenamePlaylistDialog = setShowRenamePlaylistDialog,
             setPendingRenamePlaylist = setPendingRenamePlaylist,
             setRenamePlaylistNameText = setRenamePlaylistNameText,
@@ -403,6 +405,7 @@ fun MainScreen(
         showDeletePlaylistDialog = showDeletePlaylistDialog,
         setShowDeletePlaylistDialog = setShowDeletePlaylistDialog,
         pendingDeletePlaylist = pendingDeletePlaylist,
+        deletePlaylistReason = deletePlaylistReason,
         onDeletePlaylist = onDeletePlaylist,
         showRenamePlaylistDialog = showRenamePlaylistDialog,
         setShowRenamePlaylistDialog = setShowRenamePlaylistDialog,
@@ -419,6 +422,12 @@ fun MainScreen(
             val playlist = uiState.playlist.selectedPlaylist ?: return@removeSong
             val updated = uiState.playlist.playlistSongs.filterNot { it.uriString == song.uriString }
             if (updated.size == uiState.playlist.playlistSongs.size) return@removeSong
+            if (updated.isEmpty()) {
+                setDeletePlaylistReason("This is the last song in the playlist.")
+                setPendingDeletePlaylist(playlist)
+                setShowDeletePlaylistDialog(true)
+                return@removeSong
+            }
             onSavePlaylistEdits(playlist, updated)
         },
         setPendingRemoveSong = setPendingRemoveSong,
@@ -493,7 +502,8 @@ private fun RecentSearchesSection(
 fun DeletePlaylistDialogContent(
     pendingDeletePlaylist: PlaylistInfo?,
     onDismissRequest: () -> Unit,
-    onDeletePlaylist: (PlaylistInfo) -> Unit
+    onDeletePlaylist: (PlaylistInfo) -> Unit,
+    reason: String? = null
 ) {
     val target = pendingDeletePlaylist
     androidx.compose.material3.AlertDialog(
@@ -501,7 +511,13 @@ fun DeletePlaylistDialogContent(
         title = { Text("Delete playlist") },
         text = {
             Text(
-                "Delete ${target?.displayName?.removeSuffix(".m3u") ?: "this playlist"}?"
+                buildString {
+                    if (reason != null) {
+                        append(reason)
+                        append(" ")
+                    }
+                    append("Delete ${target?.displayName?.removeSuffix(".m3u") ?: "this playlist"}?")
+                }
             )
         },
         confirmButton = {
@@ -2715,6 +2731,7 @@ private fun MainScreenContent(
     setSelectedSearchUris: (Set<String>) -> Unit,
     setShowDeletePlaylistDialog: (Boolean) -> Unit,
     setPendingDeletePlaylist: (PlaylistInfo?) -> Unit,
+    setDeletePlaylistReason: (String?) -> Unit,
     setShowRenamePlaylistDialog: (Boolean) -> Unit,
     setPendingRenamePlaylist: (PlaylistInfo?) -> Unit,
     setRenamePlaylistNameText: (String) -> Unit,
@@ -2958,6 +2975,7 @@ private fun MainScreenContent(
                         onPlaylistSelected = onPlaylistSelected,
                         onClearPlaylistSelection = onClearPlaylistSelection,
                         onRequestDeletePlaylist = {
+                            setDeletePlaylistReason(null)
                             setPendingDeletePlaylist(it)
                             setShowDeletePlaylistDialog(true)
                         },
