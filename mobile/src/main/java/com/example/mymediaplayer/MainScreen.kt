@@ -126,6 +126,10 @@ fun MainScreen(
     onCreatePlaylistFromSongs: (String, List<MediaFileInfo>) -> PlaylistInfo?,
     onToggleFavorite: (MediaFileInfo) -> Unit,
     onToggleFlag: (String) -> Unit,
+    onOpenSongPlaylists: (MediaFileInfo) -> Unit,
+    onToggleSongInPlaylist: (PlaylistInfo, Boolean) -> Unit,
+    onConfirmSongPlaylistsChanges: () -> Unit,
+    onCancelSongPlaylistsDialog: () -> Unit,
     nowPlayingArt: Bitmap?,
     showPlaylistSaveFolderPrompt: Boolean,
     onDismissPlaylistSaveFolderPrompt: () -> Unit,
@@ -154,6 +158,7 @@ fun MainScreen(
     val (renamePlaylistNameText, setRenamePlaylistNameText) = remember { mutableStateOf("") }
     val (showRemovePlaylistSongDialog, setShowRemovePlaylistSongDialog) = remember { mutableStateOf(false) }
     val (pendingRemoveSong, setPendingRemoveSong) = remember { mutableStateOf<MediaFileInfo?>(null) }
+    val (showSongPlaylistsDialog, setShowSongPlaylistsDialog) = remember { mutableStateOf(false) }
     val (showQueueDialog, setShowQueueDialog) = remember { mutableStateOf(false) }
     val (showExpandedNowPlayingDialog, setShowExpandedNowPlayingDialog) = remember { mutableStateOf(false) }
     val (songsFavoritesOnly, setSongsFavoritesOnly) = rememberSaveable { mutableStateOf(false) }
@@ -209,6 +214,22 @@ fun MainScreen(
         val message = uiState.playback.playbackError
         if (message != null) {
             snackbarHostState.showSnackbar(message)
+        }
+    }
+
+    LaunchedEffect(uiState.playlist.songPlaylistsDialogSong?.uriString) {
+        val song = uiState.playlist.songPlaylistsDialogSong
+        if (song != null) {
+            setShowSongPlaylistsDialog(true)
+        } else {
+            setShowSongPlaylistsDialog(false)
+        }
+    }
+
+    LaunchedEffect(showSongPlaylistsDialog) {
+        // When the user dismisses the dialog without confirming, clear the ViewModel state.
+        if (!showSongPlaylistsDialog && uiState.playlist.songPlaylistsDialogSong != null) {
+            onCancelSongPlaylistsDialog()
         }
     }
 
@@ -335,6 +356,7 @@ fun MainScreen(
             onPlayPlaylist = onPlayPlaylist,
             onShufflePlaylistSongs = onShufflePlaylistSongs,
             onToggleFavorite = onToggleFavorite,
+            onOpenSongPlaylists = onOpenSongPlaylists,
             setShowAddToPlaylistDialog = setShowAddToPlaylistDialog,
             setPendingAddFiles = setPendingAddFiles,
             isSearchSelectionMode = isSearchSelectionMode,
@@ -399,7 +421,14 @@ fun MainScreen(
             if (updated.size == uiState.playlist.playlistSongs.size) return@removeSong
             onSavePlaylistEdits(playlist, updated)
         },
-        setPendingRemoveSong = setPendingRemoveSong
+        setPendingRemoveSong = setPendingRemoveSong,
+        showSongPlaylistsDialog = showSongPlaylistsDialog,
+        setShowSongPlaylistsDialog = setShowSongPlaylistsDialog,
+        songPlaylistsDialogSong = uiState.playlist.songPlaylistsDialogSong,
+        songPlaylistsDialogContaining = uiState.playlist.songPlaylistsContainingUris,
+        onToggleSongInPlaylist = onToggleSongInPlaylist,
+        onConfirmSongPlaylistsChanges = onConfirmSongPlaylistsChanges,
+        isSongPlaylistsLoading = uiState.playlist.songPlaylistsLoading
     )
 
     ScanDialogs(
@@ -952,6 +981,7 @@ private fun CategoryTabContent(
     onPrev: () -> Unit,
     onFileClick: (MediaFileInfo) -> Unit,
     onAddToPlaylist: (MediaFileInfo) -> Unit,
+    onShowSongPlaylists: (MediaFileInfo) -> Unit,
     favoriteUris: Set<String>,
     onToggleFavorite: (MediaFileInfo) -> Unit,
     currentMediaId: String?
@@ -1010,6 +1040,7 @@ private fun CategoryTabContent(
             onPrev = onPrev,
             onFileClick = onFileClick,
             onAddToPlaylist = onAddToPlaylist,
+            onShowSongPlaylists = onShowSongPlaylists,
             favoriteUris = favoriteUris,
             onToggleFavorite = onToggleFavorite,
             currentMediaId = currentMediaId
@@ -1104,6 +1135,7 @@ private fun CategorySongsSection(
     onPrev: () -> Unit,
     onFileClick: (MediaFileInfo) -> Unit,
     onAddToPlaylist: (MediaFileInfo) -> Unit,
+    onShowSongPlaylists: (MediaFileInfo) -> Unit,
     favoriteUris: Set<String>,
     onToggleFavorite: (MediaFileInfo) -> Unit,
     currentMediaId: String?
@@ -1146,6 +1178,7 @@ private fun CategorySongsSection(
                                 isCurrentTrack = file.uriString == currentMediaId,
                                 onClick = { onFileClick(file) },
                                 onAddToPlaylist = { onAddToPlaylist(file) },
+                                onShowSongPlaylists = { onShowSongPlaylists(file) },
                                 isFavorite = file.uriString in favoriteUris,
                                 onToggleFavorite = { onToggleFavorite(file) }
                             )
@@ -1368,6 +1401,7 @@ private fun SongsListSection(
     onPrev: () -> Unit,
     onFileClick: (MediaFileInfo) -> Unit,
     onAddToPlaylist: (MediaFileInfo) -> Unit,
+    onShowSongPlaylists: (MediaFileInfo) -> Unit,
     favoriteUris: Set<String>,
     onToggleFavorite: (MediaFileInfo) -> Unit,
     enableSelection: Boolean = false,
@@ -1404,6 +1438,7 @@ private fun SongsListSection(
                 isCurrentTrack = file.uriString == currentMediaId,
                 onClick = { onFileClick(file) },
                 onAddToPlaylist = { onAddToPlaylist(file) },
+                onShowSongPlaylists = { onShowSongPlaylists(file) },
                 isFavorite = file.uriString in favoriteUris,
                 onToggleFavorite = { onToggleFavorite(file) },
                 isSelectionEnabled = enableSelection,
@@ -1438,6 +1473,7 @@ private fun PlaylistsSection(
     onPrev: () -> Unit,
     onFileClick: (MediaFileInfo) -> Unit,
     onAddToPlaylist: (MediaFileInfo) -> Unit,
+    onShowSongPlaylists: (MediaFileInfo) -> Unit,
     favoriteUris: Set<String>,
     onToggleFavorite: (MediaFileInfo) -> Unit,
     currentMediaId: String?
@@ -1474,6 +1510,7 @@ private fun PlaylistsSection(
             onPrev = onPrev,
             onFileClick = onFileClick,
             onAddToPlaylist = onAddToPlaylist,
+            onShowSongPlaylists = onShowSongPlaylists,
             favoriteUris = favoriteUris,
             onToggleFavorite = onToggleFavorite,
             currentMediaId = currentMediaId
@@ -1524,6 +1561,7 @@ private fun PlaylistSongsContent(
     onAddToPlaylist: (MediaFileInfo) -> Unit,
     onToggleFavorite: (MediaFileInfo) -> Unit,
     onRequestRemoveSong: ((MediaFileInfo) -> Unit)?,
+    onShowSongPlaylists: ((MediaFileInfo) -> Unit)?,
     setEditableSongs: (List<MediaFileInfo>) -> Unit,
     draggingIndex: Int?,
     setDraggingIndex: (Int?) -> Unit,
@@ -1553,7 +1591,8 @@ private fun PlaylistSongsContent(
                 onFileClick = onFileClick,
                 onAddToPlaylist = onAddToPlaylist,
                 onToggleFavorite = onToggleFavorite,
-                onRequestRemoveSong = onRequestRemoveSong
+                onRequestRemoveSong = onRequestRemoveSong,
+                onShowSongPlaylists = onShowSongPlaylists
             )
         } else {
             val filteredRows = if (editSearchQuery.isNotBlank()) {
@@ -1605,6 +1644,7 @@ private fun PlaylistDetails(
     onPrev: () -> Unit,
     onFileClick: (MediaFileInfo) -> Unit,
     onAddToPlaylist: (MediaFileInfo) -> Unit,
+    onShowSongPlaylists: (MediaFileInfo) -> Unit,
     favoriteUris: Set<String>,
     onToggleFavorite: (MediaFileInfo) -> Unit,
     currentMediaId: String?
@@ -1695,6 +1735,11 @@ private fun PlaylistDetails(
                     null
                 } else {
                     onRequestRemoveSong
+                },
+                onShowSongPlaylists = if (selectedPlaylist.uriString.startsWith(MainViewModel.SMART_PREFIX)) {
+                    null
+                } else {
+                    { file -> onShowSongPlaylists(file) }
                 },
                 setEditableSongs = setEditableSongs,
                 draggingIndex = draggingIndex,
@@ -1885,7 +1930,8 @@ private fun PlaylistViewList(
     onFileClick: (MediaFileInfo) -> Unit,
     onAddToPlaylist: (MediaFileInfo) -> Unit,
     onToggleFavorite: (MediaFileInfo) -> Unit,
-    onRequestRemoveSong: ((MediaFileInfo) -> Unit)?
+    onRequestRemoveSong: ((MediaFileInfo) -> Unit)?,
+    onShowSongPlaylists: ((MediaFileInfo) -> Unit)? = null
 ) {
     LazyColumn {
         items(displayedSongs) { file ->
@@ -1894,6 +1940,7 @@ private fun PlaylistViewList(
                 isCurrentTrack = file.uriString == currentMediaId,
                 onClick = { onFileClick(file) },
                 onAddToPlaylist = { onAddToPlaylist(file) },
+                onShowSongPlaylists = onShowSongPlaylists?.let { callback -> { callback(file) } },
                 isFavorite = file.uriString in favoriteUris,
                 onToggleFavorite = { onToggleFavorite(file) },
                 onRemoveFromPlaylist = onRequestRemoveSong?.let { callback -> { callback(file) } }
@@ -2388,7 +2435,8 @@ fun FileCard(
     isSelectionEnabled: Boolean = false,
     isSelected: Boolean = false,
     onSelectionToggle: (() -> Unit)? = null,
-    onRemoveFromPlaylist: (() -> Unit)? = null
+    onRemoveFromPlaylist: (() -> Unit)? = null,
+    onShowSongPlaylists: (() -> Unit)? = null
 ) {
     val colors = if (isCurrentTrack) {
         CardDefaults.cardColors(
@@ -2418,7 +2466,7 @@ fun FileCard(
                     style = MaterialTheme.typography.bodySmall
                 )
             }
-            if (onAddToPlaylist != null || onToggleFavorite != null || (isSelectionEnabled && onSelectionToggle != null) || onRemoveFromPlaylist != null) {
+            if (onAddToPlaylist != null || onToggleFavorite != null || (isSelectionEnabled && onSelectionToggle != null) || onRemoveFromPlaylist != null || onShowSongPlaylists != null) {
                 Spacer(modifier = Modifier.height(6.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -2439,6 +2487,11 @@ fun FileCard(
                     if (onAddToPlaylist != null) {
                         TextButton(onClick = onAddToPlaylist) {
                             Text("Add")
+                        }
+                    }
+                    if (onShowSongPlaylists != null) {
+                        TextButton(onClick = onShowSongPlaylists) {
+                            Text("Lists")
                         }
                     }
                     if (onRemoveFromPlaylist != null) {
@@ -2489,6 +2542,7 @@ private fun SongsTabContent(
     onPrev: () -> Unit,
     onFileClick: (MediaFileInfo) -> Unit,
     onAddToPlaylist: (MediaFileInfo) -> Unit,
+    onShowSongPlaylists: (MediaFileInfo) -> Unit,
     onToggleFavorite: (MediaFileInfo) -> Unit,
     currentMediaId: String?
 ) {
@@ -2561,6 +2615,7 @@ private fun SongsTabContent(
         onPrev = onPrev,
         onFileClick = onFileClick,
         onAddToPlaylist = onAddToPlaylist,
+        onShowSongPlaylists = onShowSongPlaylists,
         onToggleFavorite = onToggleFavorite,
         currentMediaId = currentMediaId
     )
@@ -2651,6 +2706,7 @@ private fun MainScreenContent(
     onPlayPlaylist: (PlaylistInfo) -> Unit,
     onShufflePlaylistSongs: (PlaylistInfo, List<MediaFileInfo>) -> Unit,
     onToggleFavorite: (MediaFileInfo) -> Unit,
+    onOpenSongPlaylists: (MediaFileInfo) -> Unit,
     setShowAddToPlaylistDialog: (Boolean) -> Unit,
     setPendingAddFiles: (List<MediaFileInfo>) -> Unit,
     isSearchSelectionMode: Boolean,
@@ -2776,6 +2832,7 @@ private fun MainScreenContent(
                             setPendingAddFiles(listOf(it))
                             setShowAddToPlaylistDialog(true)
                         },
+                        onShowSongPlaylists = onOpenSongPlaylists,
                         onToggleFavorite = onToggleFavorite,
                         enableSelection = isSearchSelectionMode,
                         selectedUris = selectedSearchUris,
@@ -2852,6 +2909,7 @@ private fun MainScreenContent(
                             setPendingAddFiles(listOf(it))
                             setShowAddToPlaylistDialog(true)
                         },
+                        onShowSongPlaylists = onOpenSongPlaylists,
                         onToggleFavorite = onToggleFavorite,
                         currentMediaId = uiState.playback.currentMediaId
                     )
@@ -2923,6 +2981,7 @@ private fun MainScreenContent(
                             setPendingAddFiles(listOf(it))
                             setShowAddToPlaylistDialog(true)
                         },
+                        onShowSongPlaylists = onOpenSongPlaylists,
                         favoriteUris = uiState.favoriteUris,
                         onToggleFavorite = onToggleFavorite,
                         currentMediaId = uiState.playback.currentMediaId
@@ -2975,6 +3034,7 @@ private fun MainScreenContent(
                             setPendingAddFiles(listOf(it))
                             setShowAddToPlaylistDialog(true)
                         },
+                        onShowSongPlaylists = onOpenSongPlaylists,
                         favoriteUris = uiState.favoriteUris,
                         onToggleFavorite = onToggleFavorite,
                         currentMediaId = uiState.playback.currentMediaId
@@ -3005,6 +3065,7 @@ private fun MainScreenContent(
                             setPendingAddFiles(listOf(it))
                             setShowAddToPlaylistDialog(true)
                         },
+                        onShowSongPlaylists = onOpenSongPlaylists,
                         favoriteUris = uiState.favoriteUris,
                         onToggleFavorite = onToggleFavorite,
                         currentMediaId = uiState.playback.currentMediaId
@@ -3035,6 +3096,7 @@ private fun MainScreenContent(
                             setPendingAddFiles(listOf(it))
                             setShowAddToPlaylistDialog(true)
                         },
+                        onShowSongPlaylists = onOpenSongPlaylists,
                         favoriteUris = uiState.favoriteUris,
                         onToggleFavorite = onToggleFavorite,
                         currentMediaId = uiState.playback.currentMediaId

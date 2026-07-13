@@ -1,7 +1,24 @@
 package com.example.mymediaplayer
 
 import android.graphics.Bitmap
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.remember
+import androidx.compose.ui.unit.dp
 import com.example.mymediaplayer.shared.MediaFileInfo
 import com.example.mymediaplayer.shared.PlaylistInfo
 import com.example.mymediaplayer.PlaybackState
@@ -48,7 +65,15 @@ fun PlaylistDialogs(
     setShowRemovePlaylistSongDialog: (Boolean) -> Unit,
     pendingRemoveSong: MediaFileInfo?,
     setPendingRemoveSong: (MediaFileInfo?) -> Unit,
-    onConfirmRemoveSong: () -> Unit
+    onConfirmRemoveSong: () -> Unit,
+
+    showSongPlaylistsDialog: Boolean,
+    setShowSongPlaylistsDialog: (Boolean) -> Unit,
+    songPlaylistsDialogSong: MediaFileInfo?,
+    songPlaylistsDialogContaining: Set<String>,
+    onToggleSongInPlaylist: (PlaylistInfo, Boolean) -> Unit,
+    onConfirmSongPlaylistsChanges: () -> Unit,
+    isSongPlaylistsLoading: Boolean
 ) {
     if (showPlaylistDialog) {
         CreateRandomPlaylistDialog(
@@ -135,6 +160,111 @@ fun PlaylistDialogs(
             }
         )
     }
+
+    if (showSongPlaylistsDialog) {
+        SongPlaylistsDialogContent(
+            song = songPlaylistsDialogSong,
+            allPlaylists = discoveredPlaylists,
+            containingUris = songPlaylistsDialogContaining,
+            isLoading = isSongPlaylistsLoading,
+            onToggle = onToggleSongInPlaylist,
+            onDismissRequest = { setShowSongPlaylistsDialog(false) },
+            onConfirm = {
+                onConfirmSongPlaylistsChanges()
+                setShowSongPlaylistsDialog(false)
+            }
+        )
+    }
+}
+
+@Composable
+fun SongPlaylistsDialogContent(
+    song: MediaFileInfo?,
+    allPlaylists: List<PlaylistInfo>,
+    containingUris: Set<String>,
+    isLoading: Boolean,
+    onToggle: (PlaylistInfo, Boolean) -> Unit,
+    onDismissRequest: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    val target = song
+    val visiblePlaylists = allPlaylists.filterNot { it.uriString.startsWith(MainViewModel.SMART_PREFIX) }
+    val stateOverrides = remember { mutableStateMapOf<String, Boolean>() }
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        title = { Text("Playlists for song") },
+        text = {
+            Column {
+                Text(
+                    "Choose which playlists contain \"${target?.cleanTitle ?: target?.displayName ?: "this song"}\""
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                if (isLoading) {
+                    Text("Loading playlist contents...")
+                } else if (visiblePlaylists.isEmpty()) {
+                    Text(
+                        "No playlists available",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 260.dp)
+                    ) {
+                        items(visiblePlaylists) { playlist ->
+                            val key = playlist.uriString
+                            val effective = stateOverrides[key] ?: (key in containingUris)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = effective,
+                                    onCheckedChange = { checked ->
+                                        stateOverrides[key] = checked
+                                        onToggle(playlist, checked)
+                                    }
+                                )
+                                TextButton(
+                                    onClick = {
+                                        val newValue = !effective
+                                        stateOverrides[key] = newValue
+                                        onToggle(playlist, newValue)
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(
+                                        playlist.displayName.removeSuffix(".m3u"),
+                                        modifier = Modifier.fillMaxWidth(),
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Start
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        "Uncheck to remove the song from that playlist",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onConfirm,
+                enabled = !isLoading
+            ) {
+                Text("Done")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismissRequest) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 @Composable

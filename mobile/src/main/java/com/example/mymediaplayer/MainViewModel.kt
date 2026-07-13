@@ -88,7 +88,11 @@ data class PlaylistMgmtState(
     val isPlaylistLoading: Boolean = false,
     val lastPlaylistCount: Int = 3,
     val manualPlaylistSongs: List<MediaFileInfo> = emptyList(),
-    val playlistMessage: String? = null
+    val playlistMessage: String? = null,
+    val songPlaylistsDialogSong: MediaFileInfo? = null,
+    val songPlaylistsContainingUris: Set<String> = emptySet(),
+    val songPlaylistsToRemove: Set<String> = emptySet(),
+    val songPlaylistsLoading: Boolean = false
 )
 
 private fun PlaylistMgmtState.isSelected(playlist: PlaylistInfo) =
@@ -966,6 +970,56 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun removeSongFromPlaylists(song: MediaFileInfo, playlists: List<PlaylistInfo>) {
+        val targets = playlists.filterNot { it.uriString.startsWith(SMART_PREFIX) }
+        if (targets.isEmpty()) return
+        val context = getApplication()
+        val updatedSelections = HashMap<String, List<MediaFileInfo>>()
+        val affectedNames = mutableListOf<String>()
+        val skippedNames = mutableListOf<String>()
+        val failedNames = mutableListOf<String>()
+        for (playlist in targets) {
+            val uri = playlist.uriString.toUri()
+            val current = playlistService.readPlaylist(context, uri)
+            val filtered = current.filterNot { it.uriString == song.uriString }
+            if (filtered.size == current.size) continue
+            if (filtered.isEmpty()) {
+                skippedNames.add(playlist.displayName)
+                continue
+            }
+            val ok = playlistService.overwritePlaylist(context, uri, filtered)
+            if (ok) {
+                updatedSelections[playlist.uriString] = filtered
+                affectedNames.add(playlist.displayName)
+            } else {
+                failedNames.add(playlist.displayName)
+            }
+        }
+        val latest = _uiState.value
+        val newSelectedPlaylist = latest.playlist.selectedPlaylist
+        val newPlaylistSongs = if (newSelectedPlaylist != null &&
+            updatedSelections.containsKey(newSelectedPlaylist.uriString)
+        ) {
+            updatedSelections.getValue(newSelectedPlaylist.uriString)
+        } else {
+            latest.playlist.playlistSongs
+        }
+        val message = when {
+            failedNames.isNotEmpty() -> "Failed to update ${failedNames.size} playlist(s)"
+            skippedNames.isNotEmpty() ->
+                "Removed from ${affectedNames.size}; left ${skippedNames.size} playlist(s) empty"
+            affectedNames.isNotEmpty() ->
+                "Removed from ${affectedNames.size} playlist(s)"
+            else -> "Song not in selected playlists"
+        }
+        _uiState.value = latest.copy(
+            playlist = latest.playlist.copy(
+                playlistSongs = newPlaylistSongs,
+                playlistMessage = message
+            )
+        )
+    }
+
     fun deletePlaylist(playlist: PlaylistInfo) {
         viewModelScope.launch(Dispatchers.IO) {
             val uri = playlist.uriString.toUri()
@@ -1101,6 +1155,86 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val current = _uiState.value
         _uiState.value = current.copy(
             playlist = current.playlist.copy(playlistMessage = null)
+        )
+    }
+
+    fun openSongPlaylistsDialog(song: MediaFileInfo) {
+        val current = _uiState.value
+        _uiState.value = current.copy(
+            playlist = current.playlist.copy(
+                songPlaylistsDialogSong = song,
+                songPlaylistsContainingUris = emptySet(),
+                songPlaylistsToRemove = emptySet(),
+                songPlaylistsLoading = true
+            )
+        )
+        viewModelScope.launch(Dispatchers.IO) {
+            val context = getApplication()
+            val latest = _uiState.value
+            val target = latest.playlist.songPlaylistsDialogSong
+            if (target == null || target.uriString != song.uriString) return@launch
+            val candidates = latest.scan.discoveredPlaylists
+                .filterNot { it.uriString.startsWith(SMART_PREFIX) }
+            val containing = HashSet<String>()
+            for (candidate in candidates) {
+                val songs = playlistService.readPlaylist(context, candidate.uriString.toUri())
+                if (songs.any { it.uriString == song.uriString }) {
+                    containing.add(candidate.uriString)
+                }
+            }
+            val cur = _uiState.value
+            if (cur.playlist.songPlaylistsDialogSong?.uriString != song.uriString) return@launch
+            _uiState.value = cur.copy(
+                playlist = cur.playlist.copy(
+                    songPlaylistsContainingUris = containing,
+                    songPlaylistsLoading = false
+                )
+            )
+        }
+    }
+
+    fun toggleSongPlaylistRemoval(playlist: PlaylistInfo, checked: Boolean) {
+        val current = _uiState.value
+        val song = current.playlist.songPlaylistsDialogSong ?: return
+        val wasContaining = playlist.uriString in current.playlist.songPlaylistsContainingUris
+        if (!wasContaining) return
+        val updated = if (checked) {
+            current.playlist.songPlaylistsToRemove - playlist.uriString
+        } else {
+            current.playlist.songPlaylistsToRemove + playlist.uriString
+        }
+        _uiState.value = current.copy(
+            playlist = current.playlist.copy(songPlaylistsToRemove = updated)
+        )
+    }
+
+    fun confirmSongPlaylistsDialogChanges() {
+        val current = _uiState.value
+        val song = current.playlist.songPlaylistsDialogSong ?: return
+        val playlistsToRemove = current.scan.discoveredPlaylists
+            .filter { it.uriString in current.playlist.songPlaylistsToRemove }
+        _uiState.value = current.copy(
+            playlist = current.playlist.copy(
+                songPlaylistsDialogSong = null,
+                songPlaylistsContainingUris = emptySet(),
+                songPlaylistsToRemove = emptySet(),
+                songPlaylistsLoading = false
+            )
+        )
+        if (playlistsToRemove.isNotEmpty()) {
+            removeSongFromPlaylists(song, playlistsToRemove)
+        }
+    }
+
+    fun cancelSongPlaylistsDialog() {
+        val current = _uiState.value
+        _uiState.value = current.copy(
+            playlist = current.playlist.copy(
+                songPlaylistsDialogSong = null,
+                songPlaylistsContainingUris = emptySet(),
+                songPlaylistsToRemove = emptySet(),
+                songPlaylistsLoading = false
+            )
         )
     }
 
