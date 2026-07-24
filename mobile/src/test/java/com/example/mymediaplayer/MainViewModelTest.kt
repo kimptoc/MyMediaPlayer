@@ -306,6 +306,38 @@ class MainViewModelTest {
     }
 
     @Test
+    fun ensurePlaylistSongCount_smartPlaylist_doesNotTouchCounts() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+
+        viewModel.ensurePlaylistSongCount(
+            PlaylistInfo(uriString = MainViewModel.SMART_FAVORITES, displayName = "Favorites.m3u")
+        )
+
+        assertTrue(viewModel.uiState.value.playlist.playlistSongCounts.isEmpty())
+    }
+
+    @Test
+    fun ensurePlaylistSongCount_alreadyCached_leavesCountUnchanged() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+        val playlist = PlaylistInfo(
+            uriString = "content://test/playlist.m3u",
+            displayName = "playlist.m3u"
+        )
+        val state = MainUiState(
+            playlist = PlaylistMgmtState(playlistSongCounts = mapOf(playlist.uriString to 7))
+        )
+        seedUiState(viewModel, state)
+
+        viewModel.ensurePlaylistSongCount(playlist)
+
+        assertEquals(7, viewModel.uiState.value.playlist.playlistSongCounts[playlist.uriString])
+    }
+
+    @Test
     fun updateSearchQuery_onPlaylistsTab_scopesResultsToSelectedPlaylist() {
         val app = ApplicationProvider.getApplicationContext<Application>()
         clearPrefs(app)
