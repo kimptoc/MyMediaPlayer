@@ -56,6 +56,29 @@ class MainViewModelTest {
     }
 
     @Test
+    fun resetAfterScan_clearsStalePlaylistSongCounts() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+        seedUiState(
+            viewModel,
+            MainUiState(
+                playlist = PlaylistMgmtState(
+                    playlistSongCounts = mapOf("content://test/playlist.m3u" to 5)
+                )
+            )
+        )
+
+        val state = viewModel.resetAfterScan(
+            files = emptyList(),
+            playlists = emptyList(),
+            maxFiles = 12
+        )
+
+        assertTrue(state.playlist.playlistSongCounts.isEmpty())
+    }
+
+    @Test
     fun updateSearchQuery_preservesSpacesAndFindsExactPhrase() {
         val app = ApplicationProvider.getApplicationContext<Application>()
         clearPrefs(app)
@@ -303,6 +326,38 @@ class MainViewModelTest {
             listOf("content://test/songB", "content://test/songC"),
             orderedUris
         )
+    }
+
+    @Test
+    fun ensurePlaylistSongCount_smartPlaylist_doesNotTouchCounts() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+
+        viewModel.ensurePlaylistSongCount(
+            PlaylistInfo(uriString = MainViewModel.SMART_FAVORITES, displayName = "Favorites.m3u")
+        )
+
+        assertTrue(viewModel.uiState.value.playlist.playlistSongCounts.isEmpty())
+    }
+
+    @Test
+    fun ensurePlaylistSongCount_alreadyCached_leavesCountUnchanged() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+        val playlist = PlaylistInfo(
+            uriString = "content://test/playlist.m3u",
+            displayName = "playlist.m3u"
+        )
+        val state = MainUiState(
+            playlist = PlaylistMgmtState(playlistSongCounts = mapOf(playlist.uriString to 7))
+        )
+        seedUiState(viewModel, state)
+
+        viewModel.ensurePlaylistSongCount(playlist)
+
+        assertEquals(7, viewModel.uiState.value.playlist.playlistSongCounts[playlist.uriString])
     }
 
     @Test

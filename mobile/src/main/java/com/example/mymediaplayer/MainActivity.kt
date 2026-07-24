@@ -457,6 +457,7 @@ class MainActivity : ComponentActivity() {
             onClearCategorySelection = viewModel::clearCategorySelection,
             onPlaylistSelected = viewModel::selectPlaylist,
             onClearPlaylistSelection = viewModel::clearSelectedPlaylist,
+            onEnsurePlaylistSongCount = viewModel::ensurePlaylistSongCount,
             onDeletePlaylist = viewModel::deletePlaylist,
             onRenamePlaylist = viewModel::renamePlaylist,
             onSavePlaylistEdits = viewModel::savePlaylistEdits,
