@@ -148,6 +148,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // scan coroutines on Dispatchers.IO are concurrently reading/writing the same map.
     private val scanCache =
         ConcurrentHashMap<String, Pair<List<MediaFileInfo>, List<PlaylistInfo>>>()
+    private val pendingPlaylistSongCountLoads: MutableSet<String> =
+        ConcurrentHashMap.newKeySet()
     private var treeUri: Uri? = null
     private var playlistTreeUri: Uri? = null
     private var metadataKey: String? = null
@@ -227,7 +229,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 selectedPlaylist = null,
                 playlistSongs = emptyList(),
                 isPlaylistLoading = false,
-                manualPlaylistSongs = emptyList()
+                manualPlaylistSongs = emptyList(),
+                playlistSongCounts = emptyMap()
             ),
             search = current.search.copy(
                 searchResults = applySearchResults(files, current.search.searchQuery)
@@ -1121,25 +1124,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun ensurePlaylistSongCount(playlist: PlaylistInfo) {
         if (playlist.uriString.startsWith(SMART_PREFIX)) return
         if (_uiState.value.playlist.playlistSongCounts.containsKey(playlist.uriString)) return
+        if (!pendingPlaylistSongCountLoads.add(playlist.uriString)) return
         viewModelScope.launch(Dispatchers.IO) {
             val count = playlistService.readPlaylist(getApplication(), playlist.uriString.toUri()).size
-            val current = _uiState.value
-            _uiState.value = current.copy(
-                playlist = current.playlist.copy(
-                    playlistSongCounts = current.playlist.playlistSongCounts + (playlist.uriString to count)
+            _uiState.update { current ->
+                current.copy(
+                    playlist = current.playlist.copy(
+                        playlistSongCounts = current.playlist.playlistSongCounts + (playlist.uriString to count)
+                    )
                 )
-            )
+            }
+            pendingPlaylistSongCountLoads.remove(playlist.uriString)
         }
     }
 
     private fun invalidatePlaylistSongCount(uriString: String) {
-        val current = _uiState.value
-        if (!current.playlist.playlistSongCounts.containsKey(uriString)) return
-        _uiState.value = current.copy(
-            playlist = current.playlist.copy(
-                playlistSongCounts = current.playlist.playlistSongCounts - uriString
+        _uiState.update { current ->
+            if (!current.playlist.playlistSongCounts.containsKey(uriString)) return@update current
+            current.copy(
+                playlist = current.playlist.copy(
+                    playlistSongCounts = current.playlist.playlistSongCounts - uriString
+                )
             )
-        )
+        }
     }
 
     fun clearSelectedPlaylist() {

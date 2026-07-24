@@ -56,6 +56,29 @@ class MainViewModelTest {
     }
 
     @Test
+    fun resetAfterScan_clearsStalePlaylistSongCounts() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+        seedUiState(
+            viewModel,
+            MainUiState(
+                playlist = PlaylistMgmtState(
+                    playlistSongCounts = mapOf("content://test/playlist.m3u" to 5)
+                )
+            )
+        )
+
+        val state = viewModel.resetAfterScan(
+            files = emptyList(),
+            playlists = emptyList(),
+            maxFiles = 12
+        )
+
+        assertTrue(state.playlist.playlistSongCounts.isEmpty())
+    }
+
+    @Test
     fun updateSearchQuery_preservesSpacesAndFindsExactPhrase() {
         val app = ApplicationProvider.getApplicationContext<Application>()
         clearPrefs(app)
