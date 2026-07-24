@@ -478,7 +478,9 @@ class MainActivity : ComponentActivity() {
             onSetPlaylistSaveFolderNow = ::handleSetPlaylistSaveFolderNow,
             onOpenSettings = ::handleOpenSettings,
             onPlayPlaylist = ::handlePlayPlaylist,
-            onShufflePlaylistSongs = ::handleShufflePlaylistSongs
+            onShufflePlaylistSongs = ::handleShufflePlaylistSongs,
+            onRefreshPlaylistSongCounts = viewModel::refreshPlaylistSongCounts,
+            onSmartPlaylistSongCount = viewModel::smartPlaylistSongCount
         )
     }
 

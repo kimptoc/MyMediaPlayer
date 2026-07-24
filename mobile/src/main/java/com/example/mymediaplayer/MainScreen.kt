@@ -135,6 +135,8 @@ fun MainScreen(
     onDismissPlaylistSaveFolderPrompt: () -> Unit,
     onSetPlaylistSaveFolderNow: () -> Unit,
     onOpenSettings: () -> Unit,
+    onRefreshPlaylistSongCounts: () -> Unit,
+    onSmartPlaylistSongCount: (String) -> Int?,
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     val (menuExpanded, setMenuExpanded) = remember { mutableStateOf(false) }
@@ -1468,6 +1470,7 @@ private fun SongsListSection(
 @Composable
 private fun PlaylistsSection(
     playlists: List<PlaylistInfo>,
+    playlistSongCounts: Map<String, Int>,
     selectedPlaylist: PlaylistInfo?,
     playlistSongs: List<MediaFileInfo>,
     isLoading: Boolean,
@@ -1502,6 +1505,7 @@ private fun PlaylistsSection(
     if (selectedPlaylist == null) {
         PlaylistList(
             playlists = playlists,
+            playlistSongCounts = playlistSongCounts,
             onRequestRenamePlaylist = onRequestRenamePlaylist,
             onRequestDeletePlaylist = onRequestDeletePlaylist,
             onPlaylistSelected = onPlaylistSelected
@@ -1537,6 +1541,7 @@ private fun PlaylistsSection(
 @Composable
 private fun PlaylistList(
     playlists: List<PlaylistInfo>,
+    playlistSongCounts: Map<String, Int>,
     onRequestRenamePlaylist: (PlaylistInfo) -> Unit,
     onRequestDeletePlaylist: (PlaylistInfo) -> Unit,
     onPlaylistSelected: (PlaylistInfo) -> Unit
@@ -1550,6 +1555,7 @@ private fun PlaylistList(
                 val isSmart = playlist.uriString.startsWith(MainViewModel.SMART_PREFIX)
                 PlaylistCard(
                     playlist = playlist,
+                    songCount = playlistSongCounts[playlist.uriString],
                     isCompact = false,
                     isSmart = isSmart,
                     onRename = { if (!isSmart) onRequestRenamePlaylist(playlist) },
@@ -2358,10 +2364,13 @@ fun PlaylistCard(
     playlist: PlaylistInfo,
     isCompact: Boolean = false,
     isSmart: Boolean = false,
+    songCount: Int? = null,
     onRename: () -> Unit,
     onDelete: () -> Unit,
     onClick: () -> Unit
 ) {
+    val displayName = playlist.displayName.removeSuffix(".m3u")
+    val titleText = songCount?.let { count -> "$displayName ($count)" } ?: displayName
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -2376,7 +2385,7 @@ fun PlaylistCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = playlist.displayName.removeSuffix(".m3u"),
+                text = titleText,
                 style = if (isCompact) {
                     MaterialTheme.typography.bodyMedium
                 } else {
@@ -2962,8 +2971,23 @@ private fun MainScreenContent(
                             )
                         )
                     }
+                    val combinedPlaylists = uiState.scan.discoveredPlaylists + smartPlaylists
+                    LaunchedEffect(combinedPlaylists.map { it.uriString }.toSet()) {
+                        if (uiState.playlist.selectedPlaylist == null) {
+                            onRefreshPlaylistSongCounts()
+                        }
+                    }
+                    val smartCounts: Map<String, Int> = smartPlaylists
+                        .mapNotNull { p ->
+                            val count = uiState.playlist.playlistSongCounts[p.uriString]
+                                ?: onSmartPlaylistSongCount(p.uriString)
+                            if (count != null) p.uriString to count else null
+                        }
+                        .toMap()
+                    val playlistSongCounts = uiState.playlist.playlistSongCounts + smartCounts
                     PlaylistsSection(
-                        playlists = uiState.scan.discoveredPlaylists + smartPlaylists,
+                        playlists = combinedPlaylists,
+                        playlistSongCounts = playlistSongCounts,
                         selectedPlaylist = uiState.playlist.selectedPlaylist,
                         playlistSongs = uiState.playlist.playlistSongs,
                         isLoading = uiState.playlist.isPlaylistLoading,

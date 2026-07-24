@@ -92,7 +92,9 @@ data class PlaylistMgmtState(
     val songPlaylistsDialogSong: MediaFileInfo? = null,
     val songPlaylistsContainingUris: Set<String> = emptySet(),
     val songPlaylistsToRemove: Set<String> = emptySet(),
-    val songPlaylistsLoading: Boolean = false
+    val songPlaylistsLoading: Boolean = false,
+    val playlistSongCounts: Map<String, Int> = emptyMap(),
+    val isPlaylistCountsLoading: Boolean = false
 )
 
 private fun PlaylistMgmtState.isSelected(playlist: PlaylistInfo) =
@@ -1165,6 +1167,54 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
+    fun refreshPlaylistSongCounts() {
+        val playlists = _uiState.value.scan.discoveredPlaylists
+            .filterNot { it.uriString.startsWith(SMART_PREFIX) }
+        if (playlists.isEmpty()) {
+            _uiState.update { current ->
+                if (current.playlist.playlistSongCounts.isEmpty() &&
+                    !current.playlist.isPlaylistCountsLoading
+                ) {
+                    current
+                } else {
+                    current.copy(
+                        playlist = current.playlist.copy(
+                            playlistSongCounts = emptyMap(),
+                            isPlaylistCountsLoading = false
+                        )
+                    )
+                }
+            }
+            return
+        }
+        _uiState.update { current ->
+            current.copy(
+                playlist = current.playlist.copy(isPlaylistCountsLoading = true)
+            )
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            val context = getApplication<Application>()
+            val counts = HashMap<String, Int>()
+            for (playlist in playlists) {
+                val songs = playlistService.readPlaylist(context, playlist.uriString.toUri())
+                counts[playlist.uriString] = songs.size
+            }
+            val latest = _uiState.value
+            val latestUris = latest.scan.discoveredPlaylists
+                .filterNot { it.uriString.startsWith(SMART_PREFIX) }
+                .map { it.uriString }
+                .toSet()
+            val merged = latest.playlist.playlistSongCounts + counts
+            val filtered = merged.filterKeys { uri -> uri in latestUris }
+            _uiState.value = latest.copy(
+                playlist = latest.playlist.copy(
+                    playlistSongCounts = filtered,
+                    isPlaylistCountsLoading = false
+                )
+            )
+        }
+    }
+
     fun openSongPlaylistsDialog(song: MediaFileInfo) {
         val current = _uiState.value
         _uiState.value = current.copy(
@@ -1555,6 +1605,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 .thenBy { lastPlayedAt[it.uriString] ?: Long.MIN_VALUE }
                 .thenBy { it.cleanTitle.lowercase(Locale.US) }
         )
+    }
+
+    fun smartPlaylistSongCount(uriString: String): Int? {
+        if (!uriString.startsWith(SMART_PREFIX)) return null
+        if (_uiState.value.isPreferencesLoading) return null
+        return smartPlaylistSongs(uriString).size
     }
 
     private fun refreshSmartPlaylistSelection() {
