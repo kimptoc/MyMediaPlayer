@@ -900,30 +900,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun addSongToExistingPlaylist(playlist: PlaylistInfo, file: MediaFileInfo) {
-        val uri = playlist.uriString.toUri()
-        val success = playlistService.appendToPlaylist(getApplication(), uri, listOf(file))
-        if (success) invalidatePlaylistSongCount(playlist.uriString)
-        val current = _uiState.value
-        if (success) {
-            val updatedSongs = if (current.playlist.isSelected(playlist)) {
-                current.playlist.playlistSongs + file
-            } else {
-                current.playlist.playlistSongs
-            }
-            _uiState.value = current.copy(
-                playlist = current.playlist.copy(
-                    playlistSongs = updatedSongs,
-                    playlistMessage = "Added to ${playlist.displayName.removeSuffix(".m3u")}"
-                )
-            )
-        } else {
-            _uiState.value = current.copy(
-                playlist = current.playlist.copy(playlistMessage = "Failed to update playlist")
-            )
-        }
-    }
-
     fun addManyToExistingPlaylist(playlist: PlaylistInfo, files: List<MediaFileInfo>) {
         if (files.isEmpty()) return
         val uri = playlist.uriString.toUri()
