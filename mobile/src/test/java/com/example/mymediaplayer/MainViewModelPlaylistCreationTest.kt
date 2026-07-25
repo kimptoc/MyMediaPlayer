@@ -8,6 +8,7 @@ import com.example.mymediaplayer.shared.MediaFileInfo
 import com.example.mymediaplayer.shared.PlaylistInfo
 import com.example.mymediaplayer.shared.PlaylistService
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -178,6 +179,56 @@ class MainViewModelPlaylistCreationTest {
     @Test
     fun createManualPlaylist_success_updatesStateAndDiscoveredPlaylists() {
         viewModel.setTreeUri(Uri.parse("content://tree"))
+        val file = MediaFileInfo("content://song1", "song1.mp3", 0L, "Song 1")
+        viewModel.addToManualPlaylist(file)
+
+        val expectedResult = PlaylistInfo("content://playlist.m3u", "Manual Playlist.m3u")
+        mockPlaylistService.mockResult = expectedResult
+
+        viewModel.createManualPlaylist("Manual Playlist")
+
+        val state = viewModel.uiState.value
+        assertEquals("Created Manual Playlist.m3u", state.playlist.playlistMessage)
+        assertTrue(state.playlist.manualPlaylistSongs.isEmpty())
+        assertTrue(state.scan.discoveredPlaylists.contains(expectedResult))
+        assertTrue(mockPlaylistService.writePlaylistCalled)
+    }
+
+    @Test
+    fun createManualPlaylist_success_updatesScanCache() {
+        viewModel.setTreeUri(Uri.parse("content://tree"))
+        val file = MediaFileInfo("content://song1", "song1.mp3", 0L, "Song 1")
+        viewModel.addToManualPlaylist(file)
+
+        val scanCacheField = viewModel.javaClass.getDeclaredField("scanCache")
+        scanCacheField.isAccessible = true
+        @Suppress("UNCHECKED_CAST")
+        val scanCache = scanCacheField.get(viewModel) as java.util.concurrent.ConcurrentHashMap<String, Pair<List<MediaFileInfo>, List<PlaylistInfo>>>
+
+        val key = "content://tree|${viewModel.uiState.value.scan.lastScanLimit}"
+        val initialPlaylists = listOf(PlaylistInfo("content://existing.m3u", "Existing.m3u"))
+        scanCache[key] = Pair(emptyList(), initialPlaylists)
+
+        val expectedResult = PlaylistInfo("content://playlist.m3u", "Manual Playlist.m3u")
+        mockPlaylistService.mockResult = expectedResult
+
+        viewModel.createManualPlaylist("Manual Playlist")
+
+        val state = viewModel.uiState.value
+        assertEquals("Created Manual Playlist.m3u", state.playlist.playlistMessage)
+        assertTrue(state.playlist.manualPlaylistSongs.isEmpty())
+        assertTrue(state.scan.discoveredPlaylists.contains(expectedResult))
+        assertTrue(mockPlaylistService.writePlaylistCalled)
+
+        val updatedPair = scanCache[key]
+        assertNotNull(updatedPair)
+        assertTrue(updatedPair!!.second.contains(expectedResult))
+        assertTrue(updatedPair.second.contains(initialPlaylists[0]))
+    }
+
+    @Test
+    fun createManualPlaylist_success_withPlaylistTreeUri() {
+        viewModel.setPlaylistTreeUri(Uri.parse("content://playlist_tree"))
         val file = MediaFileInfo("content://song1", "song1.mp3", 0L, "Song 1")
         viewModel.addToManualPlaylist(file)
 
