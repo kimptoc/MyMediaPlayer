@@ -633,19 +633,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
-    fun addManyToManualPlaylist(files: List<MediaFileInfo>) {
-        if (files.isEmpty()) return
-        val current = _uiState.value
-        val existingUris = current.playlist.manualPlaylistSongs.map { it.uriString }.toMutableSet()
-        val additions = files.filter { existingUris.add(it.uriString) }
-        if (additions.isEmpty()) return
-        _uiState.value = current.copy(
-            playlist = current.playlist.copy(
-                manualPlaylistSongs = current.playlist.manualPlaylistSongs + additions
-            )
-        )
-    }
-
     fun clearManualPlaylist() {
         val current = _uiState.value
         _uiState.value = current.copy(
