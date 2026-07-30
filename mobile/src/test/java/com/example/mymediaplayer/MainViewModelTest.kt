@@ -710,12 +710,7 @@ class MainViewModelTest {
             )
         )
 
-        val field = viewModel.javaClass.getDeclaredField("mediaCacheService")
-        field.isAccessible = true
-        val cacheService = field.get(viewModel) as MediaCacheService
-        cacheService.clearCache()
-        cacheService.addAllFiles(files)
-        cacheService.buildAlbumArtistIndexesFromCache()
+        seedCacheService(viewModel, files)
 
         assertEquals(null, viewModel.uiState.value.library.selectedGenre)
         assertTrue(viewModel.uiState.value.library.filteredSongs.isEmpty())
@@ -757,15 +752,13 @@ class MainViewModelTest {
             )
         )
 
-        val field = viewModel.javaClass.getDeclaredField("mediaCacheService")
-        field.isAccessible = true
-        val cacheService = field.get(viewModel) as MediaCacheService
-        cacheService.clearCache()
-        cacheService.addAllFiles(files)
-        cacheService.buildAlbumArtistIndexesFromCache()
+        seedCacheService(viewModel, files)
 
         viewModel.selectAlbum("Album A")
         assertEquals("Album A", viewModel.uiState.value.library.selectedAlbum)
+
+        viewModel.selectArtist("Artist A")
+        assertEquals("Artist A", viewModel.uiState.value.library.selectedArtist)
 
         viewModel.selectGenre("Rock/Metal")
         val state = viewModel.uiState.value
@@ -773,5 +766,18 @@ class MainViewModelTest {
         assertEquals(null, state.library.selectedAlbum)
         assertEquals(null, state.library.selectedArtist)
         assertEquals(1, state.library.filteredSongs.size)
+    }
+
+    private fun seedCacheService(
+        viewModel: MainViewModel,
+        files: List<MediaFileInfo>
+    ): MediaCacheService {
+        val field = viewModel.javaClass.getDeclaredField("mediaCacheService")
+        field.isAccessible = true
+        val cacheService = field.get(viewModel) as MediaCacheService
+        cacheService.clearCache()
+        cacheService.addAllFiles(files)
+        cacheService.buildAlbumArtistIndexesFromCache()
+        return cacheService
     }
 }
