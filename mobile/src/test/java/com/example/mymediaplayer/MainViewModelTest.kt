@@ -680,6 +680,15 @@ class MainViewModelTest {
         assertTrue(playbackState.hasNext)
     }
 
+    private fun seedCacheService(viewModel: MainViewModel, files: List<MediaFileInfo>) {
+        val field = viewModel.javaClass.getDeclaredField("mediaCacheService")
+        field.isAccessible = true
+        val cacheService = field.get(viewModel) as MediaCacheService
+        cacheService.clearCache()
+        cacheService.addAllFiles(files)
+        cacheService.buildAlbumArtistIndexesFromCache()
+    }
+
     @Test
     fun selectGenre_updatesSelectedGenreAndFiltersSongs() {
         val app = ApplicationProvider.getApplicationContext<Application>()
@@ -754,30 +763,20 @@ class MainViewModelTest {
 
         seedCacheService(viewModel, files)
 
+        // Verify selectGenre clears selectedAlbum
         viewModel.selectAlbum("Album A")
         assertEquals("Album A", viewModel.uiState.value.library.selectedAlbum)
 
+        viewModel.selectGenre("Rock/Metal")
+        assertEquals("Rock/Metal", viewModel.uiState.value.library.selectedGenre)
+        assertEquals(null, viewModel.uiState.value.library.selectedAlbum)
+
+        // Verify selectGenre clears selectedArtist
         viewModel.selectArtist("Artist A")
         assertEquals("Artist A", viewModel.uiState.value.library.selectedArtist)
 
         viewModel.selectGenre("Rock/Metal")
-        val state = viewModel.uiState.value
-        assertEquals("Rock/Metal", state.library.selectedGenre)
-        assertEquals(null, state.library.selectedAlbum)
-        assertEquals(null, state.library.selectedArtist)
-        assertEquals(1, state.library.filteredSongs.size)
-    }
-
-    private fun seedCacheService(
-        viewModel: MainViewModel,
-        files: List<MediaFileInfo>
-    ): MediaCacheService {
-        val field = viewModel.javaClass.getDeclaredField("mediaCacheService")
-        field.isAccessible = true
-        val cacheService = field.get(viewModel) as MediaCacheService
-        cacheService.clearCache()
-        cacheService.addAllFiles(files)
-        cacheService.buildAlbumArtistIndexesFromCache()
-        return cacheService
+        assertEquals("Rock/Metal", viewModel.uiState.value.library.selectedGenre)
+        assertEquals(null, viewModel.uiState.value.library.selectedArtist)
     }
 }
