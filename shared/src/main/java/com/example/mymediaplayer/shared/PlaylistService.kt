@@ -175,7 +175,7 @@ open class PlaylistService {
         }
     }
 
-    fun renamePlaylist(
+    open fun renamePlaylist(
         context: Context,
         playlistUri: Uri,
         newName: String
@@ -206,7 +206,7 @@ open class PlaylistService {
         }
     }
 
-    fun deletePlaylist(
+    open fun deletePlaylist(
         context: Context,
         playlistUri: Uri,
         displayName: String? = null,
