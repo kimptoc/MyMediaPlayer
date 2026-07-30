@@ -633,13 +633,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
-    fun clearManualPlaylist() {
-        val current = _uiState.value
-        _uiState.value = current.copy(
-            playlist = current.playlist.copy(manualPlaylistSongs = emptyList())
-        )
-    }
-
     fun createManualPlaylist(name: String) {
         val uri = resolvePlaylistTreeUri()
         val current = _uiState.value
