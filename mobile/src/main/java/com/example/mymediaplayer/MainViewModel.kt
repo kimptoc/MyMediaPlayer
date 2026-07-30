@@ -238,13 +238,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
+    internal fun buildScanCacheKey(treeUri: Uri, maxFiles: Int, deepScan: Boolean): String =
+        "${treeUri}|$maxFiles|deep=$deepScan"
+
     fun onDirectorySelected(
         treeUri: Uri,
         maxFiles: Int,
         deepScan: Boolean = false,
         forceRescan: Boolean = false
     ) {
-        val key = "${treeUri}|$maxFiles|deep=$deepScan"
+        val key = buildScanCacheKey(treeUri, maxFiles, deepScan)
         if (!forceRescan) {
             val cached = scanCache[key]
             if (cached != null) {

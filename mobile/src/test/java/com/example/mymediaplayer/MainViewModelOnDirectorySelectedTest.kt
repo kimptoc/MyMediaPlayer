@@ -72,13 +72,14 @@ class MainViewModelOnDirectorySelectedTest {
         while (!condition() && (System.currentTimeMillis() - start) < timeoutMs) {
             Thread.sleep(10)
         }
+        if (!condition()) throw AssertionError("Condition was not met within ${timeoutMs}ms")
     }
 
     @Test
     fun onDirectorySelected_memoryCacheHit_loadsCachedDataImmediately() {
         val treeUri = android.provider.DocumentsContract.buildTreeDocumentUri("test", "root")
         val maxFiles = 10
-        val key = "$treeUri|$maxFiles|deep=false"
+        val key = viewModel.buildScanCacheKey(treeUri, maxFiles, deepScan = false)
 
         val cachedFiles = listOf(
             MediaFileInfo(
@@ -129,7 +130,7 @@ class MainViewModelOnDirectorySelectedTest {
     fun onDirectorySelected_diskCacheHit_loadsPersistedData() = runBlocking {
         val treeUri = android.provider.DocumentsContract.buildTreeDocumentUri("test", "root")
         val maxFiles = 10
-        val key = "$treeUri|$maxFiles|deep=false"
+        val key = viewModel.buildScanCacheKey(treeUri, maxFiles, deepScan = false)
 
         val trackUri = "content://test/tree/song.mp3"
         val playlistUri = "content://test/tree/playlist.m3u"
