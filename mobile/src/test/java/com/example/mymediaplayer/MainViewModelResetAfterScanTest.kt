@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.test.core.app.ApplicationProvider
 import com.example.mymediaplayer.shared.MediaFileInfo
 import com.example.mymediaplayer.shared.PlaylistInfo
+import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -15,10 +16,17 @@ import org.robolectric.RobolectricTestRunner
 @RunWith(RobolectricTestRunner::class)
 class MainViewModelResetAfterScanTest {
 
+    private fun seedUiState(viewModel: MainViewModel, state: MainUiState) {
+        val field = viewModel.javaClass.getDeclaredField("_uiState")
+        field.isAccessible = true
+        @Suppress("UNCHECKED_CAST")
+        val flow = field.get(viewModel) as MutableStateFlow<MainUiState>
+        flow.value = state
+    }
+
     @Test
     fun testResetAfterScan_basicAndDefaultParameters() {
         val app = ApplicationProvider.getApplicationContext<Application>()
-        clearPrefs(app)
         val viewModel = MainViewModel(app)
 
         val files = listOf(
@@ -46,7 +54,6 @@ class MainViewModelResetAfterScanTest {
     @Test
     fun testResetAfterScan_playlistSortingIsCaseInsensitive() {
         val app = ApplicationProvider.getApplicationContext<Application>()
-        clearPrefs(app)
         val viewModel = MainViewModel(app)
 
         val playlists = listOf(
@@ -71,7 +78,6 @@ class MainViewModelResetAfterScanTest {
     @Test
     fun testResetAfterScan_libraryStateIsResetAndPlaylistStateIsCleared() {
         val app = ApplicationProvider.getApplicationContext<Application>()
-        clearPrefs(app)
         val viewModel = MainViewModel(app)
 
         val initialUiState = MainUiState(
@@ -103,7 +109,6 @@ class MainViewModelResetAfterScanTest {
     @Test
     fun testResetAfterScan_preservesOtherStateProperties() {
         val app = ApplicationProvider.getApplicationContext<Application>()
-        clearPrefs(app)
         val viewModel = MainViewModel(app)
 
         val initialUiState = MainUiState(
@@ -133,7 +138,6 @@ class MainViewModelResetAfterScanTest {
     @Test
     fun testResetAfterScan_appliesSearchQueryCorrectly() {
         val app = ApplicationProvider.getApplicationContext<Application>()
-        clearPrefs(app)
         val viewModel = MainViewModel(app)
 
         val initialUiState = MainUiState(
