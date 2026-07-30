@@ -702,6 +702,104 @@ class MainViewModelTest {
     }
 
     @Test
+    fun updateSearchQuery_matchesArtistAlbumAndGenre() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+        val files = listOf(
+            MediaFileInfo(
+                uriString = "content://test/song1",
+                displayName = "Song One",
+                sizeBytes = 1L,
+                artist = "The Beatles"
+            ),
+            MediaFileInfo(
+                uriString = "content://test/song2",
+                displayName = "Song Two",
+                sizeBytes = 1L,
+                album = "Abbey Road"
+            ),
+            MediaFileInfo(
+                uriString = "content://test/song3",
+                displayName = "Song Three",
+                sizeBytes = 1L,
+                genre = "Rock"
+            )
+        )
+        seedScanState(viewModel, files, emptyList())
+
+        // Match artist
+        viewModel.updateSearchQuery("Beatles")
+        var results = viewModel.uiState.value.search.searchResults
+        assertEquals(1, results.size)
+        assertEquals("content://test/song1", results.first().uriString)
+
+        // Match album
+        viewModel.updateSearchQuery("Abbey")
+        results = viewModel.uiState.value.search.searchResults
+        assertEquals(1, results.size)
+        assertEquals("content://test/song2", results.first().uriString)
+
+        // Match genre
+        viewModel.updateSearchQuery("Rock")
+        results = viewModel.uiState.value.search.searchResults
+        assertEquals(1, results.size)
+        assertEquals("content://test/song3", results.first().uriString)
+    }
+
+    @Test
+    fun updateSearchQuery_trimsWhitespaceAndIsCaseInsensitive() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+        val files = listOf(
+            MediaFileInfo(
+                uriString = "content://test/song1",
+                displayName = "Song One",
+                sizeBytes = 1L,
+                title = "Amazing Grace"
+            )
+        )
+        seedScanState(viewModel, files, emptyList())
+
+        viewModel.updateSearchQuery("  AmAzInG  ")
+        val results = viewModel.uiState.value.search.searchResults
+        assertEquals(1, results.size)
+        assertEquals("content://test/song1", results.first().uriString)
+    }
+
+    @Test
+    fun updateSearchQuery_blankQueryWhenAlreadyBlank_doesNotSaveToHistory() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+
+        viewModel.updateSearchQuery("")
+        val state = viewModel.uiState.value
+        assertTrue(state.search.previousSearchQueries.isEmpty())
+    }
+
+    @Test
+    fun updateSearchQuery_withNoMatches_returnsEmptyResults() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+        val files = listOf(
+            MediaFileInfo(
+                uriString = "content://test/song1",
+                displayName = "Song One",
+                sizeBytes = 1L,
+                title = "hello"
+            )
+        )
+        seedScanState(viewModel, files, emptyList())
+
+        viewModel.updateSearchQuery("nonexistent")
+        val results = viewModel.uiState.value.search.searchResults
+        assertTrue(results.isEmpty())
+    }
+
+    @Test
     fun setAlbumSortMode_whenModeIsAlreadySame_returnsEarly() {
         val app = ApplicationProvider.getApplicationContext<Application>()
         clearPrefs(app)
