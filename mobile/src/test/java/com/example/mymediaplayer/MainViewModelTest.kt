@@ -767,6 +767,26 @@ class MainViewModelTest {
     }
 
     @Test
+    fun setTreeUri_updatesTreeUriAndResetsMetadataKey() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+
+        val treeUriField = MainViewModel::class.java.getDeclaredField("treeUri")
+        treeUriField.isAccessible = true
+
+        val metadataKeyField = MainViewModel::class.java.getDeclaredField("metadataKey")
+        metadataKeyField.isAccessible = true
+        metadataKeyField.set(viewModel, "some_metadata_key")
+
+        val targetUri = android.net.Uri.parse("content://my/tree/uri")
+        viewModel.setTreeUri(targetUri)
+
+        assertEquals(targetUri, treeUriField.get(viewModel))
+        org.junit.Assert.assertNull(metadataKeyField.get(viewModel))
+    }
+
+    @Test
     fun clearCategorySelection_clearsCategorySelectionState() {
         val app = ApplicationProvider.getApplicationContext<Application>()
         clearPrefs(app)
