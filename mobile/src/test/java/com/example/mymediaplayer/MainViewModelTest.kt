@@ -702,6 +702,71 @@ class MainViewModelTest {
     }
 
     @Test
+    fun selectArtist_updatesUiStateAndFiltersSongsCorrectly() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+
+        val mediaCacheField = viewModel.javaClass.getDeclaredField("mediaCacheService")
+        mediaCacheField.isAccessible = true
+        val mediaCache = mediaCacheField.get(viewModel) as com.example.mymediaplayer.shared.MediaCacheService
+
+        val song1 = MediaFileInfo(
+            uriString = "content://test/song1",
+            displayName = "Song One",
+            sizeBytes = 1L,
+            title = "Song One",
+            artist = "Artist A",
+            album = "Album X",
+            genre = "Rock"
+        )
+        val song2 = MediaFileInfo(
+            uriString = "content://test/song2",
+            displayName = "Song Two",
+            sizeBytes = 1L,
+            title = "Song Two",
+            artist = "Artist B",
+            album = "Album Y",
+            genre = "Pop"
+        )
+        val song3 = MediaFileInfo(
+            uriString = "content://test/song3",
+            displayName = "Song Three",
+            sizeBytes = 1L,
+            title = "Song Three",
+            artist = "Artist A",
+            album = "Album Z",
+            genre = "Jazz"
+        )
+
+        mediaCache.addAllFiles(listOf(song1, song2, song3))
+        mediaCache.buildAlbumArtistIndexesFromCache()
+
+        // Seed some pre-existing selections to ensure they get cleared
+        seedUiState(
+            viewModel,
+            viewModel.uiState.value.copy(
+                library = viewModel.uiState.value.library.copy(
+                    selectedAlbum = "Album X",
+                    selectedGenre = "Rock",
+                    selectedArtist = "Old Artist"
+                )
+            )
+        )
+
+        viewModel.selectArtist("Artist A")
+
+        val state = viewModel.uiState.value
+        assertEquals("Artist A", state.library.selectedArtist)
+        assertEquals(null, state.library.selectedAlbum)
+        assertEquals(null, state.library.selectedGenre)
+        assertEquals(2, state.library.filteredSongs.size)
+        assertTrue(state.library.filteredSongs.contains(song1))
+        assertTrue(state.library.filteredSongs.contains(song3))
+        assertFalse(state.library.filteredSongs.contains(song2))
+    }
+
+    @Test
     fun setTreeUri_updatesTreeUriAndResetsMetadataKey() {
         val app = ApplicationProvider.getApplicationContext<Application>()
         clearPrefs(app)
