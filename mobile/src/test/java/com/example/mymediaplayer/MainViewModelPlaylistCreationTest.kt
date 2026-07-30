@@ -24,6 +24,7 @@ class MockPlaylistService : PlaylistService() {
     var writePlaylistCalled = false
     var passedName = ""
     var passedFiles = emptyList<MediaFileInfo>()
+    var passedUri: Uri? = null
     var mockResult: PlaylistInfo? = null
 
     override fun writePlaylistWithName(
@@ -35,6 +36,7 @@ class MockPlaylistService : PlaylistService() {
         writePlaylistCalled = true
         passedName = name
         passedFiles = files
+        passedUri = treeUri
         return mockResult
     }
 }
@@ -228,7 +230,13 @@ class MainViewModelPlaylistCreationTest {
 
     @Test
     fun createManualPlaylist_success_withPlaylistTreeUri() {
-        viewModel.setPlaylistTreeUri(Uri.parse("content://playlist_tree"))
+        // Set playlistTreeUri directly via reflection instead of calling setPlaylistTreeUri,
+        // which launches an unawaited background coroutine to import playlists from the folder.
+        val playlistTreeUriField: Field = MainViewModel::class.java.getDeclaredField("playlistTreeUri")
+        playlistTreeUriField.isAccessible = true
+        val playlistTreeUri = Uri.parse("content://playlist_tree")
+        playlistTreeUriField.set(viewModel, playlistTreeUri)
+
         val file = MediaFileInfo("content://song1", "song1.mp3", 0L, "Song 1")
         viewModel.addToManualPlaylist(file)
 
@@ -242,6 +250,7 @@ class MainViewModelPlaylistCreationTest {
         assertTrue(state.playlist.manualPlaylistSongs.isEmpty())
         assertTrue(state.scan.discoveredPlaylists.contains(expectedResult))
         assertTrue(mockPlaylistService.writePlaylistCalled)
+        assertEquals(playlistTreeUri, mockPlaylistService.passedUri)
     }
 
     @Test
