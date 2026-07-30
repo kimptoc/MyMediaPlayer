@@ -165,6 +165,28 @@ class MainViewModelTest {
     }
 
     @Test
+    fun clearSearch_withBlankQuery_doesNotRecordPreviousQuery() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+        val files = listOf(
+            MediaFileInfo(
+                uriString = "content://test/song1",
+                displayName = "Song One",
+                sizeBytes = 1L,
+                title = "hello world"
+            )
+        )
+        seedScanState(viewModel, files, emptyList())
+
+        viewModel.clearSearch()
+        val state = viewModel.uiState.value
+
+        assertEquals("", state.search.searchQuery)
+        assertTrue(state.search.previousSearchQueries.isEmpty())
+    }
+
+    @Test
     fun updateSearchQuery_whenClearedManually_savesPreviousSearchQuery() {
         val app = ApplicationProvider.getApplicationContext<Application>()
         clearPrefs(app)
@@ -819,5 +841,60 @@ class MainViewModelTest {
         val state = viewModel.uiState.value
         assertEquals(AlbumSortMode.DateAddedDesc, state.library.albumSortMode)
         assertEquals(listOf("New-Album", "Old-Album"), state.library.albums)
+    }
+
+    @Test
+    fun setTreeUri_updatesTreeUriAndResetsMetadataKey() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+
+        val treeUriField = MainViewModel::class.java.getDeclaredField("treeUri")
+        treeUriField.isAccessible = true
+
+        val metadataKeyField = MainViewModel::class.java.getDeclaredField("metadataKey")
+        metadataKeyField.isAccessible = true
+        metadataKeyField.set(viewModel, "some_metadata_key")
+
+        val targetUri = android.net.Uri.parse("content://my/tree/uri")
+        viewModel.setTreeUri(targetUri)
+
+        assertEquals(targetUri, treeUriField.get(viewModel))
+        org.junit.Assert.assertNull(metadataKeyField.get(viewModel))
+    }
+
+    @Test
+    fun clearCategorySelection_clearsCategorySelectionState() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+
+        val initialLibraryState = LibraryState(
+            selectedAlbum = "Album A",
+            selectedGenre = "Genre A",
+            selectedArtist = "Artist A",
+            filteredSongs = listOf(
+                MediaFileInfo(
+                    uriString = "content://test/songA",
+                    displayName = "Song A",
+                    sizeBytes = 100L
+                )
+            )
+        )
+        seedUiState(
+            viewModel,
+            MainUiState(
+                library = initialLibraryState,
+                isPreferencesLoading = false
+            )
+        )
+
+        viewModel.clearCategorySelection()
+
+        val libraryState = viewModel.uiState.value.library
+        assertEquals(null, libraryState.selectedAlbum)
+        assertEquals(null, libraryState.selectedGenre)
+        assertEquals(null, libraryState.selectedArtist)
+        assertTrue(libraryState.filteredSongs.isEmpty())
     }
 }
