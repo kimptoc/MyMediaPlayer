@@ -165,6 +165,28 @@ class MainViewModelTest {
     }
 
     @Test
+    fun clearSearch_withBlankQuery_doesNotRecordPreviousQuery() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+        val files = listOf(
+            MediaFileInfo(
+                uriString = "content://test/song1",
+                displayName = "Song One",
+                sizeBytes = 1L,
+                title = "hello world"
+            )
+        )
+        seedScanState(viewModel, files, emptyList())
+
+        viewModel.clearSearch()
+        val state = viewModel.uiState.value
+
+        assertEquals("", state.search.searchQuery)
+        assertTrue(state.search.previousSearchQueries.isEmpty())
+    }
+
+    @Test
     fun updateSearchQuery_whenClearedManually_savesPreviousSearchQuery() {
         val app = ApplicationProvider.getApplicationContext<Application>()
         clearPrefs(app)
@@ -742,5 +764,40 @@ class MainViewModelTest {
         assertTrue(state.library.filteredSongs.contains(song1))
         assertTrue(state.library.filteredSongs.contains(song3))
         assertFalse(state.library.filteredSongs.contains(song2))
+    }
+
+    @Test
+    fun clearCategorySelection_clearsCategorySelectionState() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+
+        val initialLibraryState = LibraryState(
+            selectedAlbum = "Album A",
+            selectedGenre = "Genre A",
+            selectedArtist = "Artist A",
+            filteredSongs = listOf(
+                MediaFileInfo(
+                    uriString = "content://test/songA",
+                    displayName = "Song A",
+                    sizeBytes = 100L
+                )
+            )
+        )
+        seedUiState(
+            viewModel,
+            MainUiState(
+                library = initialLibraryState,
+                isPreferencesLoading = false
+            )
+        )
+
+        viewModel.clearCategorySelection()
+
+        val libraryState = viewModel.uiState.value.library
+        assertEquals(null, libraryState.selectedAlbum)
+        assertEquals(null, libraryState.selectedGenre)
+        assertEquals(null, libraryState.selectedArtist)
+        assertTrue(libraryState.filteredSongs.isEmpty())
     }
 }
