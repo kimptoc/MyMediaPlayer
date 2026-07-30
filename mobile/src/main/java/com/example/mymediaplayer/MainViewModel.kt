@@ -140,6 +140,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         const val SMART_RECENTLY_ADDED = "${SMART_PREFIX}recently_added"
         const val SMART_MOST_PLAYED = "${SMART_PREFIX}most_played"
         const val SMART_NOT_HEARD_RECENTLY = "${SMART_PREFIX}not_heard_recently"
+
+        fun buildScanCacheKey(treeUri: Uri, maxFiles: Int, deepScan: Boolean): String =
+            "${treeUri}|$maxFiles|deep=$deepScan"
     }
 
     private val mediaCacheService = MediaCacheService()
@@ -237,9 +240,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             )
         )
     }
-
-    internal fun buildScanCacheKey(treeUri: Uri, maxFiles: Int, deepScan: Boolean): String =
-        "${treeUri}|$maxFiles|deep=$deepScan"
 
     fun onDirectorySelected(
         treeUri: Uri,
@@ -487,7 +487,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 )
             )
-            val key = treeUri?.let { "${it}|${current.scan.lastScanLimit}|deep=${current.scan.deepScanEnabled}" }
+            val key = treeUri?.let { buildScanCacheKey(it, current.scan.lastScanLimit, current.scan.deepScanEnabled) }
             if (key != null) {
                 val cached = scanCache[key]
                 if (cached != null) {
