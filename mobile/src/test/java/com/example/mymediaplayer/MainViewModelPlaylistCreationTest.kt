@@ -22,9 +22,9 @@ import java.lang.reflect.Field
 
 class MockPlaylistService : PlaylistService() {
     var writePlaylistCalled = false
+    var passedTreeUri: Uri? = null
     var passedName = ""
     var passedFiles = emptyList<MediaFileInfo>()
-    var passedUri: Uri? = null
     var mockResult: PlaylistInfo? = null
 
     override fun writePlaylistWithName(
@@ -34,9 +34,9 @@ class MockPlaylistService : PlaylistService() {
         name: String
     ): PlaylistInfo? {
         writePlaylistCalled = true
+        passedTreeUri = treeUri
         passedName = name
         passedFiles = files
-        passedUri = treeUri
         return mockResult
     }
 }
@@ -180,7 +180,8 @@ class MainViewModelPlaylistCreationTest {
 
     @Test
     fun createManualPlaylist_success_updatesStateAndDiscoveredPlaylists() {
-        viewModel.setTreeUri(Uri.parse("content://tree"))
+        val treeUri = Uri.parse("content://tree")
+        viewModel.setTreeUri(treeUri)
         val file = MediaFileInfo("content://song1", "song1.mp3", 0L, "Song 1")
         viewModel.addToManualPlaylist(file)
 
@@ -194,11 +195,13 @@ class MainViewModelPlaylistCreationTest {
         assertTrue(state.playlist.manualPlaylistSongs.isEmpty())
         assertTrue(state.scan.discoveredPlaylists.contains(expectedResult))
         assertTrue(mockPlaylistService.writePlaylistCalled)
+        assertEquals(treeUri, mockPlaylistService.passedTreeUri)
     }
 
     @Test
     fun createManualPlaylist_success_updatesScanCache() {
-        viewModel.setTreeUri(Uri.parse("content://tree"))
+        val treeUri = Uri.parse("content://tree")
+        viewModel.setTreeUri(treeUri)
         val file = MediaFileInfo("content://song1", "song1.mp3", 0L, "Song 1")
         viewModel.addToManualPlaylist(file)
 
@@ -221,6 +224,7 @@ class MainViewModelPlaylistCreationTest {
         assertTrue(state.playlist.manualPlaylistSongs.isEmpty())
         assertTrue(state.scan.discoveredPlaylists.contains(expectedResult))
         assertTrue(mockPlaylistService.writePlaylistCalled)
+        assertEquals(treeUri, mockPlaylistService.passedTreeUri)
 
         val updatedPair = scanCache[key]
         assertNotNull(updatedPair)
@@ -230,11 +234,9 @@ class MainViewModelPlaylistCreationTest {
 
     @Test
     fun createManualPlaylist_success_withPlaylistTreeUri() {
-        // Set playlistTreeUri directly via reflection instead of calling setPlaylistTreeUri,
-        // which launches an unawaited background coroutine to import playlists from the folder.
-        val playlistTreeUriField: Field = MainViewModel::class.java.getDeclaredField("playlistTreeUri")
-        playlistTreeUriField.isAccessible = true
         val playlistTreeUri = Uri.parse("content://playlist_tree")
+        val playlistTreeUriField = viewModel.javaClass.getDeclaredField("playlistTreeUri")
+        playlistTreeUriField.isAccessible = true
         playlistTreeUriField.set(viewModel, playlistTreeUri)
 
         val file = MediaFileInfo("content://song1", "song1.mp3", 0L, "Song 1")
@@ -250,7 +252,7 @@ class MainViewModelPlaylistCreationTest {
         assertTrue(state.playlist.manualPlaylistSongs.isEmpty())
         assertTrue(state.scan.discoveredPlaylists.contains(expectedResult))
         assertTrue(mockPlaylistService.writePlaylistCalled)
-        assertEquals(playlistTreeUri, mockPlaylistService.passedUri)
+        assertEquals(playlistTreeUri, mockPlaylistService.passedTreeUri)
     }
 
     @Test
