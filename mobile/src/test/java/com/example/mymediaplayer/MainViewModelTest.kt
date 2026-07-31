@@ -5,7 +5,6 @@ import android.support.v4.media.session.PlaybackStateCompat
 import androidx.test.core.app.ApplicationProvider
 import com.example.mymediaplayer.shared.MediaFileInfo
 import com.example.mymediaplayer.shared.PlaylistInfo
-import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -554,21 +553,6 @@ class MainViewModelTest {
         viewModel.updateRepeatMode(PlaybackStateCompat.REPEAT_MODE_ONE)
 
         assertEquals(PlaybackStateCompat.REPEAT_MODE_ONE, viewModel.uiState.value.playback.repeatMode)
-    }
-
-    private fun seedUiState(viewModel: MainViewModel, state: MainUiState) {
-        val field = viewModel.javaClass.getDeclaredField("_uiState")
-        field.isAccessible = true
-        @Suppress("UNCHECKED_CAST")
-        val flow = field.get(viewModel) as MutableStateFlow<MainUiState>
-        flow.value = state
-    }
-
-    private fun clearPrefs(app: Application) {
-        app.getSharedPreferences("mymediaplayer_prefs", Application.MODE_PRIVATE)
-            .edit()
-            .clear()
-            .commit()
     }
 
     @Test
