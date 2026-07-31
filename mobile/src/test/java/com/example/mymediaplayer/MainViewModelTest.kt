@@ -3,6 +3,7 @@ package com.example.mymediaplayer
 import android.app.Application
 import android.support.v4.media.session.PlaybackStateCompat
 import androidx.test.core.app.ApplicationProvider
+import com.example.mymediaplayer.shared.MediaCacheService
 import com.example.mymediaplayer.shared.MediaFileInfo
 import com.example.mymediaplayer.shared.PlaylistInfo
 import org.junit.Assert.assertEquals
@@ -161,6 +162,28 @@ class MainViewModelTest {
         val state = viewModel.uiState.value
 
         assertEquals(listOf("hello"), state.search.previousSearchQueries)
+    }
+
+    @Test
+    fun clearSearch_withBlankQuery_doesNotRecordPreviousQuery() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+        val files = listOf(
+            MediaFileInfo(
+                uriString = "content://test/song1",
+                displayName = "Song One",
+                sizeBytes = 1L,
+                title = "hello world"
+            )
+        )
+        seedScanState(viewModel, files, emptyList())
+
+        viewModel.clearSearch()
+        val state = viewModel.uiState.value
+
+        assertEquals("", state.search.searchQuery)
+        assertTrue(state.search.previousSearchQueries.isEmpty())
     }
 
     @Test
@@ -662,4 +685,465 @@ class MainViewModelTest {
         assertTrue(playbackState.hasPrev)
         assertTrue(playbackState.hasNext)
     }
+
+    @Test
+    fun updateSearchQuery_matchesArtistAlbumAndGenre() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+        val files = listOf(
+            MediaFileInfo(
+                uriString = "content://test/song1",
+                displayName = "Song One",
+                sizeBytes = 1L,
+                artist = "The Beatles"
+            ),
+            MediaFileInfo(
+                uriString = "content://test/song2",
+                displayName = "Song Two",
+                sizeBytes = 1L,
+                album = "Abbey Road"
+            ),
+            MediaFileInfo(
+                uriString = "content://test/song3",
+                displayName = "Song Three",
+                sizeBytes = 1L,
+                genre = "Rock"
+            )
+        )
+        seedScanState(viewModel, files, emptyList())
+
+        // Match artist
+        viewModel.updateSearchQuery("Beatles")
+        var results = viewModel.uiState.value.search.searchResults
+        assertEquals(1, results.size)
+        assertEquals("content://test/song1", results.first().uriString)
+
+        // Match album
+        viewModel.updateSearchQuery("Abbey")
+        results = viewModel.uiState.value.search.searchResults
+        assertEquals(1, results.size)
+        assertEquals("content://test/song2", results.first().uriString)
+
+        // Match genre
+        viewModel.updateSearchQuery("Rock")
+        results = viewModel.uiState.value.search.searchResults
+        assertEquals(1, results.size)
+        assertEquals("content://test/song3", results.first().uriString)
+    }
+
+    @Test
+    fun updateSearchQuery_trimsWhitespaceAndIsCaseInsensitive() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+        val files = listOf(
+            MediaFileInfo(
+                uriString = "content://test/song1",
+                displayName = "Song One",
+                sizeBytes = 1L,
+                title = "Amazing Grace"
+            )
+        )
+        seedScanState(viewModel, files, emptyList())
+
+        viewModel.updateSearchQuery("  AmAzInG  ")
+        val results = viewModel.uiState.value.search.searchResults
+        assertEquals(1, results.size)
+        assertEquals("content://test/song1", results.first().uriString)
+    }
+
+    @Test
+    fun updateSearchQuery_blankQueryWhenAlreadyBlank_doesNotSaveToHistory() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+
+        viewModel.updateSearchQuery("")
+        val state = viewModel.uiState.value
+        assertTrue(state.search.previousSearchQueries.isEmpty())
+    }
+
+    @Test
+    fun updateSearchQuery_withNoMatches_returnsEmptyResults() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+        val files = listOf(
+            MediaFileInfo(
+                uriString = "content://test/song1",
+                displayName = "Song One",
+                sizeBytes = 1L,
+                title = "hello"
+            )
+        )
+        seedScanState(viewModel, files, emptyList())
+
+        viewModel.updateSearchQuery("nonexistent")
+        val results = viewModel.uiState.value.search.searchResults
+        assertTrue(results.isEmpty())
+    }
+
+    @Test
+    fun setAlbumSortMode_whenModeIsAlreadySame_returnsEarly() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+        val initialAlbums = listOf("Album A", "Album B")
+        seedUiState(
+            viewModel,
+            MainUiState(
+                library = LibraryState(
+                    albumSortMode = AlbumSortMode.Name,
+                    albums = initialAlbums
+                )
+            )
+        )
+
+        viewModel.setAlbumSortMode(AlbumSortMode.Name)
+
+        val state = viewModel.uiState.value
+        assertEquals(AlbumSortMode.Name, state.library.albumSortMode)
+        assertEquals(initialAlbums, state.library.albums)
+    }
+
+    @Test
+    fun setAlbumSortMode_withoutIndexes_setsModeButDoesNotReSort() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+        val initialAlbums = listOf("Album B", "Album A")
+        seedUiState(
+            viewModel,
+            MainUiState(
+                library = LibraryState(
+                    albumSortMode = AlbumSortMode.Name,
+                    albums = initialAlbums
+                )
+            )
+        )
+
+        viewModel.setAlbumSortMode(AlbumSortMode.DateAddedDesc)
+
+        val state = viewModel.uiState.value
+        assertEquals(AlbumSortMode.DateAddedDesc, state.library.albumSortMode)
+        assertEquals(initialAlbums, state.library.albums)
+    }
+
+    @Test
+    fun setAlbumSortMode_withIndexes_sortsByName() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+
+        // Retrieve mediaCacheService using reflection
+        val serviceField = viewModel.javaClass.getDeclaredField("mediaCacheService")
+        serviceField.isAccessible = true
+        val mediaCacheService = serviceField.get(viewModel) as com.example.mymediaplayer.shared.MediaCacheService
+
+        val files = listOf(
+            MediaFileInfo(
+                uriString = "content://test/song1",
+                displayName = "Song One",
+                sizeBytes = 1L,
+                album = "Z-Album",
+                addedAtMs = 1000L
+            ),
+            MediaFileInfo(
+                uriString = "content://test/song2",
+                displayName = "Song Two",
+                sizeBytes = 1L,
+                album = "A-Album",
+                addedAtMs = 5000L
+            )
+        )
+
+        mediaCacheService.addAllFiles(files)
+        mediaCacheService.buildAlbumArtistIndexesFromCache()
+
+        seedUiState(
+            viewModel,
+            MainUiState(
+                library = LibraryState(
+                    albumSortMode = AlbumSortMode.DateAddedDesc,
+                    albums = listOf("Z-Album", "A-Album")
+                )
+            )
+        )
+
+        viewModel.setAlbumSortMode(AlbumSortMode.Name)
+
+        val state = viewModel.uiState.value
+        assertEquals(AlbumSortMode.Name, state.library.albumSortMode)
+        assertEquals(listOf("A-Album", "Z-Album"), state.library.albums)
+    }
+
+    @Test
+    fun setAlbumSortMode_withIndexes_sortsByDateAddedDesc() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+
+        // Retrieve mediaCacheService using reflection
+        val serviceField = viewModel.javaClass.getDeclaredField("mediaCacheService")
+        serviceField.isAccessible = true
+        val mediaCacheService = serviceField.get(viewModel) as com.example.mymediaplayer.shared.MediaCacheService
+
+        val files = listOf(
+            MediaFileInfo(
+                uriString = "content://test/song1",
+                displayName = "Song One",
+                sizeBytes = 1L,
+                album = "Old-Album",
+                addedAtMs = 1000L
+            ),
+            MediaFileInfo(
+                uriString = "content://test/song2",
+                displayName = "Song Two",
+                sizeBytes = 1L,
+                album = "New-Album",
+                addedAtMs = 5000L
+            )
+        )
+
+        mediaCacheService.addAllFiles(files)
+        mediaCacheService.buildAlbumArtistIndexesFromCache()
+
+        seedUiState(
+            viewModel,
+            MainUiState(
+                library = LibraryState(
+                    albumSortMode = AlbumSortMode.Name,
+                    albums = listOf("New-Album", "Old-Album")
+                )
+            )
+        )
+
+        viewModel.setAlbumSortMode(AlbumSortMode.DateAddedDesc)
+
+        val state = viewModel.uiState.value
+        assertEquals(AlbumSortMode.DateAddedDesc, state.library.albumSortMode)
+        assertEquals(listOf("New-Album", "Old-Album"), state.library.albums)
+    }
+
+    @Test
+    fun selectArtist_updatesUiStateAndFiltersSongsCorrectly() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+
+        val mediaCacheField = viewModel.javaClass.getDeclaredField("mediaCacheService")
+        mediaCacheField.isAccessible = true
+        val mediaCache = mediaCacheField.get(viewModel) as com.example.mymediaplayer.shared.MediaCacheService
+
+        val song1 = MediaFileInfo(
+            uriString = "content://test/song1",
+            displayName = "Song One",
+            sizeBytes = 1L,
+            title = "Song One",
+            artist = "Artist A",
+            album = "Album X",
+            genre = "Rock"
+        )
+        val song2 = MediaFileInfo(
+            uriString = "content://test/song2",
+            displayName = "Song Two",
+            sizeBytes = 1L,
+            title = "Song Two",
+            artist = "Artist B",
+            album = "Album Y",
+            genre = "Pop"
+        )
+        val song3 = MediaFileInfo(
+            uriString = "content://test/song3",
+            displayName = "Song Three",
+            sizeBytes = 1L,
+            title = "Song Three",
+            artist = "Artist A",
+            album = "Album Z",
+            genre = "Jazz"
+        )
+
+        mediaCache.addAllFiles(listOf(song1, song2, song3))
+        mediaCache.buildAlbumArtistIndexesFromCache()
+
+        // Seed some pre-existing selections to ensure they get cleared
+        seedUiState(
+            viewModel,
+            viewModel.uiState.value.copy(
+                library = viewModel.uiState.value.library.copy(
+                    selectedAlbum = "Album X",
+                    selectedGenre = "Rock",
+                    selectedArtist = "Old Artist"
+                )
+            )
+        )
+
+        viewModel.selectArtist("Artist A")
+
+        val state = viewModel.uiState.value
+        assertEquals("Artist A", state.library.selectedArtist)
+        assertEquals(null, state.library.selectedAlbum)
+        assertEquals(null, state.library.selectedGenre)
+        assertEquals(2, state.library.filteredSongs.size)
+        assertTrue(state.library.filteredSongs.contains(song1))
+        assertTrue(state.library.filteredSongs.contains(song3))
+        assertFalse(state.library.filteredSongs.contains(song2))
+    }
+
+    @Test
+    fun setTreeUri_updatesTreeUriAndResetsMetadataKey() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+
+        val treeUriField = MainViewModel::class.java.getDeclaredField("treeUri")
+        treeUriField.isAccessible = true
+
+        val metadataKeyField = MainViewModel::class.java.getDeclaredField("metadataKey")
+        metadataKeyField.isAccessible = true
+        metadataKeyField.set(viewModel, "some_metadata_key")
+
+        val targetUri = android.net.Uri.parse("content://my/tree/uri")
+        viewModel.setTreeUri(targetUri)
+
+        assertEquals(targetUri, treeUriField.get(viewModel))
+        org.junit.Assert.assertNull(metadataKeyField.get(viewModel))
+    }
+
+    @Test
+    fun clearCategorySelection_clearsCategorySelectionState() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+
+        val initialLibraryState = LibraryState(
+            selectedAlbum = "Album A",
+            selectedGenre = "Genre A",
+            selectedArtist = "Artist A",
+            filteredSongs = listOf(
+                MediaFileInfo(
+                    uriString = "content://test/songA",
+                    displayName = "Song A",
+                    sizeBytes = 100L
+                )
+            )
+        )
+        seedUiState(
+            viewModel,
+            MainUiState(
+                library = initialLibraryState,
+                isPreferencesLoading = false
+            )
+        )
+
+        viewModel.clearCategorySelection()
+
+        val libraryState = viewModel.uiState.value.library
+        assertEquals(null, libraryState.selectedAlbum)
+        assertEquals(null, libraryState.selectedGenre)
+        assertEquals(null, libraryState.selectedArtist)
+        assertTrue(libraryState.filteredSongs.isEmpty())
+    }
+    private fun seedCacheService(viewModel: MainViewModel, files: List<MediaFileInfo>) {
+        val field = viewModel.javaClass.getDeclaredField("mediaCacheService")
+        field.isAccessible = true
+        val cacheService = field.get(viewModel) as MediaCacheService
+        cacheService.clearCache()
+        cacheService.addAllFiles(files)
+        cacheService.buildAlbumArtistIndexesFromCache()
+    }
+
+    @Test
+    fun selectGenre_updatesSelectedGenreAndFiltersSongs() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+
+        val files = listOf(
+            MediaFileInfo(
+                uriString = "content://test/song1",
+                displayName = "Song One",
+                sizeBytes = 1L,
+                title = "Song One",
+                genre = "Rock"
+            ),
+            MediaFileInfo(
+                uriString = "content://test/song2",
+                displayName = "Song Two",
+                sizeBytes = 1L,
+                title = "Song Two",
+                genre = "Pop"
+            ),
+            MediaFileInfo(
+                uriString = "content://test/song3",
+                displayName = "Song Three",
+                sizeBytes = 1L,
+                title = "Song Three",
+                genre = "Rock"
+            )
+        )
+
+        seedCacheService(viewModel, files)
+
+        assertEquals(null, viewModel.uiState.value.library.selectedGenre)
+        assertTrue(viewModel.uiState.value.library.filteredSongs.isEmpty())
+
+        viewModel.selectGenre("Rock/Metal")
+
+        val state = viewModel.uiState.value
+        assertEquals("Rock/Metal", state.library.selectedGenre)
+        assertEquals(null, state.library.selectedAlbum)
+        assertEquals(null, state.library.selectedArtist)
+        assertEquals(2, state.library.filteredSongs.size)
+        assertTrue(state.library.filteredSongs.all { it.genre == "Rock" })
+
+        viewModel.selectGenre("Pop")
+
+        val state2 = viewModel.uiState.value
+        assertEquals("Pop", state2.library.selectedGenre)
+        assertEquals(null, state2.library.selectedAlbum)
+        assertEquals(null, state2.library.selectedArtist)
+        assertEquals(1, state2.library.filteredSongs.size)
+        assertEquals("content://test/song2", state2.library.filteredSongs.first().uriString)
+    }
+
+    @Test
+    fun selectGenre_clearsSelectedAlbumAndArtist() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+
+        val files = listOf(
+            MediaFileInfo(
+                uriString = "content://test/song1",
+                displayName = "Song One",
+                sizeBytes = 1L,
+                title = "Song One",
+                album = "Album A",
+                genre = "Rock",
+                artist = "Artist A"
+            )
+        )
+
+        seedCacheService(viewModel, files)
+
+        // Verify selectGenre clears selectedAlbum
+        viewModel.selectAlbum("Album A")
+        assertEquals("Album A", viewModel.uiState.value.library.selectedAlbum)
+
+        viewModel.selectGenre("Rock/Metal")
+        assertEquals("Rock/Metal", viewModel.uiState.value.library.selectedGenre)
+        assertEquals(null, viewModel.uiState.value.library.selectedAlbum)
+
+        // Verify selectGenre clears selectedArtist
+        viewModel.selectArtist("Artist A")
+        assertEquals("Artist A", viewModel.uiState.value.library.selectedArtist)
+
+        viewModel.selectGenre("Rock/Metal")
+        assertEquals("Rock/Metal", viewModel.uiState.value.library.selectedGenre)
+        assertEquals(null, viewModel.uiState.value.library.selectedArtist)
+        assertEquals(1, viewModel.uiState.value.library.filteredSongs.size)
+    }
+
 }
