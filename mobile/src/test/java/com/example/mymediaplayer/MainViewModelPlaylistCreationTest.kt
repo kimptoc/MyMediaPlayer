@@ -326,6 +326,30 @@ class MainViewModelPlaylistCreationTest {
         assertEquals(listOf(existingSong, newSong), state.playlist.playlistSongs)
     }
 
+    @Test
+    fun addToManualPlaylist_addsSongSuccessfully() {
+        val file = MediaFileInfo("content://song1", "song1.mp3", 0L, "Song 1")
+
+        viewModel.addToManualPlaylist(file)
+
+        val state = viewModel.uiState.value
+        assertEquals(1, state.playlist.manualPlaylistSongs.size)
+        assertEquals(file, state.playlist.manualPlaylistSongs.first())
+    }
+
+    @Test
+    fun addToManualPlaylist_ignoresDuplicateSong() {
+        val file1 = MediaFileInfo("content://song1", "song1.mp3", 0L, "Song 1")
+        val file2 = MediaFileInfo("content://song1", "song1-duplicate.mp3", 100L, "Song 1 Duplicate")
+
+        viewModel.addToManualPlaylist(file1)
+        viewModel.addToManualPlaylist(file2)
+
+        val state = viewModel.uiState.value
+        assertEquals(1, state.playlist.manualPlaylistSongs.size)
+        assertEquals(file1, state.playlist.manualPlaylistSongs.first())
+    }
+
     private fun seedUiState(viewModel: MainViewModel, state: MainUiState) {
         val field = viewModel.javaClass.getDeclaredField("_uiState")
         field.isAccessible = true
