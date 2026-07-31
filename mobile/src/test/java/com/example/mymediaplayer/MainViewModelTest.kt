@@ -1146,4 +1146,65 @@ class MainViewModelTest {
         assertEquals(1, viewModel.uiState.value.library.filteredSongs.size)
     }
 
+    @Test
+    fun selectAlbum_updatesStateAndFiltersSongsCorrectly() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+
+        val mediaCacheField = viewModel.javaClass.getDeclaredField("mediaCacheService")
+        mediaCacheField.isAccessible = true
+        val mediaCache = mediaCacheField.get(viewModel) as MediaCacheService
+
+        val song1 = MediaFileInfo(
+            uriString = "content://test/song1",
+            displayName = "Song One",
+            sizeBytes = 1L,
+            title = "Song One",
+            album = "Album A"
+        )
+        val song2 = MediaFileInfo(
+            uriString = "content://test/song2",
+            displayName = "Song Two",
+            sizeBytes = 1L,
+            title = "Song Two",
+            album = "Album B"
+        )
+        val song3 = MediaFileInfo(
+            uriString = "content://test/song3",
+            displayName = "Song Three",
+            sizeBytes = 1L,
+            title = "Song Three",
+            album = "Album A"
+        )
+
+        mediaCache.addFile(song1)
+        mediaCache.addFile(song2)
+        mediaCache.addFile(song3)
+        mediaCache.buildAlbumArtistIndexesFromCache()
+
+        // Set non-null values to genre and artist first to ensure they are cleared
+        val initialUiState = viewModel.uiState.value
+        seedUiState(
+            viewModel,
+            initialUiState.copy(
+                library = initialUiState.library.copy(
+                    selectedGenre = "Genre A",
+                    selectedArtist = "Artist A"
+                )
+            )
+        )
+
+        viewModel.selectAlbum("Album A")
+
+        val state = viewModel.uiState.value
+        assertEquals("Album A", state.library.selectedAlbum)
+        assertEquals(null, state.library.selectedGenre)
+        assertEquals(null, state.library.selectedArtist)
+        assertEquals(2, state.library.filteredSongs.size)
+        assertTrue(state.library.filteredSongs.contains(song1))
+        assertTrue(state.library.filteredSongs.contains(song3))
+        assertFalse(state.library.filteredSongs.contains(song2))
+    }
+
 }
