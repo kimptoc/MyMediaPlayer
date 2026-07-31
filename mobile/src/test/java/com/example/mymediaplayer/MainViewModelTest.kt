@@ -778,5 +778,6 @@ class MainViewModelTest {
         viewModel.selectGenre("Rock/Metal")
         assertEquals("Rock/Metal", viewModel.uiState.value.library.selectedGenre)
         assertEquals(null, viewModel.uiState.value.library.selectedArtist)
+        assertEquals(1, viewModel.uiState.value.library.filteredSongs.size)
     }
 }
