@@ -556,21 +556,6 @@ class MainViewModelTest {
         assertEquals(PlaybackStateCompat.REPEAT_MODE_ONE, viewModel.uiState.value.playback.repeatMode)
     }
 
-    private fun seedUiState(viewModel: MainViewModel, state: MainUiState) {
-        val field = viewModel.javaClass.getDeclaredField("_uiState")
-        field.isAccessible = true
-        @Suppress("UNCHECKED_CAST")
-        val flow = field.get(viewModel) as MutableStateFlow<MainUiState>
-        flow.value = state
-    }
-
-    private fun clearPrefs(app: Application) {
-        app.getSharedPreferences("mymediaplayer_prefs", Application.MODE_PRIVATE)
-            .edit()
-            .clear()
-            .commit()
-    }
-
     @Test
     fun updateQueueState_withValidTitleAndSize_updatesStateCorrectly() {
         val app = ApplicationProvider.getApplicationContext<Application>()
