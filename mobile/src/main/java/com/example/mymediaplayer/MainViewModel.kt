@@ -636,26 +636,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
-    fun addManyToManualPlaylist(files: List<MediaFileInfo>) {
-        if (files.isEmpty()) return
-        val current = _uiState.value
-        val existingUris = current.playlist.manualPlaylistSongs.map { it.uriString }.toMutableSet()
-        val additions = files.filter { existingUris.add(it.uriString) }
-        if (additions.isEmpty()) return
-        _uiState.value = current.copy(
-            playlist = current.playlist.copy(
-                manualPlaylistSongs = current.playlist.manualPlaylistSongs + additions
-            )
-        )
-    }
-
-    fun clearManualPlaylist() {
-        val current = _uiState.value
-        _uiState.value = current.copy(
-            playlist = current.playlist.copy(manualPlaylistSongs = emptyList())
-        )
-    }
-
     fun createManualPlaylist(name: String) {
         val uri = resolvePlaylistTreeUri()
         val current = _uiState.value
@@ -900,30 +880,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             viewModelScope.launch(Dispatchers.IO) {
                 mediaCacheService.persistCache(getApplication(), tree, limit)
             }
-        }
-    }
-
-    fun addSongToExistingPlaylist(playlist: PlaylistInfo, file: MediaFileInfo) {
-        val uri = playlist.uriString.toUri()
-        val success = playlistService.appendToPlaylist(getApplication(), uri, listOf(file))
-        if (success) invalidatePlaylistSongCount(playlist.uriString)
-        val current = _uiState.value
-        if (success) {
-            val updatedSongs = if (current.playlist.isSelected(playlist)) {
-                current.playlist.playlistSongs + file
-            } else {
-                current.playlist.playlistSongs
-            }
-            _uiState.value = current.copy(
-                playlist = current.playlist.copy(
-                    playlistSongs = updatedSongs,
-                    playlistMessage = "Added to ${playlist.displayName.removeSuffix(".m3u")}"
-                )
-            )
-        } else {
-            _uiState.value = current.copy(
-                playlist = current.playlist.copy(playlistMessage = "Failed to update playlist")
-            )
         }
     }
 
