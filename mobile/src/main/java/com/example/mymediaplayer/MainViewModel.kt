@@ -140,6 +140,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         const val SMART_RECENTLY_ADDED = "${SMART_PREFIX}recently_added"
         const val SMART_MOST_PLAYED = "${SMART_PREFIX}most_played"
         const val SMART_NOT_HEARD_RECENTLY = "${SMART_PREFIX}not_heard_recently"
+
+        fun buildScanCacheKey(treeUri: Uri, maxFiles: Int, deepScan: Boolean): String =
+            "${treeUri}|$maxFiles|deep=$deepScan"
     }
 
     private val mediaCacheService = MediaCacheService()
@@ -244,7 +247,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         deepScan: Boolean = false,
         forceRescan: Boolean = false
     ) {
-        val key = "${treeUri}|$maxFiles|deep=$deepScan"
+        val key = buildScanCacheKey(treeUri, maxFiles, deepScan)
         if (!forceRescan) {
             val cached = scanCache[key]
             if (cached != null) {
@@ -484,7 +487,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 )
             )
-            val key = treeUri?.let { "${it}|${current.scan.lastScanLimit}|deep=${current.scan.deepScanEnabled}" }
+            val key = treeUri?.let { buildScanCacheKey(it, current.scan.lastScanLimit, current.scan.deepScanEnabled) }
             if (key != null) {
                 val cached = scanCache[key]
                 if (cached != null) {
@@ -630,26 +633,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             playlist = current.playlist.copy(
                 manualPlaylistSongs = current.playlist.manualPlaylistSongs + file
             )
-        )
-    }
-
-    fun addManyToManualPlaylist(files: List<MediaFileInfo>) {
-        if (files.isEmpty()) return
-        val current = _uiState.value
-        val existingUris = current.playlist.manualPlaylistSongs.map { it.uriString }.toMutableSet()
-        val additions = files.filter { existingUris.add(it.uriString) }
-        if (additions.isEmpty()) return
-        _uiState.value = current.copy(
-            playlist = current.playlist.copy(
-                manualPlaylistSongs = current.playlist.manualPlaylistSongs + additions
-            )
-        )
-    }
-
-    fun clearManualPlaylist() {
-        val current = _uiState.value
-        _uiState.value = current.copy(
-            playlist = current.playlist.copy(manualPlaylistSongs = emptyList())
         )
     }
 
@@ -897,30 +880,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             viewModelScope.launch(Dispatchers.IO) {
                 mediaCacheService.persistCache(getApplication(), tree, limit)
             }
-        }
-    }
-
-    fun addSongToExistingPlaylist(playlist: PlaylistInfo, file: MediaFileInfo) {
-        val uri = playlist.uriString.toUri()
-        val success = playlistService.appendToPlaylist(getApplication(), uri, listOf(file))
-        if (success) invalidatePlaylistSongCount(playlist.uriString)
-        val current = _uiState.value
-        if (success) {
-            val updatedSongs = if (current.playlist.isSelected(playlist)) {
-                current.playlist.playlistSongs + file
-            } else {
-                current.playlist.playlistSongs
-            }
-            _uiState.value = current.copy(
-                playlist = current.playlist.copy(
-                    playlistSongs = updatedSongs,
-                    playlistMessage = "Added to ${playlist.displayName.removeSuffix(".m3u")}"
-                )
-            )
-        } else {
-            _uiState.value = current.copy(
-                playlist = current.playlist.copy(playlistMessage = "Failed to update playlist")
-            )
         }
     }
 
