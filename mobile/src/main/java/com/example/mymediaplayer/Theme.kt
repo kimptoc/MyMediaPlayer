@@ -73,15 +73,3 @@ fun lcarsLightColorScheme(): ColorScheme = lightColorScheme(
     outline = LcarsDimWhite,
 )
 
-@Composable
-fun LcarsTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    content: @Composable () -> Unit,
-) {
-    val colorScheme = if (darkTheme) lcarsDarkColorScheme() else lcarsLightColorScheme()
-
-    MaterialTheme(
-        colorScheme = colorScheme,
-        content = content,
-    )
-}
