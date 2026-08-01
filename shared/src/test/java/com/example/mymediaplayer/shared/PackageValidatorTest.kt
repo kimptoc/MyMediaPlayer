@@ -11,6 +11,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.shadows.ShadowLog
 import org.robolectric.shadows.ShadowPackageManager
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.Implements
@@ -131,11 +132,20 @@ class PackageValidatorTest {
 
     @Test
     fun isCallerValid_sanitizesNewlinesInPackageName() {
-        // Invokes isCallerValid with a package name containing newline characters and verifies it runs safely and returns false
+        // Invokes isCallerValid with a package name containing newline characters and verifies
+        // both that it runs safely and that the logged package name has no raw newlines in it.
         val uid = 90000
         val maliciousPackageName = "com.malicious.app\nwith\nnewlines"
         pm.installPackage(PackageInfo().apply { packageName = maliciousPackageName })
         pm.setPackagesForUid(uid, maliciousPackageName)
+
         assertFalse(validator.isCallerValid(maliciousPackageName, uid))
+
+        val logs = ShadowLog.getLogsForTag("PackageValidator")
+        assertTrue(logs.isNotEmpty())
+        logs.forEach { entry ->
+            assertFalse(entry.msg.contains("\n"))
+            assertFalse(entry.msg.contains("\r"))
+        }
     }
 }
