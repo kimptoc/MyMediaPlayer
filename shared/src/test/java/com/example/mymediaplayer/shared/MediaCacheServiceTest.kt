@@ -508,11 +508,26 @@ class MediaCacheServiceTest {
     class MockMediaStoreProvider : android.content.ContentProvider() {
         var genres = emptyList<Pair<Long, String>>()
         var members = emptyMap<Long, List<Long>>()
+        var simulateFailure = false
 
         override fun onCreate() = true
 
         override fun query(uri: Uri, projection: Array<out String>?, selection: String?, selectionArgs: Array<out String>?, sortOrder: String?): android.database.Cursor? {
-            if (uri == android.provider.MediaStore.Audio.Genres.EXTERNAL_CONTENT_URI) {
+            if (simulateFailure && uri.toString() == "content://media/external/audio/genres/all/members") {
+                throw RuntimeException("Simulated content provider failure")
+            }
+            if (uri.toString() == "content://media/external/audio/genres/all/members") {
+                val cursor = android.database.MatrixCursor(arrayOf(
+                    android.provider.MediaStore.Audio.Genres.Members.AUDIO_ID,
+                    android.provider.MediaStore.Audio.Genres.Members.GENRE_ID
+                ))
+                members.forEach { (genreId, audioIdsList) ->
+                    audioIdsList.forEach { audioId ->
+                        cursor.addRow(arrayOf<Any>(audioId, genreId))
+                    }
+                }
+                return cursor
+            } else if (uri == android.provider.MediaStore.Audio.Genres.EXTERNAL_CONTENT_URI) {
                 val cursor = android.database.MatrixCursor(arrayOf(android.provider.MediaStore.Audio.Genres._ID, android.provider.MediaStore.Audio.Genres.NAME))
                 genres.forEach { (id, name) -> cursor.addRow(arrayOf<Any>(id, name)) }
                 return cursor
@@ -532,12 +547,13 @@ class MediaCacheServiceTest {
         override fun update(uri: Uri, values: android.content.ContentValues?, selection: String?, selectionArgs: Array<out String>?) = 0
     }
 
-    private fun setupProvider(genres: List<Pair<Long, String>>, members: Map<Long, List<Long>>) {
+    private fun setupProvider(genres: List<Pair<Long, String>>, members: Map<Long, List<Long>>): MockMediaStoreProvider {
         val providerInfo = android.content.pm.ProviderInfo().apply { authority = android.provider.MediaStore.AUTHORITY }
         val controller = org.robolectric.Robolectric.buildContentProvider(MockMediaStoreProvider::class.java).create(providerInfo)
         val provider = controller.get() as MockMediaStoreProvider
         provider.genres = genres
         provider.members = members
+        return provider
     }
 
     @Test
@@ -582,6 +598,24 @@ class MediaCacheServiceTest {
         val result = service.loadWholeDriveGenres(context, setOf(100L))
 
         assertTrue(result.isEmpty())
+    }
+
+    @Test
+    fun loadWholeDriveGenres_fallbackOnFailure_stillResolvesGenres() {
+        // Setup provider but configure it to simulate query failure on the optimized path
+        val provider = setupProvider(
+            genres = listOf(1L to "Jazz", 2L to "Blues"),
+            members = mapOf(1L to listOf(300L), 2L to listOf(400L))
+        )
+        provider.simulateFailure = true
+
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val service = MediaCacheService()
+        val result = service.loadWholeDriveGenres(context, setOf(300L, 400L))
+
+        assertEquals(2, result.size)
+        assertEquals("Jazz", result[300L])
+        assertEquals("Blues", result[400L])
     }
 
     @Test

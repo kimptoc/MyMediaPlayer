@@ -239,20 +239,79 @@ class MediaCacheService {
             MediaStore.Audio.Genres._ID,
             MediaStore.Audio.Genres.NAME
         )
-        resolver.query(
-            MediaStore.Audio.Genres.EXTERNAL_CONTENT_URI,
-            genreProjection,
-            null,
-            null,
-            null
-        )?.use { genreCursor ->
-            val genreIdIndex = genreCursor.getColumnIndexOrThrow(MediaStore.Audio.Genres._ID)
-            val genreNameIndex = genreCursor.getColumnIndexOrThrow(MediaStore.Audio.Genres.NAME)
-            while (genreCursor.moveToNext()) {
-                val genreId = genreCursor.getLong(genreIdIndex)
-                val genreName = genreCursor.getString(genreNameIndex)?.trim().orEmpty()
-                if (genreName.isBlank()) continue
-                collectGenreMembers(resolver, genreId, genreName, audioIds, allGenresByAudioId)
+
+        var querySuccessful = false
+        try {
+            // First attempt to query all members in one efficient query
+            val allMembersUri = Uri.parse("content://media/external/audio/genres/all/members")
+            val membersProjection = arrayOf(
+                MediaStore.Audio.Genres.Members.AUDIO_ID,
+                MediaStore.Audio.Genres.Members.GENRE_ID
+            )
+            // Query only relevant audioIds if possible using standard IN clause
+            val selection = "${MediaStore.Audio.Genres.Members.AUDIO_ID} IN (${audioIds.joinToString(",")})"
+            val genresMap = mutableMapOf<Long, String>()
+
+            resolver.query(
+                MediaStore.Audio.Genres.EXTERNAL_CONTENT_URI,
+                genreProjection,
+                null,
+                null,
+                null
+            )?.use { genreCursor ->
+                val genreIdIndex = genreCursor.getColumnIndexOrThrow(MediaStore.Audio.Genres._ID)
+                val genreNameIndex = genreCursor.getColumnIndexOrThrow(MediaStore.Audio.Genres.NAME)
+                while (genreCursor.moveToNext()) {
+                    val genreId = genreCursor.getLong(genreIdIndex)
+                    val genreName = genreCursor.getString(genreNameIndex)?.trim().orEmpty()
+                    if (genreName.isNotBlank()) {
+                        genresMap[genreId] = genreName
+                    }
+                }
+            }
+
+            if (genresMap.isNotEmpty()) {
+                resolver.query(
+                    allMembersUri,
+                    membersProjection,
+                    selection,
+                    null,
+                    null
+                )?.use { membersCursor ->
+                    val audioIdIndex = membersCursor.getColumnIndexOrThrow(MediaStore.Audio.Genres.Members.AUDIO_ID)
+                    val genreIdIndex = membersCursor.getColumnIndexOrThrow(MediaStore.Audio.Genres.Members.GENRE_ID)
+                    while (membersCursor.moveToNext()) {
+                        val audioId = membersCursor.getLong(audioIdIndex)
+                        val genreId = membersCursor.getLong(genreIdIndex)
+                        val genreName = genresMap[genreId]
+                        if (genreName != null) {
+                            allGenresByAudioId.getOrPut(audioId) { mutableListOf() }.add(genreName)
+                        }
+                    }
+                    querySuccessful = true
+                }
+            }
+        } catch (e: Exception) {
+            Timber.w(e, "Failed to query all genres efficiently; falling back to N+1 query pattern.")
+        }
+
+        if (!querySuccessful) {
+            allGenresByAudioId.clear()
+            resolver.query(
+                MediaStore.Audio.Genres.EXTERNAL_CONTENT_URI,
+                genreProjection,
+                null,
+                null,
+                null
+            )?.use { genreCursor ->
+                val genreIdIndex = genreCursor.getColumnIndexOrThrow(MediaStore.Audio.Genres._ID)
+                val genreNameIndex = genreCursor.getColumnIndexOrThrow(MediaStore.Audio.Genres.NAME)
+                while (genreCursor.moveToNext()) {
+                    val genreId = genreCursor.getLong(genreIdIndex)
+                    val genreName = genreCursor.getString(genreNameIndex)?.trim().orEmpty()
+                    if (genreName.isBlank()) continue
+                    collectGenreMembers(resolver, genreId, genreName, audioIds, allGenresByAudioId)
+                }
             }
         }
         // Pick genre per audio ID: only use MediaStore genre if all assignments
