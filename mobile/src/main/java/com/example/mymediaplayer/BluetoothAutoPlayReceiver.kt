@@ -10,7 +10,6 @@ import android.os.Build
 import android.os.SystemClock
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
-import androidx.core.content.IntentCompat
 import com.example.mymediaplayer.shared.MyMusicService
 
 class BluetoothAutoPlayReceiver : BroadcastReceiver() {
@@ -43,7 +42,12 @@ class BluetoothAutoPlayReceiver : BroadcastReceiver() {
         }
 
         val device = try {
-            IntentCompat.getParcelableExtra(intent, BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
+            }
         } catch (e: Exception) {
             null
         } ?: run {
