@@ -128,4 +128,14 @@ class PackageValidatorTest {
         pm.setPackagesForUid(uid, "com.malicious.app")
         assertFalse(validator.isCallerUidValid(uid))
     }
+
+    @Test
+    fun isCallerValid_sanitizesNewlinesInPackageName() {
+        // Invokes isCallerValid with a package name containing newline characters and verifies it runs safely and returns false
+        val uid = 90000
+        val maliciousPackageName = "com.malicious.app\nwith\nnewlines"
+        pm.installPackage(PackageInfo().apply { packageName = maliciousPackageName })
+        pm.setPackagesForUid(uid, maliciousPackageName)
+        assertFalse(validator.isCallerValid(maliciousPackageName, uid))
+    }
 }
