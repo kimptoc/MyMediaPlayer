@@ -154,28 +154,39 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
             if (encryptedPrefs != null) {
                 if (standardPrefsFile.exists() && !encryptedPrefs.getBoolean("migration_completed", false)) {
-                    val editor = encryptedPrefs.edit()
-                    for ((key, value) in standardPrefs.all) {
-                        when (value) {
-                            is String -> editor.putString(key, value)
-                            is Int -> editor.putInt(key, value)
-                            is Boolean -> editor.putBoolean(key, value)
-                            is Long -> editor.putLong(key, value)
-                            is Float -> editor.putFloat(key, value)
-                            is Set<*> -> {
-                                @Suppress("UNCHECKED_CAST")
-                                editor.putStringSet(key, value as Set<String>)
+                    val allPrefs = standardPrefs.all
+                    if (allPrefs.isNotEmpty()) {
+                        val editor = encryptedPrefs.edit()
+                        for ((key, value) in allPrefs) {
+                            when (value) {
+                                is String -> editor.putString(key, value)
+                                is Int -> editor.putInt(key, value)
+                                is Boolean -> editor.putBoolean(key, value)
+                                is Long -> editor.putLong(key, value)
+                                is Float -> editor.putFloat(key, value)
+                                is Set<*> -> {
+                                    @Suppress("UNCHECKED_CAST")
+                                    editor.putStringSet(key, value as Set<String>)
+                                }
                             }
                         }
-                    }
-                    try {
-                        @Suppress("ApplySharedPref")
-                        editor.putBoolean("migration_completed", true).commit()
-                        @Suppress("ApplySharedPref")
-                        standardPrefs.edit().clear().commit()
-                        standardPrefsFile.delete()
-                    } catch (e: Exception) {
-                        Log.e("MyMusicService", "Failed to commit prefs migration for $PREFS_NAME — will retry on next launch", e)
+                        try {
+                            @Suppress("ApplySharedPref")
+                            editor.putBoolean("migration_completed", true).commit()
+                            @Suppress("ApplySharedPref")
+                            standardPrefs.edit().clear().commit()
+                            standardPrefsFile.delete()
+                        } catch (e: Exception) {
+                            Log.e("MyMusicService", "Failed to commit prefs migration for $PREFS_NAME — will retry on next launch", e)
+                        }
+                    } else {
+                        try {
+                            @Suppress("ApplySharedPref")
+                            encryptedPrefs.edit().putBoolean("migration_completed", true).commit()
+                            standardPrefsFile.delete()
+                        } catch (e: Exception) {
+                            Log.e("MyMusicService", "Failed to commit empty prefs migration for $PREFS_NAME — will retry on next launch", e)
+                        }
                     }
                 }
                 prefsInstance = encryptedPrefs

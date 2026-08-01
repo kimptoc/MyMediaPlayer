@@ -113,4 +113,52 @@ class MyMusicServiceBenchmarkTest {
             elapsedMs < 2000
         )
     }
+
+    @Test
+    @org.robolectric.annotation.Config(sdk = [34], shadows = [EncryptedPrefsManagerTest.ShadowEncryptedSharedPreferences::class, EncryptedPrefsManagerTest.ShadowMasterKeyBuilder::class])
+    fun benchmarkPrefsMigration() {
+        val service = Robolectric.buildService(MyMusicService::class.java).get()
+        val context = service.applicationContext
+        val standardPrefs = context.getSharedPreferences("mymediaplayer_prefs", android.content.Context.MODE_PRIVATE)
+
+        // 1. Measure empty migration
+        val emptyTime = measureTimeMillis {
+            for (i in 0 until 10) {
+                // Reset states
+                standardPrefs.edit().clear().commit()
+                val standardPrefsFile = java.io.File(context.applicationInfo.dataDir, "shared_prefs/mymediaplayer_prefs.xml")
+                standardPrefsFile.parentFile?.mkdirs()
+                standardPrefsFile.createNewFile()
+                EncryptedPrefsManager.clearCacheForTesting()
+                MyMusicService.clearPrefsCacheForTesting()
+
+                MyMusicService.getPrefs(context)
+            }
+        }
+        println("Benchmark: Empty prefs migration took average ${emptyTime / 10.0} ms per iteration")
+
+        // 2. Measure populated migration
+        val populatedTime = measureTimeMillis {
+            for (i in 0 until 10) {
+                // Reset states and seed keys
+                standardPrefs.edit().clear().commit()
+                val editor = standardPrefs.edit()
+                for (j in 0 until 20) {
+                    editor.putString("key_$j", "value_$j")
+                }
+                editor.commit()
+
+                val standardPrefsFile = java.io.File(context.applicationInfo.dataDir, "shared_prefs/mymediaplayer_prefs.xml")
+                standardPrefsFile.parentFile?.mkdirs()
+                standardPrefsFile.createNewFile()
+                EncryptedPrefsManager.clearCacheForTesting()
+                MyMusicService.clearPrefsCacheForTesting()
+
+                MyMusicService.getPrefs(context)
+            }
+        }
+        println("Benchmark: Populated prefs migration (20 keys) took average ${populatedTime / 10.0} ms per iteration")
+
+        assertTrue(true)
+    }
 }
