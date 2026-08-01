@@ -23,6 +23,12 @@ class MyMusicServiceTest {
     fun setup() {
         EncryptedPrefsManager.clearCacheForTesting()
         MyMusicService.clearPrefsCacheForTesting()
+        EncryptedPrefsManagerTest.ShadowEncryptedSharedPreferences.throwGeneralSecurityException = false
+        EncryptedPrefsManagerTest.ShadowEncryptedSharedPreferences.throwIOException = false
+        EncryptedPrefsManagerTest.ShadowEncryptedSharedPreferences.throwException = false
+        EncryptedPrefsManagerTest.ShadowMasterKeyBuilder.throwGeneralSecurityException = false
+        EncryptedPrefsManagerTest.ShadowMasterKeyBuilder.throwIOException = false
+        EncryptedPrefsManagerTest.ShadowMasterKeyBuilder.throwException = false
     }
 
     @Test
