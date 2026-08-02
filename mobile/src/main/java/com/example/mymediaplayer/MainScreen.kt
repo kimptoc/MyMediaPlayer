@@ -913,14 +913,7 @@ fun ScanDialogContent(
     )
 }
 
-@Composable
-fun CreateRandomPlaylistDialog(
-    maxCount: Int,
-    playlistCountText: String,
-    onPlaylistCountTextChange: (String) -> Unit,
-    onDismissRequest: () -> Unit,
-    onCreatePlaylist: (Int) -> Unit
-) {
+fun getPlaylistCountValidation(maxCount: Int, playlistCountText: String): Pair<Boolean, String> {
     val countValue = playlistCountText.toIntOrNull()
     val isValid = countValue != null && countValue in 1..maxCount
     val helperText = when {
@@ -929,49 +922,95 @@ fun CreateRandomPlaylistDialog(
         countValue < 1 || countValue > maxCount -> "Enter a number between 1 and $maxCount."
         else -> "OK"
     }
+    return Pair(isValid, helperText)
+}
+
+@Composable
+fun CreateRandomPlaylistDialogContentText(
+    playlistCountText: String,
+    onPlaylistCountTextChange: (String) -> Unit,
+    helperText: String,
+    isValid: Boolean
+) {
+    Column {
+        Text("How many songs should be added?")
+        Spacer(modifier = Modifier.height(8.dp))
+        TextField(
+            value = playlistCountText,
+            onValueChange = onPlaylistCountTextChange,
+            singleLine = true,
+            placeholder = { Text("e.g. 3") }
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = helperText,
+            style = MaterialTheme.typography.labelSmall,
+            color = if (isValid) {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            } else {
+                MaterialTheme.colorScheme.error
+            }
+        )
+    }
+}
+
+@Composable
+fun CreateRandomPlaylistConfirmButton(
+    isValid: Boolean,
+    onConfirm: () -> Unit
+) {
+    TextButton(
+        onClick = onConfirm,
+        enabled = isValid
+    ) {
+        Text("Create")
+    }
+}
+
+@Composable
+fun CreateRandomPlaylistDismissButton(
+    onDismissRequest: () -> Unit
+) {
+    TextButton(onClick = onDismissRequest) {
+        Text("Cancel")
+    }
+}
+
+@Composable
+fun CreateRandomPlaylistDialog(
+    maxCount: Int,
+    playlistCountText: String,
+    onPlaylistCountTextChange: (String) -> Unit,
+    onDismissRequest: () -> Unit,
+    onCreatePlaylist: (Int) -> Unit
+) {
+    val (isValid, helperText) = getPlaylistCountValidation(maxCount, playlistCountText)
+    val countValue = playlistCountText.toIntOrNull()
 
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismissRequest,
         title = { Text("Create Random Playlist") },
         text = {
-            Column {
-                Text("How many songs should be added?")
-                Spacer(modifier = Modifier.height(8.dp))
-                TextField(
-                    value = playlistCountText,
-                    onValueChange = onPlaylistCountTextChange,
-                    singleLine = true,
-                    placeholder = { Text("e.g. 3") }
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = helperText,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (isValid) {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    } else {
-                        MaterialTheme.colorScheme.error
-                    }
-                )
-            }
+            CreateRandomPlaylistDialogContentText(
+                playlistCountText = playlistCountText,
+                onPlaylistCountTextChange = onPlaylistCountTextChange,
+                helperText = helperText,
+                isValid = isValid
+            )
         },
         confirmButton = {
-            TextButton(
-                onClick = {
-                    if (isValid) {
+            CreateRandomPlaylistConfirmButton(
+                isValid = isValid,
+                onConfirm = {
+                    if (isValid && countValue != null) {
                         onDismissRequest()
-                        onCreatePlaylist(countValue!!)
+                        onCreatePlaylist(countValue)
                     }
-                },
-                enabled = isValid
-            ) {
-                Text("Create")
-            }
+                }
+            )
         },
         dismissButton = {
-            TextButton(onClick = onDismissRequest) {
-                Text("Cancel")
-            }
+            CreateRandomPlaylistDismissButton(onDismissRequest = onDismissRequest)
         }
     )
 }
