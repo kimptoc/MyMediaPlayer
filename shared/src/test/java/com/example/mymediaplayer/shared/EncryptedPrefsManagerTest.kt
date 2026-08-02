@@ -205,7 +205,45 @@ class EncryptedPrefsManagerTest {
         field.isAccessible = true
         val map = field.get(EncryptedPrefsManager) as Map<*, *>
 
+        // Verify the internal failedFileNames set is actually cleared
+        val failedField = EncryptedPrefsManager::class.java.getDeclaredField("failedFileNames")
+        failedField.isAccessible = true
+        val failedSet = failedField.get(EncryptedPrefsManager) as Set<*>
+
         assertTrue(map.isEmpty())
+        assertTrue(failedSet.isEmpty())
+    }
+
+    @Test
+    fun testCreateOrGet_failedFileNames_populated() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val fileName = "test_failed_prefs_file"
+
+        // Trigger IOException on creation
+        ShadowEncryptedSharedPreferences.throwIOException = true
+
+        // Attempting to create should return null
+        val result1 = EncryptedPrefsManager.createOrGet(context, fileName)
+        org.junit.Assert.assertNull(result1)
+
+        // Retrieve failedFileNames field via reflection
+        val failedField = EncryptedPrefsManager::class.java.getDeclaredField("failedFileNames")
+        failedField.isAccessible = true
+        val failedSet = failedField.get(EncryptedPrefsManager) as Set<*>
+
+        // Verify it contains our fileName
+        assertTrue(failedSet.contains(fileName))
+
+        // Reset the IOException flag so creation would normally succeed
+        ShadowEncryptedSharedPreferences.throwIOException = false
+
+        // Attempting to create again should still return null because the filename is cached as failed
+        val result2 = EncryptedPrefsManager.createOrGet(context, fileName)
+        org.junit.Assert.assertNull(result2)
+
+        // Clear cache and verify it is removed
+        EncryptedPrefsManager.clearCacheForTesting()
+        assertTrue(failedSet.isEmpty())
     }
 
     @Test
