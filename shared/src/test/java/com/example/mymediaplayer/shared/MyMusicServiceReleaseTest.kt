@@ -8,6 +8,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.Implementation
 import org.robolectric.annotation.Implements
@@ -15,10 +16,8 @@ import org.robolectric.shadows.ShadowMediaPlayer
 
 @Implements(MediaPlayer::class)
 class ShadowMediaPlayerThrowingStop : ShadowMediaPlayer() {
-    companion object {
-        var stopCalled = false
-        var releaseCalled = false
-    }
+    var stopCalled = false
+    var releaseCalled = false
 
     @Implementation
     fun stop() {
@@ -29,6 +28,7 @@ class ShadowMediaPlayerThrowingStop : ShadowMediaPlayer() {
     @Implementation
     fun release() {
         releaseCalled = true
+        _release()
     }
 }
 
@@ -39,14 +39,13 @@ class MyMusicServiceReleaseTest {
     @Before
     fun setup() {
         EncryptedPrefsManager.clearCacheForTesting()
-        ShadowMediaPlayerThrowingStop.stopCalled = false
-        ShadowMediaPlayerThrowingStop.releaseCalled = false
     }
 
     @Test
     fun releaseMediaPlayer_whenStopThrowsIllegalStateException_isCaughtAndReleaseIsCalled() {
         val service = Robolectric.buildService(MyMusicService::class.java).create().get()
         val player = MediaPlayer()
+        val shadow = shadowOf(player) as ShadowMediaPlayerThrowingStop
 
         // Set the private mediaPlayer field on the service using reflection
         val field = MyMusicService::class.java.getDeclaredField("mediaPlayer")
@@ -59,8 +58,8 @@ class MyMusicServiceReleaseTest {
         method.invoke(service)
 
         // Verify that stop() was called and threw the exception, but release() was still called and mediaPlayer was set to null
-        assertTrue("stop() should have been called", ShadowMediaPlayerThrowingStop.stopCalled)
-        assertTrue("release() should have been called despite stop() throwing", ShadowMediaPlayerThrowingStop.releaseCalled)
+        assertTrue("stop() should have been called", shadow.stopCalled)
+        assertTrue("release() should have been called despite stop() throwing", shadow.releaseCalled)
         assertNull("mediaPlayer field should have been set to null", field.get(service))
     }
 }
