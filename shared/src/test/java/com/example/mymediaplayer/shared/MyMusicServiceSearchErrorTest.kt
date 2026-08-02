@@ -3,12 +3,14 @@ package com.example.mymediaplayer.shared
 import android.app.SearchManager
 import android.content.Intent
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowLog
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
@@ -56,6 +58,19 @@ class MyMusicServiceSearchErrorTest {
 
         // It should return START_NOT_STICKY as ACTION_MEDIA_PLAY_FROM_SEARCH handles it
         assertEquals(android.app.Service.START_NOT_STICKY, result)
+
+        // Every throwing key should have produced its own warning log entry.
+        val logs = ShadowLog.getLogsForTag("MyMusicService")
+        assertTrue(
+            "Expected a warning for the failed search query",
+            logs.any { it.msg.contains("search query extra") }
+        )
+        for (key in allowedKeys - SearchManager.QUERY) {
+            assertTrue(
+                "Expected a warning for extra '$key'",
+                logs.any { it.msg.contains(key) }
+            )
+        }
     }
 
     @Test
@@ -74,6 +89,17 @@ class MyMusicServiceSearchErrorTest {
         val result = service.onStartCommand(intent, 0, 1)
 
         assertEquals(android.app.Service.START_NOT_STICKY, result)
+
+        // The query failure should be logged, but the extras that succeeded must not be.
+        val logs = ShadowLog.getLogsForTag("MyMusicService")
+        assertTrue(
+            "Expected a warning for the failed search query",
+            logs.any { it.msg.contains("search query extra") }
+        )
+        assertTrue(
+            "Extras that were read successfully should not log a warning",
+            logs.none { it.msg.contains("search intent extra") }
+        )
     }
 
     @Test
@@ -92,5 +118,16 @@ class MyMusicServiceSearchErrorTest {
         val result = service.onStartCommand(intent, 0, 1)
 
         assertEquals(android.app.Service.START_NOT_STICKY, result)
+
+        // Only the throwing extra should be logged; the query and other extras succeeded.
+        val logs = ShadowLog.getLogsForTag("MyMusicService")
+        assertTrue(
+            "Expected a warning for extra 'android.intent.extra.album'",
+            logs.any { it.msg.contains("android.intent.extra.album") }
+        )
+        assertTrue(
+            "Query was read successfully and should not log a warning",
+            logs.none { it.msg.contains("search query extra") }
+        )
     }
 }
