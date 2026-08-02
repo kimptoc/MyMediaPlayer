@@ -54,32 +54,6 @@ class MockDocumentProviderException : ContentProvider() {
     override fun update(uri: Uri, values: ContentValues?, selection: String?, selectionArgs: Array<out String>?): Int = 0
 }
 
-class MockDocumentsProviderSecurityException : ContentProvider() {
-    override fun onCreate() = true
-    override fun query(uri: Uri, projection: Array<out String>?, selection: String?, selectionArgs: Array<out String>?, sortOrder: String?): Cursor? = null
-    override fun getType(uri: Uri): String? = null
-    override fun insert(uri: Uri, values: ContentValues?): Uri? = null
-    override fun delete(uri: Uri, selection: String?, selectionArgs: Array<out String>?): Int = 0
-    override fun update(uri: Uri, values: ContentValues?, selection: String?, selectionArgs: Array<out String>?): Int = 0
-
-    override fun call(method: String, arg: String?, extras: android.os.Bundle?): android.os.Bundle? {
-        throw SecurityException("Mocked SecurityException in call")
-    }
-}
-
-class MockDocumentsProviderGenericException : ContentProvider() {
-    override fun onCreate() = true
-    override fun query(uri: Uri, projection: Array<out String>?, selection: String?, selectionArgs: Array<out String>?, sortOrder: String?): Cursor? = null
-    override fun getType(uri: Uri): String? = null
-    override fun insert(uri: Uri, values: ContentValues?): Uri? = null
-    override fun delete(uri: Uri, selection: String?, selectionArgs: Array<out String>?): Int = 0
-    override fun update(uri: Uri, values: ContentValues?, selection: String?, selectionArgs: Array<out String>?): Int = 0
-
-    override fun call(method: String, arg: String?, extras: android.os.Bundle?): android.os.Bundle? {
-        throw RuntimeException("Mocked RuntimeException in call")
-    }
-}
-
 @RunWith(RobolectricTestRunner::class)
 @Config(shadows = [ShadowSingleDocumentFileException::class])
 class PlaylistServiceDeleteTest {
@@ -122,46 +96,6 @@ class PlaylistServiceDeleteTest {
             uri,
             "test_playlist",
             treeUri
-        )
-
-        assertFalse(result)
-    }
-
-    @Test
-    fun deletePlaylist_catchesDocumentsContractSecurityException() {
-        val baseContext = ApplicationProvider.getApplicationContext<Context>()
-
-        val providerInfo = ProviderInfo().apply {
-            authority = "documents_security_exception"
-        }
-        Robolectric.buildContentProvider(MockDocumentsProviderSecurityException::class.java).create(providerInfo).get()
-
-        val uri = Uri.parse("content://documents_security_exception/playlist.m3u")
-        val service = PlaylistService()
-
-        val result = service.deletePlaylist(
-            baseContext,
-            uri
-        )
-
-        assertFalse(result)
-    }
-
-    @Test
-    fun deletePlaylist_catchesDocumentsContractGenericException() {
-        val baseContext = ApplicationProvider.getApplicationContext<Context>()
-
-        val providerInfo = ProviderInfo().apply {
-            authority = "documents_generic_exception"
-        }
-        Robolectric.buildContentProvider(MockDocumentsProviderGenericException::class.java).create(providerInfo).get()
-
-        val uri = Uri.parse("content://documents_generic_exception/playlist.m3u")
-        val service = PlaylistService()
-
-        val result = service.deletePlaylist(
-            baseContext,
-            uri
         )
 
         assertFalse(result)

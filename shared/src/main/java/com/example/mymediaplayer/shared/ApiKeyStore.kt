@@ -40,7 +40,7 @@ object ApiKeyStore {
         OkHttpClient.Builder()
             .connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
             .readTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
-            .addInterceptor { chain -> testInterceptor?.intercept(chain) ?: chain.proceed(chain.request()) }
+            .apply { testInterceptor?.let { addInterceptor(it) } }
             .build()
     }
 
@@ -97,7 +97,31 @@ object ApiKeyStore {
                 .post(bodyStr.toRequestBody("application/json".toMediaType()))
                 .build()
 
-            executeRequest(request)
+            suspendCancellableCoroutine<ValidationResult> { continuation ->
+                val call = okHttpClient.newCall(request)
+                continuation.invokeOnCancellation {
+                    call.cancel()
+                }
+                call.enqueue(object : okhttp3.Callback {
+                    override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
+                        if (continuation.isActive) {
+                            continuation.resume(ValidationResult.Error("Connection failed: ${e.message}"))
+                        }
+                    }
+
+                    override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
+                        response.use {
+                            if (continuation.isActive) {
+                                if (it.code != 200) {
+                                    continuation.resume(ValidationResult.Error("HTTP ${it.code}: API request failed"))
+                                } else {
+                                    continuation.resume(ValidationResult.Success)
+                                }
+                            }
+                        }
+                    }
+                })
+            }
         }.getOrElse { e ->
             if (e is CancellationException) throw e
             ValidationResult.Error("Connection failed: ${e.message}")
@@ -128,37 +152,35 @@ object ApiKeyStore {
                 .post(bodyStr.toRequestBody("application/json".toMediaType()))
                 .build()
 
-            executeRequest(request)
+            suspendCancellableCoroutine<ValidationResult> { continuation ->
+                val call = okHttpClient.newCall(request)
+                continuation.invokeOnCancellation {
+                    call.cancel()
+                }
+                call.enqueue(object : okhttp3.Callback {
+                    override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
+                        if (continuation.isActive) {
+                            continuation.resume(ValidationResult.Error("Connection failed: ${e.message}"))
+                        }
+                    }
+
+                    override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
+                        response.use {
+                            if (continuation.isActive) {
+                                if (it.code != 200) {
+                                    continuation.resume(ValidationResult.Error("HTTP ${it.code}: API request failed"))
+                                } else {
+                                    continuation.resume(ValidationResult.Success)
+                                }
+                            }
+                        }
+                    }
+                })
+            }
         }.getOrElse { e ->
             if (e is CancellationException) throw e
             ValidationResult.Error("Connection failed: ${e.message}")
         }
-    }
-
-    private suspend fun executeRequest(request: Request): ValidationResult = suspendCancellableCoroutine { continuation ->
-        val call = okHttpClient.newCall(request)
-        continuation.invokeOnCancellation {
-            call.cancel()
-        }
-        call.enqueue(object : okhttp3.Callback {
-            override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
-                if (continuation.isActive) {
-                    continuation.resume(ValidationResult.Error("Connection failed: ${e.message}"))
-                }
-            }
-
-            override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
-                response.use {
-                    if (continuation.isActive) {
-                        if (it.code != 200) {
-                            continuation.resume(ValidationResult.Error("HTTP ${it.code}: API request failed"))
-                        } else {
-                            continuation.resume(ValidationResult.Success)
-                        }
-                    }
-                }
-            }
-        })
     }
 
     /**
