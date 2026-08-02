@@ -1,5 +1,6 @@
 package com.example.mymediaplayer.shared
 
+import org.junit.Assert.assertEquals
 import org.junit.Test
 import kotlin.system.measureTimeMillis
 
@@ -78,11 +79,21 @@ class MediaCacheServiceBenchmarkTest {
             "content://media/external/audio/media/pop/reggaeton/salsa.mp3",
             "content://media/external/audio/media/unknown_path/other.mp3",
             "C:\\Users\\Music\\Hip-Hop\\song.mp3",
+            "C:\\Users\\Music\\Rap\\song.mp3",
             "   /rap/trap/trap_song.mp3   ",
             null,
             "",
             "   "
         )
+
+        // Verify the optimized implementation agrees with the original before trusting its timing.
+        for (path in testPaths) {
+            assertEquals(
+                "inferGenreFromPath diverged from the original for path=$path",
+                inferGenreFromPathOld(path),
+                service.inferGenreFromPath(path)
+            )
+        }
 
         // Warmup
         repeat(10000) {
