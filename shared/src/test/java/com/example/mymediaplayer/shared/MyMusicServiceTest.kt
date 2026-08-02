@@ -23,6 +23,12 @@ class MyMusicServiceTest {
     fun setup() {
         EncryptedPrefsManager.clearCacheForTesting()
         MyMusicService.clearPrefsCacheForTesting()
+        EncryptedPrefsManagerTest.ShadowEncryptedSharedPreferences.throwGeneralSecurityException = false
+        EncryptedPrefsManagerTest.ShadowEncryptedSharedPreferences.throwIOException = false
+        EncryptedPrefsManagerTest.ShadowEncryptedSharedPreferences.throwException = false
+        EncryptedPrefsManagerTest.ShadowMasterKeyBuilder.throwGeneralSecurityException = false
+        EncryptedPrefsManagerTest.ShadowMasterKeyBuilder.throwIOException = false
+        EncryptedPrefsManagerTest.ShadowMasterKeyBuilder.throwException = false
     }
 
     @Test
@@ -806,5 +812,79 @@ class MyMusicServiceTest {
         val queue = service.currentPlaylistQueue()
         assertEquals(1, queue.size)
         assertEquals("Song One", queue[0].title)
+    }
+
+    @Test
+    @Config(sdk = [34], shadows = [EncryptedPrefsManagerTest.ShadowEncryptedSharedPreferences::class, EncryptedPrefsManagerTest.ShadowMasterKeyBuilder::class])
+    fun testPrefsMigration_whenPopulated_correctlyMigratesAndClearsStandardPrefs() {
+        val service = Robolectric.buildService(MyMusicService::class.java).get()
+        val context = service.applicationContext
+        val standardPrefs = context.getSharedPreferences("mymediaplayer_prefs", android.content.Context.MODE_PRIVATE)
+
+        // Seed some standard SharedPreferences values
+        standardPrefs.edit()
+            .putString("test_string", "hello")
+            .putInt("test_int", 42)
+            .putBoolean("test_boolean", true)
+            .putLong("test_long", 123L)
+            .putFloat("test_float", 3.14f)
+            .putStringSet("test_set", setOf("a", "b"))
+            .commit()
+
+        // Create standard prefs file in filesystem to simulate standard file existing
+        val standardPrefsFile = java.io.File(context.applicationInfo.dataDir, "shared_prefs/mymediaplayer_prefs.xml")
+        standardPrefsFile.parentFile?.mkdirs()
+        standardPrefsFile.createNewFile()
+        assertTrue(standardPrefsFile.exists())
+
+        // Clear cache and cache reference so getPrefs triggers migration
+        EncryptedPrefsManager.clearCacheForTesting()
+        MyMusicService.clearPrefsCacheForTesting()
+
+        // Execute getPrefs to run migration
+        val encryptedPrefs = MyMusicService.getPrefs(context)
+
+        // Verify values migrated successfully
+        assertEquals("hello", encryptedPrefs.getString("test_string", null))
+        assertEquals(42, encryptedPrefs.getInt("test_int", -1))
+        assertEquals(true, encryptedPrefs.getBoolean("test_boolean", false))
+        assertEquals(123L, encryptedPrefs.getLong("test_long", -1L))
+        assertEquals(3.14f, encryptedPrefs.getFloat("test_float", -1f))
+        assertEquals(setOf("a", "b"), encryptedPrefs.getStringSet("test_set", null))
+        assertEquals(true, encryptedPrefs.getBoolean("migration_completed", false))
+
+        // Verify standard SharedPreferences is cleared
+        assertTrue(standardPrefs.all.isEmpty())
+
+        // Verify standardPrefsFile is deleted
+        assertFalse(standardPrefsFile.exists())
+    }
+
+    @Test
+    @Config(sdk = [34], shadows = [EncryptedPrefsManagerTest.ShadowEncryptedSharedPreferences::class, EncryptedPrefsManagerTest.ShadowMasterKeyBuilder::class])
+    fun testPrefsMigration_whenEmpty_marksCompletedAndDeletesFile() {
+        val service = Robolectric.buildService(MyMusicService::class.java).get()
+        val context = service.applicationContext
+        val standardPrefs = context.getSharedPreferences("mymediaplayer_prefs", android.content.Context.MODE_PRIVATE)
+
+        // Ensure standard SharedPreferences is empty
+        standardPrefs.edit().clear().commit()
+
+        // Create standard prefs file in filesystem
+        val standardPrefsFile = java.io.File(context.applicationInfo.dataDir, "shared_prefs/mymediaplayer_prefs.xml")
+        standardPrefsFile.parentFile?.mkdirs()
+        standardPrefsFile.createNewFile()
+        assertTrue(standardPrefsFile.exists())
+
+        // Clear cache and cache reference so getPrefs triggers migration
+        EncryptedPrefsManager.clearCacheForTesting()
+        MyMusicService.clearPrefsCacheForTesting()
+
+        // Execute getPrefs to run empty migration
+        val encryptedPrefs = MyMusicService.getPrefs(context)
+
+        // Verify migration_completed is marked as true and file is deleted
+        assertEquals(true, encryptedPrefs.getBoolean("migration_completed", false))
+        assertFalse(standardPrefsFile.exists())
     }
 }
