@@ -1051,30 +1051,32 @@ class MediaCacheService {
         return if (primary.isBlank()) "Other" else primary
     }
 
-    @VisibleForTesting
-    internal fun inferGenreFromPath(pathLike: String?): String? {
-        if (pathLike == null || pathLike.isBlank()) return null
-        val lower = pathLike.lowercase(Locale.US)
+    private fun inferGenreFromPath(pathLike: String?): String? {
+        val normalized = pathLike
+            ?.replace('\\', '/')
+            ?.lowercase(Locale.US)
+            ?.trim()
+            .orEmpty()
+        if (normalized.isBlank()) return null
         return when {
-            lower.contains("hip hop") || lower.contains("hip-hop") ||
-                lower.contains("/rap") || lower.contains("\\rap") ||
-                lower.contains("trap") -> "Hip-Hop"
-            lower.contains("r&b") || lower.contains("rnb") ||
-                lower.contains("soul") || lower.contains("motown") -> "R&B"
-            lower.contains("electronic") || lower.contains("edm") ||
-                lower.contains("house") || lower.contains("techno") ||
-                lower.contains("trance") || lower.contains("dubstep") -> "Electronic"
-            lower.contains("rock") || lower.contains("metal") ||
-                lower.contains("punk") || lower.contains("grunge") -> "Rock"
-            lower.contains("country") || lower.contains("bluegrass") -> "Country"
-            lower.contains("folk") || lower.contains("americana") -> "Folk"
-            lower.contains("classical") || lower.contains("orchestra") ||
-                lower.contains("opera") || lower.contains("baroque") -> "Classical"
-            lower.contains("jazz") -> "Jazz"
-            lower.contains("blues") -> "Blues"
-            lower.contains("latin") || lower.contains("reggaeton") ||
-                lower.contains("salsa") || lower.contains("bachata") -> "Latin"
-            lower.contains("pop") -> "Pop"
+            normalized.contains("hip hop") || normalized.contains("hip-hop") ||
+                normalized.contains("/rap") || normalized.contains("trap") -> "Hip-Hop"
+            normalized.contains("r&b") || normalized.contains("rnb") ||
+                normalized.contains("soul") || normalized.contains("motown") -> "R&B"
+            normalized.contains("electronic") || normalized.contains("edm") ||
+                normalized.contains("house") || normalized.contains("techno") ||
+                normalized.contains("trance") || normalized.contains("dubstep") -> "Electronic"
+            normalized.contains("rock") || normalized.contains("metal") ||
+                normalized.contains("punk") || normalized.contains("grunge") -> "Rock"
+            normalized.contains("country") || normalized.contains("bluegrass") -> "Country"
+            normalized.contains("folk") || normalized.contains("americana") -> "Folk"
+            normalized.contains("classical") || normalized.contains("orchestra") ||
+                normalized.contains("opera") || normalized.contains("baroque") -> "Classical"
+            normalized.contains("jazz") -> "Jazz"
+            normalized.contains("blues") -> "Blues"
+            normalized.contains("latin") || normalized.contains("reggaeton") ||
+                normalized.contains("salsa") || normalized.contains("bachata") -> "Latin"
+            normalized.contains("pop") -> "Pop"
             else -> null
         }
     }
