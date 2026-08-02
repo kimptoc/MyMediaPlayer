@@ -26,12 +26,12 @@ class PackageValidator(private val context: Context) {
         val actualUidForPackage = try {
             context.packageManager.getPackageUid(callerPackageName, 0)
         } catch (e: Exception) {
-            Log.w("PackageValidator", "Caller package $callerPackageName not found")
+            Log.w("PackageValidator", "Caller package ${sanitize(callerPackageName)} not found")
             return false
         }
 
         if (actualUidForPackage != callerUid) {
-            Log.w("PackageValidator", "Caller package $callerPackageName spoofed (claimed uid $callerUid, actual $actualUidForPackage)")
+            Log.w("PackageValidator", "Caller package ${sanitize(callerPackageName)} spoofed (claimed uid $callerUid, actual $actualUidForPackage)")
             return false
         }
 
@@ -51,7 +51,7 @@ class PackageValidator(private val context: Context) {
             Log.e("PackageValidator", "Failed to verify caller using MediaSessionManager", e)
         }
 
-        Log.w("PackageValidator", "Caller $callerPackageName (uid $callerUid) is not allowed")
+        Log.w("PackageValidator", "Caller ${sanitize(callerPackageName)} (uid $callerUid) is not allowed")
         return false
     }
 
@@ -62,5 +62,13 @@ class PackageValidator(private val context: Context) {
         }
         val packages = context.packageManager.getPackagesForUid(callerUid) ?: return false
         return packages.any { isCallerValid(it, callerUid) }
+    }
+
+    private fun sanitize(input: String): String {
+        return input.replace(NEWLINE_REGEX, "_")
+    }
+
+    companion object {
+        private val NEWLINE_REGEX = Regex("[\\r\\n]")
     }
 }

@@ -1,5 +1,6 @@
 package com.example.mymediaplayer.shared
 
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -10,6 +11,18 @@ import org.junit.Assert.assertTrue
 
 @RunWith(RobolectricTestRunner::class)
 class MyMusicServiceBenchmarkTest {
+
+    @Before
+    fun setup() {
+        EncryptedPrefsManager.clearCacheForTesting()
+        MyMusicService.clearPrefsCacheForTesting()
+        EncryptedPrefsManagerTest.ShadowEncryptedSharedPreferences.throwGeneralSecurityException = false
+        EncryptedPrefsManagerTest.ShadowEncryptedSharedPreferences.throwIOException = false
+        EncryptedPrefsManagerTest.ShadowEncryptedSharedPreferences.throwException = false
+        EncryptedPrefsManagerTest.ShadowMasterKeyBuilder.throwGeneralSecurityException = false
+        EncryptedPrefsManagerTest.ShadowMasterKeyBuilder.throwIOException = false
+        EncryptedPrefsManagerTest.ShadowMasterKeyBuilder.throwException = false
+    }
 
     @Test
     fun benchmarkEnrichFromCache() {
@@ -135,7 +148,8 @@ class MyMusicServiceBenchmarkTest {
                 MyMusicService.getPrefs(context)
             }
         }
-        println("Benchmark: Empty prefs migration took average ${emptyTime / 10.0} ms per iteration")
+        val avgEmptyMs = emptyTime / 10.0
+        println("Benchmark: Empty prefs migration took average $avgEmptyMs ms per iteration")
 
         // 2. Measure populated migration
         val populatedTime = measureTimeMillis {
@@ -157,8 +171,20 @@ class MyMusicServiceBenchmarkTest {
                 MyMusicService.getPrefs(context)
             }
         }
-        println("Benchmark: Populated prefs migration (20 keys) took average ${populatedTime / 10.0} ms per iteration")
+        val avgPopulatedMs = populatedTime / 10.0
+        println("Benchmark: Populated prefs migration (20 keys) took average $avgPopulatedMs ms per iteration")
 
-        assertTrue(true)
+        // Defensive regression bound, not a tight perf target: observed averages on a
+        // laptop JVM are single-digit ms for both cases, so 500ms leaves generous
+        // headroom for CI runner variance while still catching an actual regression
+        // (e.g. the migration loop re-introducing a per-key disk commit).
+        assertTrue(
+            "Empty prefs migration took ${avgEmptyMs}ms on average, expected < 500ms",
+            avgEmptyMs < 500
+        )
+        assertTrue(
+            "Populated prefs migration (20 keys) took ${avgPopulatedMs}ms on average, expected < 500ms",
+            avgPopulatedMs < 500
+        )
     }
 }
