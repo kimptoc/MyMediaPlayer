@@ -123,4 +123,72 @@ class OkHttpExtensionsTest {
         job.join()
         assertTrue(call.isCanceled())
     }
+
+    @Test
+    fun await_successfulResponse() = runTest {
+        val response = Response.Builder()
+            .request(request)
+            .protocol(Protocol.HTTP_1_1)
+            .code(200)
+            .message("OK")
+            .body("Success Body".toResponseBody("text/plain".toMediaTypeOrNull()))
+            .build()
+        val call = MockCall(response = response)
+        val result = call.await {
+            it.body?.string()
+        }
+        assertEquals("Success Body", result)
+    }
+
+    @Test
+    fun await_blockThrowsException() = runTest {
+        val response = Response.Builder()
+            .request(request)
+            .protocol(Protocol.HTTP_1_1)
+            .code(200)
+            .message("OK")
+            .body("Success Body".toResponseBody("text/plain".toMediaTypeOrNull()))
+            .build()
+        val call = MockCall(response = response)
+        var thrown: Throwable? = null
+        try {
+            call.await {
+                throw RuntimeException("Exception inside block")
+            }
+        } catch (e: Exception) {
+            thrown = e
+        }
+        assertTrue(thrown is RuntimeException)
+        assertEquals("Exception inside block", thrown?.message)
+    }
+
+    @Test
+    fun await_failure_throwsException() = runTest {
+        val exception = IOException("Network Error")
+        val call = MockCall(exception = exception)
+        var thrown: Throwable? = null
+        try {
+            call.await {
+                it.body?.string()
+            }
+        } catch (e: Exception) {
+            thrown = e
+        }
+        assertTrue(thrown is IOException)
+        assertEquals("Network Error", thrown?.message)
+    }
+
+    @Test
+    fun await_cancellation() = runTest {
+        val call = MockCall(response = null, exception = null) // Hangs, allowing cancellation
+        val job = launch {
+            call.await {
+                it.body?.string()
+            }
+        }
+        runCurrent() // let the coroutine start and suspend
+        job.cancel()
+        job.join()
+        assertTrue(call.isCanceled())
+    }
 }
