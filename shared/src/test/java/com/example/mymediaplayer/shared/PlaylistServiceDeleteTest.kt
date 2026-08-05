@@ -195,3 +195,39 @@ class PlaylistServiceDeleteFallbackTest {
         assertTrue(result)
     }
 }
+
+@Implements(className = "androidx.documentfile.provider.TreeDocumentFile")
+class ShadowTreeDocumentFileException {
+    @Implementation
+    fun findFile(displayName: String): DocumentFile? {
+        throw RuntimeException("Mocked fallback exception")
+    }
+}
+
+@RunWith(RobolectricTestRunner::class)
+@Config(shadows = [ShadowTreeDocumentFileException::class])
+class PlaylistServiceDeleteFallbackExceptionTest {
+
+    @Test
+    fun deletePlaylist_handlesExceptionInFallbackDelete() {
+        val baseContext = ApplicationProvider.getApplicationContext<Context>()
+
+        val providerInfo = ProviderInfo().apply {
+            authority = "test"
+        }
+        Robolectric.buildContentProvider(MockDocumentProviderException::class.java).create(providerInfo).get()
+
+        val uri = Uri.parse("content://test/playlist.m3u")
+        val treeUri = Uri.parse("content://mock/tree")
+        val service = PlaylistService()
+
+        val result = service.deletePlaylist(
+            baseContext,
+            uri,
+            "test_playlist",
+            treeUri
+        )
+
+        assertFalse(result)
+    }
+}
