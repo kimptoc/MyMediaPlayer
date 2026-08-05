@@ -209,4 +209,21 @@ class PlaylistServiceErrorTest {
         val result = service.appendToPlaylist(baseContext, targetUri, files)
         assertFalse(result)
     }
+
+    @Test
+    fun overwritePlaylist_returnsFalseWhenOpenOutputStreamReturnsNull() {
+        val baseContext = ApplicationProvider.getApplicationContext<Context>()
+        val shadowResolver = Shadows.shadowOf(baseContext.contentResolver)
+        val targetUri = Uri.parse("content://myauth_valid/document/existing_file")
+
+        shadowResolver.registerOutputStreamSupplier(targetUri) {
+            null
+        }
+
+        val service = PlaylistService()
+        val files = listOf(MediaFileInfo("content://test/song1", "Song One", 1L, "Song One"))
+
+        val result = service.overwritePlaylist(baseContext, targetUri, files)
+        assertFalse(result)
+    }
 }
