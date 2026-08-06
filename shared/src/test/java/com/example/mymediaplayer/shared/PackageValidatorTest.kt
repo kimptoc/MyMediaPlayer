@@ -3,6 +3,7 @@ package com.example.mymediaplayer.shared
 import android.content.Context
 import android.content.pm.PackageInfo
 import android.os.Process
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -20,8 +21,15 @@ import androidx.media.MediaSessionManager
 
 @Implements(MediaSessionManager::class)
 class ShadowMediaSessionManager {
+    companion object {
+        var throwException = false
+    }
+
     @Implementation
     fun isTrustedForMediaControl(info: MediaSessionManager.RemoteUserInfo): Boolean {
+        if (throwException) {
+            throw RuntimeException("Simulated MediaSessionManager failure")
+        }
         // Mock the trust logic for testing:
         // Trust known packages unless it's a known attacker UID.
         val trustedPackages = setOf(
@@ -47,6 +55,7 @@ class PackageValidatorTest {
 
     @Before
     fun setup() {
+        ShadowMediaSessionManager.throwException = false
         context = RuntimeEnvironment.getApplication()
         validator = PackageValidator(context)
         pm = shadowOf(context.packageManager)
@@ -147,5 +156,26 @@ class PackageValidatorTest {
             assertFalse(entry.msg.contains("\n"))
             assertFalse(entry.msg.contains("\r"))
         }
+    }
+
+    @Test
+    fun isCallerValid_whenMediaSessionManagerThrows_returnsFalseAndLogsException() {
+        ShadowMediaSessionManager.throwException = true
+        val uid = 10001
+        val packageName = "com.google.android.projection.gearhead"
+        pm.installPackage(PackageInfo().apply { this.packageName = packageName })
+        pm.setPackagesForUid(uid, packageName)
+
+        assertFalse(validator.isCallerValid(packageName, uid))
+
+        val logs = ShadowLog.getLogsForTag("PackageValidator")
+        val errorLog = logs.find { it.msg.contains("Failed to verify caller using MediaSessionManager") }
+        assertTrue("Expected error log not found", errorLog != null)
+        assertEquals(android.util.Log.ERROR, errorLog!!.type)
+        assertTrue(
+            "Expected the caught exception to be attached to the log entry",
+            errorLog.throwable is RuntimeException
+        )
+        assertEquals("Simulated MediaSessionManager failure", errorLog.throwable?.message)
     }
 }
