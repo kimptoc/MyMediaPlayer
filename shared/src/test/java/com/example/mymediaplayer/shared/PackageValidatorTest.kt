@@ -3,6 +3,7 @@ package com.example.mymediaplayer.shared
 import android.content.Context
 import android.content.pm.PackageInfo
 import android.os.Process
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -168,7 +169,13 @@ class PackageValidatorTest {
         assertFalse(validator.isCallerValid(packageName, uid))
 
         val logs = ShadowLog.getLogsForTag("PackageValidator")
-        val hasErrorLog = logs.any { it.msg.contains("Failed to verify caller using MediaSessionManager") }
-        assertTrue("Expected error log not found", hasErrorLog)
+        val errorLog = logs.find { it.msg.contains("Failed to verify caller using MediaSessionManager") }
+        assertTrue("Expected error log not found", errorLog != null)
+        assertEquals(android.util.Log.ERROR, errorLog!!.type)
+        assertTrue(
+            "Expected the caught exception to be attached to the log entry",
+            errorLog.throwable is RuntimeException
+        )
+        assertEquals("Simulated MediaSessionManager failure", errorLog.throwable?.message)
     }
 }
