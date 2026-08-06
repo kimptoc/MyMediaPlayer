@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -196,17 +197,27 @@ class PlaylistServiceDeleteFallbackTest {
     }
 }
 
-@Implements(className = "androidx.documentfile.provider.TreeDocumentFile")
-class ShadowTreeDocumentFileException {
+@Implements(className = "androidx.documentfile.provider.SingleDocumentFile")
+class ShadowSingleDocumentFileFallbackException {
+    companion object {
+        var deleteCalled = false
+    }
+
     @Implementation
-    fun findFile(displayName: String): DocumentFile? {
+    fun delete(): Boolean {
+        deleteCalled = true
         throw RuntimeException("Mocked fallback exception")
     }
 }
 
 @RunWith(RobolectricTestRunner::class)
-@Config(shadows = [ShadowTreeDocumentFileException::class])
+@Config(shadows = [ShadowTreeDocumentFileFallback::class, ShadowSingleDocumentFileFallbackException::class])
 class PlaylistServiceDeleteFallbackExceptionTest {
+
+    @Before
+    fun setUp() {
+        ShadowSingleDocumentFileFallbackException.deleteCalled = false
+    }
 
     @Test
     fun deletePlaylist_handlesExceptionInFallbackDelete() {
@@ -229,5 +240,6 @@ class PlaylistServiceDeleteFallbackExceptionTest {
         )
 
         assertFalse(result)
+        assertTrue(ShadowSingleDocumentFileFallbackException.deleteCalled)
     }
 }
