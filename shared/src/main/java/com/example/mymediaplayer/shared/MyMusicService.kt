@@ -504,14 +504,47 @@ class MyMusicService : MediaBrowserServiceCompat() {
             mediaCacheService.clearFiles()
             val count = minOf(uris.size, names.size, sizes.size)
             val mappedFiles = ArrayList<MediaFileInfo>(count)
+
+            val titlesSize = titles?.size ?: 0
+            val artistsSize = artists?.size ?: 0
+            val albumsSize = albums?.size ?: 0
+            val genresSize = genres?.size ?: 0
+            val durationsSize = durations?.size ?: 0
+            val yearsSize = years?.size ?: 0
+            val addedAtSize = addedAt?.size ?: 0
+
             for (i in 0 until count) {
-                val title = titles?.getOrNull(i).orEmpty().ifBlank { names[i].substringBeforeLast('.') }
-                val artist = artists?.getOrNull(i).orEmpty().ifBlank { null }
-                val album = albums?.getOrNull(i).orEmpty().ifBlank { null }
-                val genre = genres?.getOrNull(i).orEmpty().ifBlank { null }
-                val durationMs = durations?.getOrNull(i)?.takeIf { it >= 0L }
-                val year = years?.getOrNull(i)?.takeIf { it > 0 }
-                val addedAtMs = addedAt?.getOrNull(i)?.takeIf { it >= 0L }
+                val titleStr = if (titles != null && i < titlesSize) titles[i] else null
+                val title = if (titleStr.isNullOrBlank()) {
+                    names[i].substringBeforeLast('.')
+                } else {
+                    titleStr
+                }
+
+                val artistStr = if (artists != null && i < artistsSize) artists[i] else null
+                val artist = if (artistStr.isNullOrBlank()) null else artistStr
+
+                val albumStr = if (albums != null && i < albumsSize) albums[i] else null
+                val album = if (albumStr.isNullOrBlank()) null else albumStr
+
+                val genreStr = if (genres != null && i < genresSize) genres[i] else null
+                val genre = if (genreStr.isNullOrBlank()) null else genreStr
+
+                val durationMs = if (durations != null && i < durationsSize) {
+                    val d = durations[i]
+                    if (d >= 0L) d else null
+                } else null
+
+                val year = if (years != null && i < yearsSize) {
+                    val y = years[i]
+                    if (y > 0) y else null
+                } else null
+
+                val addedAtMs = if (addedAt != null && i < addedAtSize) {
+                    val a = addedAt[i]
+                    if (a >= 0L) a else null
+                } else null
+
                 mappedFiles.add(
                     MediaFileInfo(
                         uriString = uris[i],

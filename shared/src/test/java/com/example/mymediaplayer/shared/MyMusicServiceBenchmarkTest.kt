@@ -187,4 +187,55 @@ class MyMusicServiceBenchmarkTest {
             avgPopulatedMs < 500
         )
     }
+
+    @Test
+    @org.robolectric.annotation.Config(sdk = [33])
+    fun benchmarkHandleSetMediaFiles() {
+        val service = Robolectric.buildService(MyMusicService::class.java).create().get()
+
+        // Use reflection to get the callback object
+        val callbackField = MyMusicService::class.java.getDeclaredField("callback")
+        callbackField.isAccessible = true
+        val callbackObj = callbackField.get(service)
+
+        // Find the handleSetMediaFiles method
+        println("Declared methods on callback class:")
+        callbackObj.javaClass.declaredMethods.forEach { method ->
+            println("  ${method.name}(${method.parameterTypes.joinToString { it.simpleName }})")
+        }
+        val handleSetMediaFilesMethod = callbackObj.javaClass.declaredMethods.find { it.name.startsWith("handleSetMediaFiles") }
+            ?: throw IllegalStateException("Could not find handleSetMediaFiles method")
+        handleSetMediaFilesMethod.isAccessible = true
+
+        val count = 2000
+        val bundle = android.os.Bundle().apply {
+            putStringArrayList("uris", ArrayList((0 until count).map { "content://test/song$it" }))
+            putStringArrayList("names", ArrayList((0 until count).map { "Song $it.mp3" }))
+            putLongArray("sizes", LongArray(count) { 1000L })
+            putStringArrayList("titles", ArrayList((0 until count).map { "Song $it" }))
+            putStringArrayList("artists", ArrayList((0 until count).map { "Artist $it" }))
+            putStringArrayList("albums", ArrayList((0 until count).map { "Album $it" }))
+            putStringArrayList("genres", ArrayList((0 until count).map { "Genre $it" }))
+            putLongArray("durations", LongArray(count) { 200_000L })
+            putIntArray("years", IntArray(count) { 2024 })
+            putLongArray("added_at", LongArray(count) { 1700000000L })
+        }
+
+        // Warm up
+        for (i in 0 until 5) {
+            handleSetMediaFilesMethod.invoke(callbackObj, bundle)
+        }
+
+        // Benchmark
+        val iterations = 50
+        val timeMs = measureTimeMillis {
+            for (i in 0 until iterations) {
+                handleSetMediaFilesMethod.invoke(callbackObj, bundle)
+            }
+        }
+
+        val avgMs = timeMs / iterations.toDouble()
+        println("benchmarkHandleSetMediaFiles: $count items took average $avgMs ms per iteration")
+        assertTrue("Benchmark completed successfully", avgMs >= 0.0)
+    }
 }
