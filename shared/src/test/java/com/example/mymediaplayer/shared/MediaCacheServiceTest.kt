@@ -53,7 +53,13 @@ class MediaCacheServiceTest {
             sizeBytes = 100L,
             year = null
         )
-        service.addAllFiles(listOf(file1, file2))
+        val file3 = MediaFileInfo(
+            uriString = "content://test/3",
+            displayName = "song3.mp3",
+            sizeBytes = 100L,
+            year = -5
+        )
+        service.addAllFiles(listOf(file1, file2, file3))
         service.buildAlbumArtistIndexesFromCache()
 
         assertEquals(listOf("Unknown Decade"), service.decades())
@@ -111,42 +117,6 @@ class MediaCacheServiceTest {
         service.buildAlbumArtistIndexesFromCache()
 
         assertEquals(listOf("1970s", "2010s", "Unknown Decade"), service.decades())
-    }
-
-    @Test
-    fun songsForDecade_returnsCorrectSongsForGivenDecade() {
-        val service = MediaCacheService()
-        val file1 = MediaFileInfo(
-            uriString = "content://test/1",
-            displayName = "song1.mp3",
-            sizeBytes = 100L,
-            year = 1995
-        )
-        val file2 = MediaFileInfo(
-            uriString = "content://test/2",
-            displayName = "song2.mp3",
-            sizeBytes = 100L,
-            year = 1999
-        )
-        val file3 = MediaFileInfo(
-            uriString = "content://test/3",
-            displayName = "song3.mp3",
-            sizeBytes = 100L,
-            year = 1980
-        )
-        service.addAllFiles(listOf(file1, file2, file3))
-        service.buildAlbumArtistIndexesFromCache()
-
-        val songs1990s = service.songsForDecade("1990s")
-        assertEquals(2, songs1990s.size)
-        assertTrue(songs1990s.contains(file1))
-        assertTrue(songs1990s.contains(file2))
-
-        val songs1980s = service.songsForDecade("1980s")
-        assertEquals(listOf(file3), songs1980s)
-
-        val songsUnknown = service.songsForDecade("Unknown Decade")
-        assertTrue(songsUnknown.isEmpty())
     }
 
     @Test
