@@ -14,6 +14,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import android.os.Looper
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
@@ -69,6 +70,7 @@ class MyMusicServiceOnPlayTest {
 
         // Act
         callback.onPlay()
+        shadowOf(Looper.getMainLooper()).idle()
 
         // Assert
         val currentTrack = getCurrentFileInfo(service)
@@ -77,6 +79,7 @@ class MyMusicServiceOnPlayTest {
 
         val player = getMediaPlayer(service)
         assertNotNull(player)
+        assertTrue(player!!.isPlaying)
     }
 
     @Test
@@ -91,6 +94,7 @@ class MyMusicServiceOnPlayTest {
 
         // Act
         callback.onPlay()
+        shadowOf(Looper.getMainLooper()).idle()
 
         // Assert
         val currentTrack = getCurrentFileInfo(service)
@@ -99,6 +103,7 @@ class MyMusicServiceOnPlayTest {
 
         val player = getMediaPlayer(service)
         assertNotNull(player)
+        assertTrue(player!!.isPlaying)
     }
 
     @Test
@@ -110,9 +115,11 @@ class MyMusicServiceOnPlayTest {
         setMediaPlayer(service, null)
 
         val callback = getCallback(service)
+        val stateBefore = MediaControllerCompat(service, service.sessionToken!!).playbackState?.state
 
         // Act
         callback.onPlay()
+        shadowOf(Looper.getMainLooper()).idle()
 
         // Assert
         val currentTrack = getCurrentFileInfo(service)
@@ -120,6 +127,9 @@ class MyMusicServiceOnPlayTest {
 
         val player = getMediaPlayer(service)
         assertNull(player)
+
+        val stateAfter = MediaControllerCompat(service, service.sessionToken!!).playbackState?.state
+        assertEquals(stateBefore, stateAfter)
     }
 
     @Test
