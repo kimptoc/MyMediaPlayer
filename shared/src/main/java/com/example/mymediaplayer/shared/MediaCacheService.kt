@@ -969,8 +969,72 @@ class MediaCacheService {
     fun buildAlbumArtistIndexesFromCache() {
         synchronized(cacheLock) {
             clearMetadataIndexes()
-            for (file in _cachedFiles) {
-                indexMetadataFile(file)
+            val list = _cachedFiles
+            val totalFiles = list.size
+            if (totalFiles == 0) {
+                albumArtistIndexed = true
+                return
+            }
+
+            if (totalFiles < 1000) {
+                for (file in list) {
+                    indexMetadataFile(file)
+                }
+            } else {
+                val numCores = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
+                val numChunks = numCores.coerceAtMost(totalFiles)
+                val chunkSize = (totalFiles + numChunks - 1) / numChunks
+
+                class PartialIndex {
+                    val albumIdx = mutableMapOf<String, MutableList<MediaFileInfo>>()
+                    val artistIdx = mutableMapOf<String, MutableList<MediaFileInfo>>()
+                    val genreIdx = mutableMapOf<String, MutableList<MediaFileInfo>>()
+                    val decadeIdx = mutableMapOf<String, MutableList<MediaFileInfo>>()
+
+                    fun index(file: MediaFileInfo) {
+                        if (file.isPodcast) {
+                            genreIdx.getOrPut(PODCAST_GENRE) { mutableListOf() }.add(file)
+                            return
+                        }
+                        val album = file.album?.ifBlank { null } ?: "Unknown Album"
+                        val artist = file.artist?.ifBlank { null } ?: "Unknown Artist"
+                        val genre = bucketGenre(file.genre)
+                        val decade = decadeLabel(file.year)
+                        albumIdx.getOrPut(album) { mutableListOf() }.add(file)
+                        artistIdx.getOrPut(artist) { mutableListOf() }.add(file)
+                        genreIdx.getOrPut(genre) { mutableListOf() }.add(file)
+                        decadeIdx.getOrPut(decade) { mutableListOf() }.add(file)
+                    }
+                }
+
+                val partials = kotlinx.coroutines.runBlocking(Dispatchers.Default) {
+                    (0 until numChunks).map { chunkIdx ->
+                        val start = chunkIdx * chunkSize
+                        val end = (start + chunkSize).coerceAtMost(totalFiles)
+                        async {
+                            val partial = PartialIndex()
+                            for (i in start until end) {
+                                partial.index(list[i])
+                            }
+                            partial
+                        }
+                    }.awaitAll()
+                }
+
+                for (partial in partials) {
+                    for ((key, subList) in partial.albumIdx) {
+                        albumIndex.getOrPut(key) { mutableListOf() }.addAll(subList)
+                    }
+                    for ((key, subList) in partial.artistIdx) {
+                        artistIndex.getOrPut(key) { mutableListOf() }.addAll(subList)
+                    }
+                    for ((key, subList) in partial.genreIdx) {
+                        genreIndex.getOrPut(key) { mutableListOf() }.addAll(subList)
+                    }
+                    for ((key, subList) in partial.decadeIdx) {
+                        decadeIndex.getOrPut(key) { mutableListOf() }.addAll(subList)
+                    }
+                }
             }
             albumArtistIndexed = true
         }

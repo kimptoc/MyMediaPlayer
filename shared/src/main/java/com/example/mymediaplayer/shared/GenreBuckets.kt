@@ -40,26 +40,30 @@ private val GENRE_RULES = arrayOf(
     GenreRule("Other", contains = listOf("soundtrack", "score", "ost", "musical", "spoken", "podcast", "audiobook"))
 )
 
+private val genreBucketCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+
 fun bucketGenre(raw: String?): String {
     val trimmed = raw?.trim().orEmpty()
     if (trimmed.isBlank()) return "Other"
 
-    val primary = trimmed
-        .split(';', '/', '|', ',')
-        .firstOrNull { it.isNotBlank() }
-        ?.trim()
-        .orEmpty()
-    if (primary.isBlank()) return "Other"
+    return genreBucketCache.getOrPut(trimmed) {
+        val primary = trimmed
+            .split(';', '/', '|', ',')
+            .firstOrNull { it.isNotBlank() }
+            ?.trim()
+            .orEmpty()
+        if (primary.isBlank()) return@getOrPut "Other"
 
-    val normalized = primary
-        .replace(WHITESPACE_REGEX, " ")
-        .trim()
-        .lowercase(Locale.US)
+        val normalized = primary
+            .replace(WHITESPACE_REGEX, " ")
+            .trim()
+            .lowercase(Locale.US)
 
-    for (i in GENRE_RULES.indices) {
-        if (GENRE_RULES[i].matches(normalized)) {
-            return GENRE_RULES[i].name
+        for (i in GENRE_RULES.indices) {
+            if (GENRE_RULES[i].matches(normalized)) {
+                return@getOrPut GENRE_RULES[i].name
+            }
         }
+        "Other"
     }
-    return "Other"
 }

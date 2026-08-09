@@ -39,6 +39,37 @@ class MediaCacheServiceBenchmarkTest {
         println("addAllFiles (50k items): $time2 ms")
     }
 
+    @Test
+    fun benchmarkBuildIndexes() {
+        val service = MediaCacheService()
+        val files = List(50000) { i ->
+            MediaFileInfo(
+                uriString = "content://media/external/audio/media/$i",
+                displayName = "Song $i.mp3",
+                sizeBytes = 1000L,
+                title = "Song $i",
+                artist = "Artist ${i % 100}",
+                album = "Album ${i % 200}",
+                genre = "Genre ${i % 10}",
+                year = 1990 + (i % 30)
+            )
+        }
+        service.addAllFiles(files)
+
+        // Warmup
+        repeat(5) {
+            service.buildAlbumArtistIndexesFromCache()
+        }
+
+        val iterations = 20
+        val time = measureTimeMillis {
+            repeat(iterations) {
+                service.buildAlbumArtistIndexesFromCache()
+            }
+        }
+        println("buildAlbumArtistIndexesFromCache (50k items, $iterations runs): $time ms (avg: ${time.toDouble() / iterations} ms)")
+    }
+
     private fun inferGenreFromPathOld(pathLike: String?): String? {
         val normalized = pathLike
             ?.replace('\\', '/')
