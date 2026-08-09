@@ -732,28 +732,15 @@ class MainActivity : ComponentActivity() {
         if (uris == lastSentUris) return
 
         val size = files.size
-        val names = ArrayList<String>(size)
-        val sizes = LongArray(size)
-        val titles = ArrayList<String>(size)
-        val artists = ArrayList<String>(size)
-        val albums = ArrayList<String>(size)
-        val genres = ArrayList<String>(size)
-        val durations = LongArray(size)
-        val years = IntArray(size)
-        val addedAt = LongArray(size)
-
-        for (i in 0 until size) {
-            val file = files[i]
-            names.add(file.displayName)
-            sizes[i] = file.sizeBytes
-            titles.add(file.title.orEmpty())
-            artists.add(file.artist.orEmpty())
-            albums.add(file.album.orEmpty())
-            genres.add(file.genre.orEmpty())
-            durations[i] = file.durationMs ?: -1L
-            years[i] = file.year ?: 0
-            addedAt[i] = file.addedAtMs ?: -1L
-        }
+        val names = files.mapTo(ArrayList(size)) { it.displayName }
+        val sizes = LongArray(size) { files[it].sizeBytes }
+        val titles = files.mapTo(ArrayList(size)) { it.title.orEmpty() }
+        val artists = files.mapTo(ArrayList(size)) { it.artist.orEmpty() }
+        val albums = files.mapTo(ArrayList(size)) { it.album.orEmpty() }
+        val genres = files.mapTo(ArrayList(size)) { it.genre.orEmpty() }
+        val durations = LongArray(size) { files[it].durationMs ?: -1L }
+        val years = IntArray(size) { files[it].year ?: 0 }
+        val addedAt = LongArray(size) { files[it].addedAtMs ?: -1L }
 
         val bundle = Bundle().apply {
             putStringArrayList(EXTRA_URIS, ArrayList(uris))
