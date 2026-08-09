@@ -32,6 +32,94 @@ import org.robolectric.Robolectric
 class MediaCacheServiceTest {
 
     @Test
+    fun decades_whenEmpty_returnsEmptyList() {
+        val service = MediaCacheService()
+        service.buildAlbumArtistIndexesFromCache()
+        assertTrue(service.decades().isEmpty())
+    }
+
+    @Test
+    fun decades_whenOnlyUnknownDecade_returnsOnlyUnknownDecade() {
+        val service = MediaCacheService()
+        val file1 = MediaFileInfo(
+            uriString = "content://test/1",
+            displayName = "song1.mp3",
+            sizeBytes = 100L,
+            year = 0
+        )
+        val file2 = MediaFileInfo(
+            uriString = "content://test/2",
+            displayName = "song2.mp3",
+            sizeBytes = 100L,
+            year = null
+        )
+        val file3 = MediaFileInfo(
+            uriString = "content://test/3",
+            displayName = "song3.mp3",
+            sizeBytes = 100L,
+            year = -5
+        )
+        service.addAllFiles(listOf(file1, file2, file3))
+        service.buildAlbumArtistIndexesFromCache()
+
+        assertEquals(listOf("Unknown Decade"), service.decades())
+    }
+
+    @Test
+    fun decades_whenMultipleDecades_returnsSortedDecadesChronologically() {
+        val service = MediaCacheService()
+        val file1 = MediaFileInfo(
+            uriString = "content://test/1",
+            displayName = "song1.mp3",
+            sizeBytes = 100L,
+            year = 2023
+        )
+        val file2 = MediaFileInfo(
+            uriString = "content://test/2",
+            displayName = "song2.mp3",
+            sizeBytes = 100L,
+            year = 1995
+        )
+        val file3 = MediaFileInfo(
+            uriString = "content://test/3",
+            displayName = "song3.mp3",
+            sizeBytes = 100L,
+            year = 1980
+        )
+        service.addAllFiles(listOf(file1, file2, file3))
+        service.buildAlbumArtistIndexesFromCache()
+
+        assertEquals(listOf("1980s", "1990s", "2020s"), service.decades())
+    }
+
+    @Test
+    fun decades_whenUnknownAndKnownDecades_returnsSortedWithUnknownLast() {
+        val service = MediaCacheService()
+        val file1 = MediaFileInfo(
+            uriString = "content://test/1",
+            displayName = "song1.mp3",
+            sizeBytes = 100L,
+            year = 2011
+        )
+        val file2 = MediaFileInfo(
+            uriString = "content://test/2",
+            displayName = "song2.mp3",
+            sizeBytes = 100L,
+            year = 0
+        )
+        val file3 = MediaFileInfo(
+            uriString = "content://test/3",
+            displayName = "song3.mp3",
+            sizeBytes = 100L,
+            year = 1975
+        )
+        service.addAllFiles(listOf(file1, file2, file3))
+        service.buildAlbumArtistIndexesFromCache()
+
+        assertEquals(listOf("1970s", "2010s", "Unknown Decade"), service.decades())
+    }
+
+    @Test
     fun scanDirectory_reportsProgressEvenWhenEmpty() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val treeUri = DocumentsContract.buildTreeDocumentUri("test", "root")
