@@ -21,6 +21,10 @@ open class PlaylistService {
     companion object {
         private const val TAG = "PlaylistService"
         private val SANITIZE_REGEX = Regex("[^a-zA-Z0-9]")
+        // Caps concurrent listFiles() calls during tree traversal so a large/wide
+        // media tree doesn't fan out into thousands of simultaneous ContentProvider
+        // requests, which would defeat the point of parallelizing them.
+        private const val PLAYLIST_TRAVERSAL_PARALLELISM = 8
     }
 
     private fun StringBuilder.appendWithoutNewlines(str: String) {
@@ -90,12 +94,14 @@ open class PlaylistService {
 
     suspend fun listPlaylistsInTree(context: Context, treeUri: Uri): List<PlaylistInfo> {
         val root = DocumentFile.fromTreeUri(context, treeUri) ?: return emptyList()
-        val out = java.util.Collections.synchronizedList(mutableListOf<PlaylistInfo>())
 
-        kotlinx.coroutines.withContext(Dispatchers.IO) {
-            suspend fun traverse(node: DocumentFile) {
-                val children = runCatching { node.listFiles() }.getOrNull() ?: return
+        val results = kotlinx.coroutines.withContext(
+            Dispatchers.IO.limitedParallelism(PLAYLIST_TRAVERSAL_PARALLELISM)
+        ) {
+            suspend fun traverse(node: DocumentFile): List<PlaylistInfo> {
+                val children = runCatching { node.listFiles() }.getOrNull() ?: return emptyList()
                 val dirs = mutableListOf<DocumentFile>()
+                val playlists = mutableListOf<PlaylistInfo>()
 
                 for (child in children) {
                     if (child.isDirectory) {
@@ -104,7 +110,7 @@ open class PlaylistService {
                         val name = child.name ?: continue
                         val lower = name.lowercase(Locale.US)
                         if (lower.endsWith(".m3u") || lower.endsWith(".m3u8") || lower.endsWith(".pls")) {
-                            out.add(
+                            playlists.add(
                                 PlaylistInfo(
                                     uriString = child.uri.toString(),
                                     displayName = name
@@ -116,18 +122,20 @@ open class PlaylistService {
 
                 if (dirs.isNotEmpty()) {
                     coroutineScope {
-                        dirs.map { dir ->
+                        playlists += dirs.map { dir ->
                             async {
                                 traverse(dir)
                             }
-                        }.awaitAll()
+                        }.awaitAll().flatten()
                     }
                 }
+
+                return playlists
             }
             traverse(root)
         }
 
-        return out.toList().sortedBy { it.displayName.lowercase(Locale.US) }
+        return results.sortedBy { it.displayName.lowercase(Locale.US) }
     }
 
     fun appendToPlaylist(
