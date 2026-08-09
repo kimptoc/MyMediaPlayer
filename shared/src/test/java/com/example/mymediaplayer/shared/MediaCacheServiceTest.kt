@@ -357,6 +357,32 @@ class MediaCacheServiceTest {
     }
 
     @Test
+    fun clearPlaylists_emptiesDiscoveredPlaylistsButKeepsCachedFiles() {
+        val service = MediaCacheService()
+        service.addFile(
+            MediaFileInfo(
+                uriString = "uri1",
+                displayName = "file1",
+                sizeBytes = 1000L,
+                album = "Album",
+                year = 1995
+            )
+        )
+        val playlists = listOf(
+            PlaylistInfo("uri1", "Playlist 1"),
+            PlaylistInfo("uri2", "Playlist 2")
+        )
+        service.addAllPlaylists(playlists)
+        assertEquals(2, service.discoveredPlaylists.size)
+        assertEquals(1, service.cachedFiles.size)
+
+        service.clearPlaylists()
+
+        assertTrue(service.discoveredPlaylists.isEmpty())
+        assertEquals(1, service.cachedFiles.size)
+    }
+
+    @Test
     fun clearCache_emptiesFilesAndPlaylists() {
         val service = MediaCacheService()
 
