@@ -887,4 +887,93 @@ class MediaCacheServiceTest {
         assertEquals("test_fallback", result?.title)
         assertEquals("testFolder", result?.album)
     }
+
+    @Test
+    fun addFile_addsFileSuccessfully() {
+        val service = MediaCacheService()
+
+        // Populate and index to ensure _cachedMusicFiles is cached and albumArtistIndexed is true
+        service.addFile(
+            MediaFileInfo(
+                uriString = "content://test/song0",
+                displayName = "Song 0.mp3",
+                sizeBytes = 100L,
+                title = "Song 0"
+            )
+        )
+        service.buildAlbumArtistIndexesFromCache()
+
+        // Verify initial state before adding the target file
+        assertTrue(service.hasAlbumArtistIndexes())
+        assertEquals(1, service.cachedMusicFiles.size)
+
+        val newFile = MediaFileInfo(
+            uriString = "content://test/song1",
+            displayName = "Song 1.mp3",
+            sizeBytes = 100L,
+            title = "Song 1"
+        )
+
+        service.addFile(newFile)
+
+        // Assertions
+        assertEquals(2, service.cachedFiles.size)
+        assertEquals(newFile, service.getFileByUri("content://test/song1"))
+
+        // Verify internal states are reset
+        assertFalse(service.hasAlbumArtistIndexes())
+
+        // Checking private properties to verify caching has been cleared
+        val cachedMusicFilesField = MediaCacheService::class.java.getDeclaredField("_cachedMusicFiles")
+        cachedMusicFilesField.isAccessible = true
+        assertNull("Expected _cachedMusicFiles to be reset to null", cachedMusicFilesField.get(service))
+    }
+
+    @Test
+    fun addFile_enforcesMaxCacheSize() {
+        val service = MediaCacheService()
+
+        // Access private _cachedFiles list to simulate having filled the cache to just
+        // below MAX_CACHE_SIZE, leaving the final slot to be filled via the real addFile
+        // path so the boundary-crossing admission itself is exercised.
+        val cachedFilesField = MediaCacheService::class.java.getDeclaredField("_cachedFiles")
+        cachedFilesField.isAccessible = true
+        @Suppress("UNCHECKED_CAST")
+        val cachedFiles = cachedFilesField.get(service) as MutableList<MediaFileInfo>
+
+        for (i in 0 until MediaCacheService.MAX_CACHE_SIZE - 1) {
+            cachedFiles.add(
+                MediaFileInfo(
+                    uriString = "content://test/song$i",
+                    displayName = "Song $i.mp3",
+                    sizeBytes = 100L
+                )
+            )
+        }
+
+        assertEquals(MediaCacheService.MAX_CACHE_SIZE - 1, service.cachedFiles.size)
+
+        // The last file that fits should be admitted through the real addFile path.
+        val boundaryFile = MediaFileInfo(
+            uriString = "content://test/boundary",
+            displayName = "Boundary.mp3",
+            sizeBytes = 100L
+        )
+        service.addFile(boundaryFile)
+
+        assertEquals(MediaCacheService.MAX_CACHE_SIZE, service.cachedFiles.size)
+        assertNotNull(service.getFileByUri("content://test/boundary"))
+
+        val extraFile = MediaFileInfo(
+            uriString = "content://test/extra",
+            displayName = "Extra.mp3",
+            sizeBytes = 100L
+        )
+
+        service.addFile(extraFile)
+
+        // Verify capacity is strictly enforced and extra file was not added
+        assertEquals(MediaCacheService.MAX_CACHE_SIZE, service.cachedFiles.size)
+        assertNull(service.getFileByUri("content://test/extra"))
+    }
 }
