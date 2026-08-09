@@ -3,14 +3,12 @@ package com.example.mymediaplayer
 import com.example.mymediaplayer.shared.PlaylistInfo
 import org.junit.Assert.assertEquals
 import org.junit.Test
-import org.junit.runner.RunWith
-import org.robolectric.Robolectric
-import org.robolectric.RobolectricTestRunner
-import org.robolectric.annotation.Config
 import kotlin.system.measureTimeMillis
 
-@RunWith(RobolectricTestRunner::class)
-@Config(sdk = intArrayOf(33))
+// Deliberately plain JUnit, no Robolectric: these are pure-JVM microbenchmarks, and
+// running them under the Android simulator would invalidate the timings they measure.
+// The correctness check against the real production method lives in
+// MainActivityBluetoothParsingTest, which needs Robolectric to build an Activity.
 class MainViewModelPerformanceTest {
 
     @Test
@@ -193,35 +191,6 @@ class MainViewModelPerformanceTest {
         }
         if (first >= last) return ""
         return s.substring(first, last)
-    }
-
-    @Test
-    fun bluetoothParsing_matchesProductionImplementation() {
-        val raw = listOf(
-            "AA:BB:CC:DD:EE:01\tLiving Room",
-            "AA:BB:CC:DD:EE:02", // no tab, address only
-            "AA:BB:CC:DD:EE:03\t", // empty name after tab
-            "  AA:BB:CC:DD:EE:04  \t  Spaced Name  ",
-            "",
-            "   ",
-            "AA:BB:CC:DD:EE:01\tLiving Room (renamed)" // duplicate address, last wins
-        ).joinToString("\n")
-
-        val controller = Robolectric.buildActivity(MainActivity::class.java)
-        val activity = controller.create().get()
-        val prefs = activity.getSharedPreferences("mymediaplayer_prefs", android.content.Context.MODE_PRIVATE)
-        prefs.edit().putString("bt_autoplay_devices", raw).apply()
-
-        val method = MainActivity::class.java.getDeclaredMethod(
-            "readTrustedBluetoothDevices",
-            android.content.SharedPreferences::class.java
-        )
-        method.isAccessible = true
-        @Suppress("UNCHECKED_CAST")
-        val production = method.invoke(activity, prefs) as Map<String, String?>
-
-        assertEquals(runOriginalBluetoothParsing(raw), production)
-        assertEquals(runOptimizedBluetoothParsing(raw), production)
     }
 
     private fun runOptimizedBluetoothParsing(raw: String): Map<String, String?> {
