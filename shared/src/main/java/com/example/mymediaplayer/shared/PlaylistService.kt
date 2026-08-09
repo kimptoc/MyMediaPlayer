@@ -12,6 +12,9 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 
 open class PlaylistService {
 
@@ -87,19 +90,16 @@ open class PlaylistService {
 
     suspend fun listPlaylistsInTree(context: Context, treeUri: Uri): List<PlaylistInfo> {
         val root = DocumentFile.fromTreeUri(context, treeUri) ?: return emptyList()
-        val out = mutableListOf<PlaylistInfo>()
+        val out = java.util.Collections.synchronizedList(mutableListOf<PlaylistInfo>())
 
-        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            val stack = ArrayDeque<DocumentFile>()
-            stack.addLast(root)
-
-            while (stack.isNotEmpty()) {
-                val node = stack.removeLast()
-                val children = runCatching { node.listFiles() }.getOrNull() ?: continue
+        kotlinx.coroutines.withContext(Dispatchers.IO) {
+            suspend fun traverse(node: DocumentFile) {
+                val children = runCatching { node.listFiles() }.getOrNull() ?: return
+                val dirs = mutableListOf<DocumentFile>()
 
                 for (child in children) {
                     if (child.isDirectory) {
-                        stack.addLast(child)
+                        dirs.add(child)
                     } else {
                         val name = child.name ?: continue
                         val lower = name.lowercase(Locale.US)
@@ -113,11 +113,21 @@ open class PlaylistService {
                         }
                     }
                 }
+
+                if (dirs.isNotEmpty()) {
+                    coroutineScope {
+                        dirs.map { dir ->
+                            async {
+                                traverse(dir)
+                            }
+                        }.awaitAll()
+                    }
+                }
             }
+            traverse(root)
         }
 
-        out.sortBy { it.displayName.lowercase(Locale.US) }
-        return out
+        return out.toList().sortedBy { it.displayName.lowercase(Locale.US) }
     }
 
     fun appendToPlaylist(
