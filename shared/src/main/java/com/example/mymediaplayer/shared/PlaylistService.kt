@@ -12,12 +12,19 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 
 open class PlaylistService {
 
     companion object {
         private const val TAG = "PlaylistService"
         private val SANITIZE_REGEX = Regex("[^a-zA-Z0-9]")
+        // Caps concurrent listFiles() calls during tree traversal so a large/wide
+        // media tree doesn't fan out into thousands of simultaneous ContentProvider
+        // requests, which would defeat the point of parallelizing them.
+        private const val PLAYLIST_TRAVERSAL_PARALLELISM = 8
     }
 
     private fun StringBuilder.appendWithoutNewlines(str: String) {
@@ -87,24 +94,23 @@ open class PlaylistService {
 
     suspend fun listPlaylistsInTree(context: Context, treeUri: Uri): List<PlaylistInfo> {
         val root = DocumentFile.fromTreeUri(context, treeUri) ?: return emptyList()
-        val out = mutableListOf<PlaylistInfo>()
 
-        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            val stack = ArrayDeque<DocumentFile>()
-            stack.addLast(root)
-
-            while (stack.isNotEmpty()) {
-                val node = stack.removeLast()
-                val children = runCatching { node.listFiles() }.getOrNull() ?: continue
+        val results = kotlinx.coroutines.withContext(
+            Dispatchers.IO.limitedParallelism(PLAYLIST_TRAVERSAL_PARALLELISM)
+        ) {
+            suspend fun traverse(node: DocumentFile): List<PlaylistInfo> {
+                val children = runCatching { node.listFiles() }.getOrNull() ?: return emptyList()
+                val dirs = mutableListOf<DocumentFile>()
+                val playlists = mutableListOf<PlaylistInfo>()
 
                 for (child in children) {
                     if (child.isDirectory) {
-                        stack.addLast(child)
+                        dirs.add(child)
                     } else {
                         val name = child.name ?: continue
                         val lower = name.lowercase(Locale.US)
                         if (lower.endsWith(".m3u") || lower.endsWith(".m3u8") || lower.endsWith(".pls")) {
-                            out.add(
+                            playlists.add(
                                 PlaylistInfo(
                                     uriString = child.uri.toString(),
                                     displayName = name
@@ -113,11 +119,23 @@ open class PlaylistService {
                         }
                     }
                 }
+
+                if (dirs.isNotEmpty()) {
+                    coroutineScope {
+                        playlists += dirs.map { dir ->
+                            async {
+                                traverse(dir)
+                            }
+                        }.awaitAll().flatten()
+                    }
+                }
+
+                return playlists
             }
+            traverse(root)
         }
 
-        out.sortBy { it.displayName.lowercase(Locale.US) }
-        return out
+        return results.sortedBy { it.displayName.lowercase(Locale.US) }
     }
 
     fun appendToPlaylist(
