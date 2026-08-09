@@ -817,7 +817,7 @@ class MediaCacheServiceTest {
 
         // Verify initial state before adding the target file
         assertTrue(service.hasAlbumArtistIndexes())
-        assertNotNull(service.cachedMusicFiles)
+        assertEquals(1, service.cachedMusicFiles.size)
 
         val newFile = MediaFileInfo(
             uriString = "content://test/song1",
@@ -845,14 +845,15 @@ class MediaCacheServiceTest {
     fun addFile_enforcesMaxCacheSize() {
         val service = MediaCacheService()
 
-        // Access private _cachedFiles list to simulate having filled the cache to MAX_CACHE_SIZE
+        // Access private _cachedFiles list to simulate having filled the cache to just
+        // below MAX_CACHE_SIZE, leaving the final slot to be filled via the real addFile
+        // path so the boundary-crossing admission itself is exercised.
         val cachedFilesField = MediaCacheService::class.java.getDeclaredField("_cachedFiles")
         cachedFilesField.isAccessible = true
         @Suppress("UNCHECKED_CAST")
         val cachedFiles = cachedFilesField.get(service) as MutableList<MediaFileInfo>
 
-        // Fill up to max size
-        for (i in 0 until MediaCacheService.MAX_CACHE_SIZE) {
+        for (i in 0 until MediaCacheService.MAX_CACHE_SIZE - 1) {
             cachedFiles.add(
                 MediaFileInfo(
                     uriString = "content://test/song$i",
@@ -862,7 +863,18 @@ class MediaCacheServiceTest {
             )
         }
 
+        assertEquals(MediaCacheService.MAX_CACHE_SIZE - 1, service.cachedFiles.size)
+
+        // The last file that fits should be admitted through the real addFile path.
+        val boundaryFile = MediaFileInfo(
+            uriString = "content://test/boundary",
+            displayName = "Boundary.mp3",
+            sizeBytes = 100L
+        )
+        service.addFile(boundaryFile)
+
         assertEquals(MediaCacheService.MAX_CACHE_SIZE, service.cachedFiles.size)
+        assertNotNull(service.getFileByUri("content://test/boundary"))
 
         val extraFile = MediaFileInfo(
             uriString = "content://test/extra",
