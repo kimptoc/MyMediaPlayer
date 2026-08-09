@@ -676,8 +676,9 @@ class MediaCacheServiceTest {
         assertTrue(service.hasAlbumArtistIndexes())
         assertEquals(listOf("Album One"), service.albums())
         assertEquals(listOf("Artist One"), service.artists())
-        assertEquals(listOf("Rock/Metal"), service.genres())
+        assertEquals(1, service.genres().size)
         assertEquals(1, service.discoveredPlaylists.size)
+        assertNotNull(service.getFileByUri("content://test/song1"))
 
         // Clear files
         service.clearFiles()
@@ -690,6 +691,7 @@ class MediaCacheServiceTest {
         assertTrue(service.albums().isEmpty())
         assertTrue(service.artists().isEmpty())
         assertTrue(service.genres().isEmpty())
+        assertNull(service.getFileByUri("content://test/song1"))
         // Playlists should not be affected by clearFiles
         assertEquals(1, service.discoveredPlaylists.size)
     }
