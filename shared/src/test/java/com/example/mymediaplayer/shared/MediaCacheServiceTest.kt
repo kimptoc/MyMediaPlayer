@@ -357,6 +357,32 @@ class MediaCacheServiceTest {
     }
 
     @Test
+    fun clearPlaylists_emptiesDiscoveredPlaylistsButKeepsCachedFiles() {
+        val service = MediaCacheService()
+        service.addFile(
+            MediaFileInfo(
+                uriString = "uri1",
+                displayName = "file1",
+                sizeBytes = 1000L,
+                album = "Album",
+                year = 1995
+            )
+        )
+        val playlists = listOf(
+            PlaylistInfo("uri1", "Playlist 1"),
+            PlaylistInfo("uri2", "Playlist 2")
+        )
+        service.addAllPlaylists(playlists)
+        assertEquals(2, service.discoveredPlaylists.size)
+        assertEquals(1, service.cachedFiles.size)
+
+        service.clearPlaylists()
+
+        assertTrue(service.discoveredPlaylists.isEmpty())
+        assertEquals(1, service.cachedFiles.size)
+    }
+
+    @Test
     fun clearCache_emptiesFilesAndPlaylists() {
         val service = MediaCacheService()
 
@@ -648,6 +674,52 @@ class MediaCacheServiceTest {
 
         assertEquals(1, service.discoveredPlaylists.size)
         assertEquals("content://playlist1", service.discoveredPlaylists[0].uriString)
+    }
+
+    @Test
+    fun clearFiles_clearsCachedFilesAndMetadataIndexes() {
+        val service = MediaCacheService()
+        val file = MediaFileInfo(
+            uriString = "content://test/song1",
+            displayName = "song1.mp3",
+            sizeBytes = 100L,
+            title = "Song One",
+            artist = "Artist One",
+            album = "Album One",
+            genre = "Rock",
+            durationMs = 2000L,
+            year = 2020,
+            addedAtMs = 123456L
+        )
+        service.addFile(file)
+        service.addPlaylist(PlaylistInfo("content://test/playlist1", "Playlist 1"))
+        service.buildAlbumArtistIndexesFromCache()
+
+        // Verify initial state is populated
+        assertTrue(service.hasCachedFiles())
+        assertEquals(1, service.cachedFilesCount)
+        assertEquals(1, service.cachedMusicFiles.size)
+        assertTrue(service.hasAlbumArtistIndexes())
+        assertEquals(listOf("Album One"), service.albums())
+        assertEquals(listOf("Artist One"), service.artists())
+        assertEquals(1, service.genres().size)
+        assertEquals(1, service.discoveredPlaylists.size)
+        assertNotNull(service.getFileByUri("content://test/song1"))
+
+        // Clear files
+        service.clearFiles()
+
+        // Verify files and metadata are cleared, but playlists remain
+        assertFalse(service.hasCachedFiles())
+        assertEquals(0, service.cachedFilesCount)
+        assertTrue(service.cachedMusicFiles.isEmpty())
+        assertFalse(service.hasAlbumArtistIndexes())
+        assertTrue(service.albums().isEmpty())
+        assertTrue(service.artists().isEmpty())
+        assertTrue(service.genres().isEmpty())
+        assertNull(service.getFileByUri("content://test/song1"))
+        // Playlists should not be affected by clearFiles
+        assertEquals(1, service.discoveredPlaylists.size)
     }
 
     @Test
