@@ -1201,7 +1201,10 @@ class MainActivity : ComponentActivity() {
             .filterKeys { it.isNotBlank() }
             .toSortedMap()
         val encoded = clean.entries.joinToString("\n") { entry ->
-            val safeName = entry.value?.replace('\n', ' ')?.replace('\t', ' ') ?: ""
+            // readTrustedBluetoothDevices only splits records on '\n'; a stray '\r' in a
+            // device name (e.g. from an untrusted BLE broadcast name) must never reach the
+            // encoded string or it would get silently absorbed into the surrounding record.
+            val safeName = entry.value?.replace('\n', ' ')?.replace('\r', ' ')?.replace('\t', ' ') ?: ""
             "${entry.key}\t$safeName"
         }
         prefs.edit {
