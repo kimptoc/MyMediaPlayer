@@ -6,7 +6,9 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import kotlin.system.measureTimeMillis
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 
 @RunWith(RobolectricTestRunner::class)
@@ -236,6 +238,93 @@ class MyMusicServiceBenchmarkTest {
 
         val avgMs = timeMs / iterations.toDouble()
         println("benchmarkHandleSetMediaFiles: $count items took average $avgMs ms per iteration")
-        assertTrue("Benchmark completed successfully", avgMs >= 0.0)
+        assertTrue(
+            "handleSetMediaFiles with $count items took ${avgMs}ms per iteration, expected < 100ms",
+            avgMs < 100.0
+        )
+    }
+
+    @Test
+    @org.robolectric.annotation.Config(sdk = [33])
+    fun handleSetMediaFiles_appliesFallbackRulesCorrectly() {
+        val service = Robolectric.buildService(MyMusicService::class.java).create().get()
+
+        val callbackField = MyMusicService::class.java.getDeclaredField("callback")
+        callbackField.isAccessible = true
+        val callbackObj = callbackField.get(service)
+        val handleSetMediaFilesMethod = callbackObj.javaClass.declaredMethods
+            .find { it.name.startsWith("handleSetMediaFiles") }
+            ?: throw IllegalStateException("Could not find handleSetMediaFiles method")
+        handleSetMediaFilesMethod.isAccessible = true
+
+        // Index 0: everything populated normally.
+        // Index 1: blank strings -> null (title falls back to filename); negative
+        //   numbers -> null.
+        // Index 2: whitespace-only title -> fallback; zero duration/addedAt and year=1
+        //   are valid values that must be kept, not treated as "missing".
+        // Index 3: artists/albums/durations/years/addedAt arrays are shorter than the
+        //   file count, so this index is out of range for all of them -> null.
+        // genres is omitted from the bundle entirely for every index -> genre always null.
+        val bundle = android.os.Bundle().apply {
+            putStringArrayList(
+                "uris",
+                arrayListOf("content://test/0", "content://test/1", "content://test/2", "content://test/3")
+            )
+            putStringArrayList(
+                "names",
+                arrayListOf("Song Zero.mp3", "Song One.mp3", "Song Two.mp3", "Song Three.mp3")
+            )
+            putLongArray("sizes", longArrayOf(100L, 200L, 300L, 400L))
+            putStringArrayList(
+                "titles",
+                arrayListOf("Real Title 0", "", "   ", "Title 3")
+            )
+            putStringArrayList("artists", arrayListOf("Artist 0", "", "Artist 2"))
+            putStringArrayList("albums", arrayListOf("Album 0", "", "Album 2"))
+            putLongArray("durations", longArrayOf(5000L, -1L, 0L))
+            putIntArray("years", intArrayOf(1999, 0, 1))
+            putLongArray("added_at", longArrayOf(1000L, -5L, 0L))
+        }
+
+        handleSetMediaFilesMethod.invoke(callbackObj, bundle)
+
+        val byUri = service.mediaCacheService.cachedFiles.associateBy { it.uriString }
+        assertEquals(4, byUri.size)
+
+        val f0 = byUri.getValue("content://test/0")
+        assertEquals("Real Title 0", f0.title)
+        assertEquals("Artist 0", f0.artist)
+        assertEquals("Album 0", f0.album)
+        assertNull(f0.genre)
+        assertEquals(5000L, f0.durationMs)
+        assertEquals(1999, f0.year)
+        assertEquals(1000L, f0.addedAtMs)
+
+        val f1 = byUri.getValue("content://test/1")
+        assertEquals("Song One", f1.title) // blank title -> falls back to filename
+        assertNull(f1.artist) // blank -> null
+        assertNull(f1.album)
+        assertNull(f1.genre)
+        assertNull(f1.durationMs) // negative -> null
+        assertNull(f1.year) // 0 -> null
+        assertNull(f1.addedAtMs) // negative -> null
+
+        val f2 = byUri.getValue("content://test/2")
+        assertEquals("Song Two", f2.title) // whitespace-only title -> falls back
+        assertEquals("Artist 2", f2.artist)
+        assertEquals("Album 2", f2.album)
+        assertNull(f2.genre)
+        assertEquals(0L, f2.durationMs) // zero is a valid duration, not "missing"
+        assertEquals(1, f2.year)
+        assertEquals(0L, f2.addedAtMs) // zero is a valid timestamp, not "missing"
+
+        val f3 = byUri.getValue("content://test/3")
+        assertEquals("Title 3", f3.title)
+        assertNull(f3.artist) // list shorter than file count -> out of range -> null
+        assertNull(f3.album)
+        assertNull(f3.genre)
+        assertNull(f3.durationMs)
+        assertNull(f3.year)
+        assertNull(f3.addedAtMs)
     }
 }
