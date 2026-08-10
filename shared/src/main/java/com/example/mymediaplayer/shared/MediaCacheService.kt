@@ -992,18 +992,7 @@ class MediaCacheService {
                     val decadeIdx = mutableMapOf<String, MutableList<MediaFileInfo>>()
 
                     fun index(file: MediaFileInfo) {
-                        if (file.isPodcast) {
-                            genreIdx.getOrPut(PODCAST_GENRE) { mutableListOf() }.add(file)
-                            return
-                        }
-                        val album = file.album?.ifBlank { null } ?: "Unknown Album"
-                        val artist = file.artist?.ifBlank { null } ?: "Unknown Artist"
-                        val genre = bucketGenre(file.genre)
-                        val decade = decadeLabel(file.year)
-                        albumIdx.getOrPut(album) { mutableListOf() }.add(file)
-                        artistIdx.getOrPut(artist) { mutableListOf() }.add(file)
-                        genreIdx.getOrPut(genre) { mutableListOf() }.add(file)
-                        decadeIdx.getOrPut(decade) { mutableListOf() }.add(file)
+                        indexFileInto(file, albumIdx, artistIdx, genreIdx, decadeIdx)
                     }
                 }
 
@@ -1149,18 +1138,31 @@ class MediaCacheService {
     }
 
     private fun indexMetadataFile(file: MediaFileInfo) {
+        indexFileInto(file, albumIndex, artistIndex, genreIndex, decadeIndex)
+    }
+
+    // Single source of truth for the album/artist/genre/decade indexing contract, shared
+    // by the sequential path (indexMetadataFile) and the parallel chunked path
+    // (PartialIndex.index in buildAlbumArtistIndexesFromCache) so they can't drift apart.
+    private fun indexFileInto(
+        file: MediaFileInfo,
+        albumIdx: MutableMap<String, MutableList<MediaFileInfo>>,
+        artistIdx: MutableMap<String, MutableList<MediaFileInfo>>,
+        genreIdx: MutableMap<String, MutableList<MediaFileInfo>>,
+        decadeIdx: MutableMap<String, MutableList<MediaFileInfo>>
+    ) {
         if (file.isPodcast) {
-            genreIndex.getOrPut(PODCAST_GENRE) { mutableListOf() }.add(file)
+            genreIdx.getOrPut(PODCAST_GENRE) { mutableListOf() }.add(file)
             return
         }
         val album = file.album?.ifBlank { null } ?: "Unknown Album"
         val artist = file.artist?.ifBlank { null } ?: "Unknown Artist"
         val genre = bucketGenre(file.genre)
         val decade = decadeLabel(file.year)
-        albumIndex.getOrPut(album) { mutableListOf() }.add(file)
-        artistIndex.getOrPut(artist) { mutableListOf() }.add(file)
-        genreIndex.getOrPut(genre) { mutableListOf() }.add(file)
-        decadeIndex.getOrPut(decade) { mutableListOf() }.add(file)
+        albumIdx.getOrPut(album) { mutableListOf() }.add(file)
+        artistIdx.getOrPut(artist) { mutableListOf() }.add(file)
+        genreIdx.getOrPut(genre) { mutableListOf() }.add(file)
+        decadeIdx.getOrPut(decade) { mutableListOf() }.add(file)
     }
 
     private fun normalizeGenre(raw: String?): String {

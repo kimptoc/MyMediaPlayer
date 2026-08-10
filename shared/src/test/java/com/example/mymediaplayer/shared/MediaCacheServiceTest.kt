@@ -976,4 +976,42 @@ class MediaCacheServiceTest {
         assertEquals(MediaCacheService.MAX_CACHE_SIZE, service.cachedFiles.size)
         assertNull(service.getFileByUri("content://test/extra"))
     }
+
+    @Test
+    fun buildAlbumArtistIndexesFromCache_parallelPath_preservesAllFilesAndOrder() {
+        val service = MediaCacheService()
+        // buildAlbumArtistIndexesFromCache only takes the parallel chunked-merge path
+        // once totalFiles >= 1000; below that it indexes sequentially.
+        val totalFiles = 1500
+        val files = (0 until totalFiles).map { i ->
+            MediaFileInfo(
+                uriString = "content://test/song$i",
+                displayName = "Song $i.mp3",
+                sizeBytes = 100L,
+                artist = "Artist ${i % 23}",
+                album = "Album ${i % 41}",
+                genre = "Genre ${i % 7}",
+                year = 1960 + (i % 60)
+            )
+        }
+        service.addAllFiles(files)
+
+        service.buildAlbumArtistIndexesFromCache()
+
+        // No file should be lost or duplicated across the parallel chunk merge.
+        val allArtistFiles = service.artists().flatMap { service.songsForArtist(it) }
+        assertEquals(totalFiles, allArtistFiles.size)
+        assertEquals(
+            files.map { it.uriString }.toSet(),
+            allArtistFiles.map { it.uriString }.toSet()
+        )
+
+        // Files sharing an artist must retain their original relative order after the merge.
+        for (artistNum in 0 until 23) {
+            val artist = "Artist $artistNum"
+            val expected = files.filter { it.artist == artist }.map { it.uriString }
+            val actual = service.songsForArtist(artist).map { it.uriString }
+            assertEquals(expected, actual)
+        }
+    }
 }
