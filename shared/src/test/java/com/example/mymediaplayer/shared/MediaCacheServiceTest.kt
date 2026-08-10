@@ -32,6 +32,94 @@ import org.robolectric.Robolectric
 class MediaCacheServiceTest {
 
     @Test
+    fun decades_whenEmpty_returnsEmptyList() {
+        val service = MediaCacheService()
+        service.buildAlbumArtistIndexesFromCache()
+        assertTrue(service.decades().isEmpty())
+    }
+
+    @Test
+    fun decades_whenOnlyUnknownDecade_returnsOnlyUnknownDecade() {
+        val service = MediaCacheService()
+        val file1 = MediaFileInfo(
+            uriString = "content://test/1",
+            displayName = "song1.mp3",
+            sizeBytes = 100L,
+            year = 0
+        )
+        val file2 = MediaFileInfo(
+            uriString = "content://test/2",
+            displayName = "song2.mp3",
+            sizeBytes = 100L,
+            year = null
+        )
+        val file3 = MediaFileInfo(
+            uriString = "content://test/3",
+            displayName = "song3.mp3",
+            sizeBytes = 100L,
+            year = -5
+        )
+        service.addAllFiles(listOf(file1, file2, file3))
+        service.buildAlbumArtistIndexesFromCache()
+
+        assertEquals(listOf("Unknown Decade"), service.decades())
+    }
+
+    @Test
+    fun decades_whenMultipleDecades_returnsSortedDecadesChronologically() {
+        val service = MediaCacheService()
+        val file1 = MediaFileInfo(
+            uriString = "content://test/1",
+            displayName = "song1.mp3",
+            sizeBytes = 100L,
+            year = 2023
+        )
+        val file2 = MediaFileInfo(
+            uriString = "content://test/2",
+            displayName = "song2.mp3",
+            sizeBytes = 100L,
+            year = 1995
+        )
+        val file3 = MediaFileInfo(
+            uriString = "content://test/3",
+            displayName = "song3.mp3",
+            sizeBytes = 100L,
+            year = 1980
+        )
+        service.addAllFiles(listOf(file1, file2, file3))
+        service.buildAlbumArtistIndexesFromCache()
+
+        assertEquals(listOf("1980s", "1990s", "2020s"), service.decades())
+    }
+
+    @Test
+    fun decades_whenUnknownAndKnownDecades_returnsSortedWithUnknownLast() {
+        val service = MediaCacheService()
+        val file1 = MediaFileInfo(
+            uriString = "content://test/1",
+            displayName = "song1.mp3",
+            sizeBytes = 100L,
+            year = 2011
+        )
+        val file2 = MediaFileInfo(
+            uriString = "content://test/2",
+            displayName = "song2.mp3",
+            sizeBytes = 100L,
+            year = 0
+        )
+        val file3 = MediaFileInfo(
+            uriString = "content://test/3",
+            displayName = "song3.mp3",
+            sizeBytes = 100L,
+            year = 1975
+        )
+        service.addAllFiles(listOf(file1, file2, file3))
+        service.buildAlbumArtistIndexesFromCache()
+
+        assertEquals(listOf("1970s", "2010s", "Unknown Decade"), service.decades())
+    }
+
+    @Test
     fun scanDirectory_reportsProgressEvenWhenEmpty() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val treeUri = DocumentsContract.buildTreeDocumentUri("test", "root")
@@ -357,6 +445,32 @@ class MediaCacheServiceTest {
     }
 
     @Test
+    fun clearPlaylists_emptiesDiscoveredPlaylistsButKeepsCachedFiles() {
+        val service = MediaCacheService()
+        service.addFile(
+            MediaFileInfo(
+                uriString = "uri1",
+                displayName = "file1",
+                sizeBytes = 1000L,
+                album = "Album",
+                year = 1995
+            )
+        )
+        val playlists = listOf(
+            PlaylistInfo("uri1", "Playlist 1"),
+            PlaylistInfo("uri2", "Playlist 2")
+        )
+        service.addAllPlaylists(playlists)
+        assertEquals(2, service.discoveredPlaylists.size)
+        assertEquals(1, service.cachedFiles.size)
+
+        service.clearPlaylists()
+
+        assertTrue(service.discoveredPlaylists.isEmpty())
+        assertEquals(1, service.cachedFiles.size)
+    }
+
+    @Test
     fun clearCache_emptiesFilesAndPlaylists() {
         val service = MediaCacheService()
 
@@ -651,6 +765,52 @@ class MediaCacheServiceTest {
     }
 
     @Test
+    fun clearFiles_clearsCachedFilesAndMetadataIndexes() {
+        val service = MediaCacheService()
+        val file = MediaFileInfo(
+            uriString = "content://test/song1",
+            displayName = "song1.mp3",
+            sizeBytes = 100L,
+            title = "Song One",
+            artist = "Artist One",
+            album = "Album One",
+            genre = "Rock",
+            durationMs = 2000L,
+            year = 2020,
+            addedAtMs = 123456L
+        )
+        service.addFile(file)
+        service.addPlaylist(PlaylistInfo("content://test/playlist1", "Playlist 1"))
+        service.buildAlbumArtistIndexesFromCache()
+
+        // Verify initial state is populated
+        assertTrue(service.hasCachedFiles())
+        assertEquals(1, service.cachedFilesCount)
+        assertEquals(1, service.cachedMusicFiles.size)
+        assertTrue(service.hasAlbumArtistIndexes())
+        assertEquals(listOf("Album One"), service.albums())
+        assertEquals(listOf("Artist One"), service.artists())
+        assertEquals(1, service.genres().size)
+        assertEquals(1, service.discoveredPlaylists.size)
+        assertNotNull(service.getFileByUri("content://test/song1"))
+
+        // Clear files
+        service.clearFiles()
+
+        // Verify files and metadata are cleared, but playlists remain
+        assertFalse(service.hasCachedFiles())
+        assertEquals(0, service.cachedFilesCount)
+        assertTrue(service.cachedMusicFiles.isEmpty())
+        assertFalse(service.hasAlbumArtistIndexes())
+        assertTrue(service.albums().isEmpty())
+        assertTrue(service.artists().isEmpty())
+        assertTrue(service.genres().isEmpty())
+        assertNull(service.getFileByUri("content://test/song1"))
+        // Playlists should not be affected by clearFiles
+        assertEquals(1, service.discoveredPlaylists.size)
+    }
+
+    @Test
     fun extractCandidateMetadata_whenRetrieverThrowsException_andRequiresProbe_returnsNull() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val uriString = "content://something/error_probe"
@@ -726,5 +886,132 @@ class MediaCacheServiceTest {
         assertNotNull("Expected fallback metadata when requiresProbe is false", result)
         assertEquals("test_fallback", result?.title)
         assertEquals("testFolder", result?.album)
+    }
+
+    @Test
+    fun addFile_addsFileSuccessfully() {
+        val service = MediaCacheService()
+
+        // Populate and index to ensure _cachedMusicFiles is cached and albumArtistIndexed is true
+        service.addFile(
+            MediaFileInfo(
+                uriString = "content://test/song0",
+                displayName = "Song 0.mp3",
+                sizeBytes = 100L,
+                title = "Song 0"
+            )
+        )
+        service.buildAlbumArtistIndexesFromCache()
+
+        // Verify initial state before adding the target file
+        assertTrue(service.hasAlbumArtistIndexes())
+        assertEquals(1, service.cachedMusicFiles.size)
+
+        val newFile = MediaFileInfo(
+            uriString = "content://test/song1",
+            displayName = "Song 1.mp3",
+            sizeBytes = 100L,
+            title = "Song 1"
+        )
+
+        service.addFile(newFile)
+
+        // Assertions
+        assertEquals(2, service.cachedFiles.size)
+        assertEquals(newFile, service.getFileByUri("content://test/song1"))
+
+        // Verify internal states are reset
+        assertFalse(service.hasAlbumArtistIndexes())
+
+        // Checking private properties to verify caching has been cleared
+        val cachedMusicFilesField = MediaCacheService::class.java.getDeclaredField("_cachedMusicFiles")
+        cachedMusicFilesField.isAccessible = true
+        assertNull("Expected _cachedMusicFiles to be reset to null", cachedMusicFilesField.get(service))
+    }
+
+    @Test
+    fun addFile_enforcesMaxCacheSize() {
+        val service = MediaCacheService()
+
+        // Access private _cachedFiles list to simulate having filled the cache to just
+        // below MAX_CACHE_SIZE, leaving the final slot to be filled via the real addFile
+        // path so the boundary-crossing admission itself is exercised.
+        val cachedFilesField = MediaCacheService::class.java.getDeclaredField("_cachedFiles")
+        cachedFilesField.isAccessible = true
+        @Suppress("UNCHECKED_CAST")
+        val cachedFiles = cachedFilesField.get(service) as MutableList<MediaFileInfo>
+
+        for (i in 0 until MediaCacheService.MAX_CACHE_SIZE - 1) {
+            cachedFiles.add(
+                MediaFileInfo(
+                    uriString = "content://test/song$i",
+                    displayName = "Song $i.mp3",
+                    sizeBytes = 100L
+                )
+            )
+        }
+
+        assertEquals(MediaCacheService.MAX_CACHE_SIZE - 1, service.cachedFiles.size)
+
+        // The last file that fits should be admitted through the real addFile path.
+        val boundaryFile = MediaFileInfo(
+            uriString = "content://test/boundary",
+            displayName = "Boundary.mp3",
+            sizeBytes = 100L
+        )
+        service.addFile(boundaryFile)
+
+        assertEquals(MediaCacheService.MAX_CACHE_SIZE, service.cachedFiles.size)
+        assertNotNull(service.getFileByUri("content://test/boundary"))
+
+        val extraFile = MediaFileInfo(
+            uriString = "content://test/extra",
+            displayName = "Extra.mp3",
+            sizeBytes = 100L
+        )
+
+        service.addFile(extraFile)
+
+        // Verify capacity is strictly enforced and extra file was not added
+        assertEquals(MediaCacheService.MAX_CACHE_SIZE, service.cachedFiles.size)
+        assertNull(service.getFileByUri("content://test/extra"))
+    }
+
+    @Test
+    fun buildAlbumArtistIndexesFromCache_parallelPath_preservesAllFilesAndOrder() {
+        val service = MediaCacheService()
+        // buildAlbumArtistIndexesFromCache only takes the parallel chunked-merge path
+        // once totalFiles >= 1000; below that it indexes sequentially.
+        val totalFiles = 1500
+        val files = (0 until totalFiles).map { i ->
+            MediaFileInfo(
+                uriString = "content://test/song$i",
+                displayName = "Song $i.mp3",
+                sizeBytes = 100L,
+                artist = "Artist ${i % 23}",
+                album = "Album ${i % 41}",
+                genre = "Genre ${i % 7}",
+                year = 1960 + (i % 60)
+            )
+        }
+        service.addAllFiles(files)
+
+        service.buildAlbumArtistIndexesFromCache()
+
+        // No file should be lost or duplicated across the parallel chunk merge.
+        val allArtistFiles = service.artists().flatMap { service.songsForArtist(it) }
+        assertEquals(totalFiles, allArtistFiles.size)
+        assertEquals(
+            files.map { it.uriString }.toSet(),
+            allArtistFiles.map { it.uriString }.toSet()
+        )
+
+        // Files sharing an artist must retain their original relative order after the merge.
+        for (artistNum in 0 until 23) {
+            val artist = "Artist $artistNum"
+            val expected = files.filter { it.artist == artist }.map { it.uriString }
+            val actual = service.songsForArtist(artist).map { it.uriString }
+            assertEquals(expected, actual)
+        }
     }
 }

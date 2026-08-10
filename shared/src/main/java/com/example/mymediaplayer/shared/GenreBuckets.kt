@@ -40,26 +40,38 @@ private val GENRE_RULES = arrayOf(
     GenreRule("Other", contains = listOf("soundtrack", "score", "ost", "musical", "spoken", "podcast", "audiobook"))
 )
 
+// Real-world genre tag vocabularies are small (dozens to low hundreds of distinct
+// strings, even across large libraries), so this cap is generous headroom while still
+// guaranteeing the cache can never grow unbounded from arbitrary/malformed ID3 tag text.
+private const val MAX_GENRE_CACHE_SIZE = 2000
+private val genreBucketCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+
 fun bucketGenre(raw: String?): String {
     val trimmed = raw?.trim().orEmpty()
     if (trimmed.isBlank()) return "Other"
+
+    genreBucketCache[trimmed]?.let { return it }
 
     val primary = trimmed
         .split(';', '/', '|', ',')
         .firstOrNull { it.isNotBlank() }
         ?.trim()
         .orEmpty()
-    if (primary.isBlank()) return "Other"
 
-    val normalized = primary
-        .replace(WHITESPACE_REGEX, " ")
-        .trim()
-        .lowercase(Locale.US)
+    val bucket = if (primary.isBlank()) {
+        "Other"
+    } else {
+        val normalized = primary
+            .replace(WHITESPACE_REGEX, " ")
+            .trim()
+            .lowercase(Locale.US)
 
-    for (i in GENRE_RULES.indices) {
-        if (GENRE_RULES[i].matches(normalized)) {
-            return GENRE_RULES[i].name
-        }
+        GENRE_RULES.firstOrNull { it.matches(normalized) }?.name ?: "Other"
     }
-    return "Other"
+
+    if (genreBucketCache.size >= MAX_GENRE_CACHE_SIZE) {
+        genreBucketCache.clear()
+    }
+    genreBucketCache[trimmed] = bucket
+    return bucket
 }
