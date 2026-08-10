@@ -1116,20 +1116,51 @@ class MainActivity : ComponentActivity() {
         return String.format(Locale.US, "%02d:%02d:%02d", hours, minutes, seconds)
     }
 
+    private fun trimSubstring(s: String, start: Int, end: Int): String {
+        var first = start
+        while (first < end && s[first].isWhitespace()) {
+            first++
+        }
+        var last = end
+        while (last > first && s[last - 1].isWhitespace()) {
+            last--
+        }
+        if (first >= last) return ""
+        return s.substring(first, last)
+    }
+
     private fun readTrustedBluetoothDevices(
         prefs: android.content.SharedPreferences
     ): Map<String, String?> {
         val raw = prefs.getString(KEY_BT_AUTOPLAY_DEVICES, null).orEmpty()
         val decoded = mutableMapOf<String, String?>()
-        if (raw.isNotBlank()) {
-            raw.lineSequence().forEach { line ->
-                if (line.isBlank()) return@forEach
-                val parts = line.split('\t', limit = 2)
-                val address = parts[0].trim()
-                if (address.isBlank()) return@forEach
-                val name = parts.getOrNull(1)?.trim()?.ifBlank { null }
-                decoded[address] = name
+        val length = raw.length
+        var start = 0
+        while (start < length) {
+            var nextNewLine = raw.indexOf('\n', start)
+            if (nextNewLine == -1) {
+                nextNewLine = length
             }
+            var tabIndex = -1
+            for (i in start until nextNewLine) {
+                if (raw[i] == '\t') {
+                    tabIndex = i
+                    break
+                }
+            }
+            if (tabIndex == -1) {
+                val address = trimSubstring(raw, start, nextNewLine)
+                if (address.isNotEmpty()) {
+                    decoded[address] = null
+                }
+            } else {
+                val address = trimSubstring(raw, start, tabIndex)
+                if (address.isNotEmpty()) {
+                    val name = trimSubstring(raw, tabIndex + 1, nextNewLine)
+                    decoded[address] = if (name.isEmpty()) null else name
+                }
+            }
+            start = nextNewLine + 1
         }
         val legacy = prefs.getStringSet(KEY_BT_AUTOPLAY_ADDRESSES, emptySet()) ?: emptySet()
         legacy.forEach { address ->
@@ -1170,7 +1201,10 @@ class MainActivity : ComponentActivity() {
             .filterKeys { it.isNotBlank() }
             .toSortedMap()
         val encoded = clean.entries.joinToString("\n") { entry ->
-            val safeName = entry.value?.replace('\n', ' ')?.replace('\t', ' ') ?: ""
+            // readTrustedBluetoothDevices only splits records on '\n'; a stray '\r' in a
+            // device name (e.g. from an untrusted BLE broadcast name) must never reach the
+            // encoded string or it would get silently absorbed into the surrounding record.
+            val safeName = entry.value?.replace('\n', ' ')?.replace('\r', ' ')?.replace('\t', ' ') ?: ""
             "${entry.key}\t$safeName"
         }
         prefs.edit {

@@ -1,9 +1,14 @@
 package com.example.mymediaplayer
 
 import com.example.mymediaplayer.shared.PlaylistInfo
+import org.junit.Assert.assertEquals
 import org.junit.Test
 import kotlin.system.measureTimeMillis
 
+// Deliberately plain JUnit, no Robolectric: these are pure-JVM microbenchmarks, and
+// running them under the Android simulator would invalidate the timings they measure.
+// The correctness check against the real production method lives in
+// MainActivityBluetoothParsingTest, which needs Robolectric to build an Activity.
 class MainViewModelPerformanceTest {
 
     @Test
@@ -122,5 +127,102 @@ class MainViewModelPerformanceTest {
         }
 
         return updatedPlaylists
+    }
+
+    @Test
+    fun benchmarkBluetoothDeviceParsing() {
+        // Generate a mock raw bluetooth devices string (5,000 lines)
+        val rawLines = (1..5000).map { i ->
+            val mac = String.format("00:11:22:33:%02X:%02X", i / 256, i % 256)
+            val name = "Device Name $i"
+            "$mac\t$name"
+        }
+        val raw = rawLines.joinToString("\n")
+
+        // The optimized parser must produce identical results to the original for the
+        // exact data this benchmark measures - otherwise the speedup is meaningless.
+        assertEquals(runOriginalBluetoothParsing(raw), runOptimizedBluetoothParsing(raw))
+
+        // Warmup
+        for (i in 1..20) {
+            runOriginalBluetoothParsing(raw)
+            runOptimizedBluetoothParsing(raw)
+        }
+
+        val originalTime = measureTimeMillis {
+            for (i in 1..100) {
+                runOriginalBluetoothParsing(raw)
+            }
+        }
+
+        val optimizedTime = measureTimeMillis {
+            for (i in 1..100) {
+                runOptimizedBluetoothParsing(raw)
+            }
+        }
+
+        println("Bluetooth Parsing - Original Time: $originalTime ms")
+        println("Bluetooth Parsing - Optimized Time: $optimizedTime ms")
+    }
+
+    private fun runOriginalBluetoothParsing(raw: String): Map<String, String?> {
+        val decoded = mutableMapOf<String, String?>()
+        if (raw.isNotBlank()) {
+            raw.lineSequence().forEach { line ->
+                if (line.isBlank()) return@forEach
+                val parts = line.split('\t', limit = 2)
+                val address = parts[0].trim()
+                if (address.isBlank()) return@forEach
+                val name = parts.getOrNull(1)?.trim()?.ifBlank { null }
+                decoded[address] = name
+            }
+        }
+        return decoded
+    }
+
+    private fun trimSubstring(s: String, start: Int, end: Int): String {
+        var first = start
+        while (first < end && s[first].isWhitespace()) {
+            first++
+        }
+        var last = end
+        while (last > first && s[last - 1].isWhitespace()) {
+            last--
+        }
+        if (first >= last) return ""
+        return s.substring(first, last)
+    }
+
+    private fun runOptimizedBluetoothParsing(raw: String): Map<String, String?> {
+        val decoded = mutableMapOf<String, String?>()
+        val length = raw.length
+        var start = 0
+        while (start < length) {
+            var nextNewLine = raw.indexOf('\n', start)
+            if (nextNewLine == -1) {
+                nextNewLine = length
+            }
+            var tabIndex = -1
+            for (i in start until nextNewLine) {
+                if (raw[i] == '\t') {
+                    tabIndex = i
+                    break
+                }
+            }
+            if (tabIndex == -1) {
+                val address = trimSubstring(raw, start, nextNewLine)
+                if (address.isNotEmpty()) {
+                    decoded[address] = null
+                }
+            } else {
+                val address = trimSubstring(raw, start, tabIndex)
+                if (address.isNotEmpty()) {
+                    val name = trimSubstring(raw, tabIndex + 1, nextNewLine)
+                    decoded[address] = if (name.isEmpty()) null else name
+                }
+            }
+            start = nextNewLine + 1
+        }
+        return decoded
     }
 }
