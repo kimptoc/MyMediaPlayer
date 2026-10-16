@@ -129,6 +129,8 @@ class MainActivity : ComponentActivity() {
     private val trackVoiceOutroEnabled = mutableStateOf(false)
     private val cloudAnnouncementKiloKey = mutableStateOf("")
     private val cloudAnnouncementTtsKey = mutableStateOf("")
+    private val cloudAnnouncementGeminiKey = mutableStateOf("")
+    private val ttsBackend = mutableStateOf(com.example.mymediaplayer.shared.TtsBackend.STANDARD.storageValue)
     private val debugCloudAnnouncements = mutableStateOf(false)
     private val nowPlayingArt = mutableStateOf<Bitmap?>(null)
     private val showSettings = mutableStateOf(false)
@@ -309,6 +311,8 @@ class MainActivity : ComponentActivity() {
             onToggleTrackVoiceOutro = { toggleTrackVoiceOutro() },
             cloudAnnouncementKiloKey = cloudAnnouncementKiloKey.value,
             cloudAnnouncementTtsKey = cloudAnnouncementTtsKey.value,
+            cloudAnnouncementGeminiKey = cloudAnnouncementGeminiKey.value,
+            ttsBackend = ttsBackend.value,
             debugCloudAnnouncements = debugCloudAnnouncements.value,
             onSetDebugCloudAnnouncements = { enabled ->
                 debugCloudAnnouncements.value = enabled
@@ -317,7 +321,7 @@ class MainActivity : ComponentActivity() {
                 }
                 sendDebugCloudSettingToService(enabled)
             },
-            onSaveCloudAnnouncementKeys = ::saveCloudAnnouncementKeys,
+            onSaveCloudAnnouncementSettings = ::saveCloudAnnouncementSettings,
             bluetoothAutoPlayEnabled = bluetoothAutoPlayEnabled.value,
             onToggleBluetoothAutoPlay = { toggleBluetoothAutoPlay() },
             onAddCurrentBluetoothDevice = { addCurrentBluetoothDeviceToAllowlist() },
@@ -564,6 +568,11 @@ class MainActivity : ComponentActivity() {
             ?.getString(com.example.mymediaplayer.shared.ApiKeyStore.KEY_KILO, "") ?: ""
         cloudAnnouncementTtsKey.value = encryptedPrefs
             ?.getString(com.example.mymediaplayer.shared.ApiKeyStore.KEY_CLOUD_TTS, "") ?: ""
+        cloudAnnouncementGeminiKey.value = encryptedPrefs
+            ?.getString(com.example.mymediaplayer.shared.ApiKeyStore.KEY_GEMINI, "") ?: ""
+        ttsBackend.value = com.example.mymediaplayer.shared.TtsBackend.fromStorage(
+            encryptedPrefs?.getString(com.example.mymediaplayer.shared.ApiKeyStore.KEY_TTS_BACKEND, null)
+        ).storageValue
     }
 
     private fun maybeRequestPostNotifications() {
@@ -1171,15 +1180,30 @@ class MainActivity : ComponentActivity() {
         return decoded
     }
 
-    private fun saveCloudAnnouncementKeys(kilo: String, tts: String, onValidated: () -> Unit) {
+    private fun saveCloudAnnouncementSettings(
+        kilo: String,
+        tts: String,
+        gemini: String,
+        backend: String,
+        onValidated: () -> Unit
+    ) {
         cloudAnnouncementKiloKey.value = kilo
         cloudAnnouncementTtsKey.value = tts
+        cloudAnnouncementGeminiKey.value = gemini
+        ttsBackend.value = com.example.mymediaplayer.shared.TtsBackend.fromStorage(backend).storageValue
         ApiKeyStore.getPrefs(this)?.edit {
             putString(ApiKeyStore.KEY_KILO, kilo)
             putString(ApiKeyStore.KEY_CLOUD_TTS, tts)
+            putString(ApiKeyStore.KEY_GEMINI, gemini)
+            putString(ApiKeyStore.KEY_TTS_BACKEND, com.example.mymediaplayer.shared.TtsBackend.fromStorage(backend).storageValue)
         }
         lifecycleScope.launch {
             val (kiloResult, ttsResult) = ApiKeyStore.validateKeys(this@MainActivity)
+            val geminiResult = if (gemini.isBlank()) {
+                ApiKeyStore.ValidationResult.Success
+            } else {
+                ApiKeyStore.validateGeminiKey(gemini)
+            }
             val kiloMsg = when (kiloResult) {
                 is ApiKeyStore.ValidationResult.Success -> if (kilo.isBlank()) "Kilo API: Anonymous mode" else "Kilo API: OK"
                 is ApiKeyStore.ValidationResult.Error -> "Kilo API: ${kiloResult.message}"
@@ -1188,7 +1212,11 @@ class MainActivity : ComponentActivity() {
                 is ApiKeyStore.ValidationResult.Success -> if (tts.isBlank()) "Google TTS: Using on-device" else "Google TTS: OK"
                 is ApiKeyStore.ValidationResult.Error -> "Google TTS: Not configured (using on-device)"
             }
-            Toast.makeText(this@MainActivity, "$kiloMsg\n$ttsMsg", Toast.LENGTH_LONG).show()
+            val geminiMsg = when (geminiResult) {
+                is ApiKeyStore.ValidationResult.Success -> if (gemini.isBlank()) "Gemini API: Not configured" else "Gemini API: OK"
+                is ApiKeyStore.ValidationResult.Error -> "Gemini API: ${geminiResult.message}"
+            }
+            Toast.makeText(this@MainActivity, "$kiloMsg\n$ttsMsg\n$geminiMsg", Toast.LENGTH_LONG).show()
             onValidated()
         }
     }

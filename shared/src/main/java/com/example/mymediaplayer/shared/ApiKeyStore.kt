@@ -29,6 +29,8 @@ object ApiKeyStore {
 
     const val KEY_KILO = "kilo_api_key"
     const val KEY_CLOUD_TTS = "cloud_tts_api_key"
+    const val KEY_GEMINI = "gemini_api_key"
+    const val KEY_TTS_BACKEND = "tts_backend"
 
     private const val TAG = "ApiKeyStore"
     private const val ENCRYPTED_PREFS_NAME = "mymediaplayer_api_keys"
@@ -125,6 +127,32 @@ object ApiKeyStore {
             val request = Request.Builder()
                 .url(url)
                 .header("X-Goog-Api-Key", apiKey)
+                .post(bodyStr.toRequestBody("application/json".toMediaType()))
+                .build()
+
+            executeRequest(request)
+        }.getOrElse { e ->
+            if (e is CancellationException) throw e
+            ValidationResult.Error("Connection failed: ${e.message}")
+        }
+    }
+
+    /**
+     * Validates a Gemini API key by issuing a minimal TTS synthesis request against the
+     * Gemini `generateContent` endpoint. Returns [ValidationResult.Success] on HTTP 200.
+     */
+    suspend fun validateGeminiKey(apiKey: String): ValidationResult = withContext(Dispatchers.IO) {
+        runCatching {
+            val url = URL(TtsModels.GEMINI_API_TTS_URL)
+            if (!"https".equals(url.protocol, ignoreCase = true)) {
+                return@withContext ValidationResult.Error("Endpoint must use HTTPS")
+            }
+
+            val bodyStr = TtsModels.geminiTtsRequestBody("test")
+
+            val request = Request.Builder()
+                .url(url)
+                .header("x-goog-api-key", apiKey)
                 .post(bodyStr.toRequestBody("application/json".toMediaType()))
                 .build()
 

@@ -44,6 +44,14 @@ internal class AnnouncementPreGenerator(
         private const val KILO_MODEL_ANON = "kilo/auto-free"
         private const val READY_TIMEOUT_MS = 5000L
 
+        private const val CLOUD_TTS_URL = "https://texttospeech.googleapis.com/v1/text:synthesize"
+        private const val STANDARD_TTS_LANGUAGE = "en-US"
+        private val STANDARD_TTS_VOICES =
+            listOf("en-US-Neural2-F", "en-US-Neural2-J", "en-US-Neural2-I")
+
+        /** Gemini API TTS returns raw 16-bit little-endian PCM at 24 kHz, which we wrap as WAV. */
+        private const val GEMINI_TTS_SAMPLE_RATE = 24000
+
         @androidx.annotation.VisibleForTesting
         internal var testInterceptor: okhttp3.Interceptor? = null
 
@@ -169,9 +177,11 @@ internal class AnnouncementPreGenerator(
 
         val kiloKey = prefs.getString(ApiKeyStore.KEY_KILO, null)?.takeIf { it.isNotBlank() }
         val ttsKey = prefs.getString(ApiKeyStore.KEY_CLOUD_TTS, null)?.takeIf { it.isNotBlank() }
+        val geminiKey = prefs.getString(ApiKeyStore.KEY_GEMINI, null)?.takeIf { it.isNotBlank() }
+        val backend = TtsBackend.fromStorage(prefs.getString(ApiKeyStore.KEY_TTS_BACKEND, null))
 
-        if (ttsKey == null) {
-            Log.d(TAG, "No TTS key — will use on-device TTS")
+        if (ttsKey == null && geminiKey == null) {
+            Log.d(TAG, "No cloud TTS key — will use on-device TTS")
             return null
         }
 
@@ -185,8 +195,47 @@ internal class AnnouncementPreGenerator(
         }
         Log.d(TAG, "Using text: $text")
 
-        Log.d(TAG, "Calling Google TTS API")
-        return fetchGoogleTtsAudio(text, ttsKey)
+        Log.d(TAG, "Synthesising with backend=$backend")
+        return when (backend) {
+            TtsBackend.STANDARD ->
+                ttsKey?.let { fetchCloudTtsAudio(text, it, languageCode = STANDARD_TTS_LANGUAGE, voiceName = STANDARD_TTS_VOICES.random(), modelName = null) }
+                    ?: warnMissingKey("standard")
+
+            TtsBackend.CLOUD_GEMINI ->
+                ttsKey?.let { fetchCloudGeminiTtsAudio(text, it) }
+                    ?: warnMissingKey("cloud_gemini")
+
+            TtsBackend.GEMINI_API -> synthesizeWithGeminiApi(text, geminiKey, ttsKey)
+        }
+    }
+
+    private fun warnMissingKey(backend: String): File? {
+        Log.w(TAG, "Backend $backend selected but its API key is missing — falling back to on-device TTS")
+        return null
+    }
+
+    /**
+     * Option 2 (Gemini API) with graceful degradation: on resource exhaustion (HTTP 429) or
+     * failure, fall back to Option 1 (Cloud TTS Gemini voice) when a Cloud TTS key is present,
+     * otherwise to the standard Cloud TTS voice, and finally to on-device TTS (null).
+     */
+    @androidx.annotation.VisibleForTesting
+    internal suspend fun synthesizeWithGeminiApi(text: String, geminiKey: String?, ttsKey: String?): File? {
+        if (geminiKey == null) {
+            Log.w(TAG, "Gemini API backend selected but no Gemini key — trying Cloud TTS")
+            return ttsKey?.let { fetchCloudGeminiTtsAudio(text, it) }
+        }
+        return when (val result = fetchGeminiApiTtsAudio(text, geminiKey)) {
+            is SynthResult.Success -> result.file
+            SynthResult.ResourceExhausted -> {
+                Log.w(TAG, "Gemini API TTS quota exhausted (429) — falling back to Cloud TTS Gemini voice")
+                ttsKey?.let { fetchCloudGeminiTtsAudio(text, it) }
+            }
+            SynthResult.Failed -> {
+                Log.w(TAG, "Gemini API TTS failed — falling back to Cloud TTS Gemini voice")
+                ttsKey?.let { fetchCloudGeminiTtsAudio(text, it) }
+            }
+        }
     }
 
     @androidx.annotation.VisibleForTesting
@@ -277,15 +326,29 @@ internal class AnnouncementPreGenerator(
         }
     }
 
-    private suspend fun fetchGoogleTtsAudio(text: String, apiKey: String): File? =
+    /**
+     * Synthesises [text] through the Cloud Text-to-Speech `text:synthesize` endpoint and caches
+     * the resulting MP3. [modelName] selects a Gemini-TTS voice when non-null; otherwise the
+     * standard (Neural2) voice named [voiceName] is used.
+     */
+    @androidx.annotation.VisibleForTesting
+    internal suspend fun fetchCloudTtsAudio(
+        text: String,
+        apiKey: String,
+        languageCode: String,
+        voiceName: String,
+        modelName: String?,
+    ): File? =
         withContext(Dispatchers.IO) {
             runCatching {
                 val bodyString = JSONObject().apply {
-                    put("input", JSONObject().put("text", text))
+                    put("input", JSONObject().apply {
+                        put("text", text)
+                    })
                     put("voice", JSONObject().apply {
-                        put("languageCode", "en-US")
-                        val voices = listOf("en-US-Neural2-F", "en-US-Neural2-J", "en-US-Neural2-I")
-                        put("name", voices.random())
+                        put("languageCode", languageCode)
+                        if (modelName != null) put("modelName", modelName)
+                        put("name", voiceName)
                     })
                     put("audioConfig", JSONObject().apply {
                         put("audioEncoding", "MP3")
@@ -298,13 +361,13 @@ internal class AnnouncementPreGenerator(
                 val requestBody = bodyString.toRequestBody("application/json; charset=utf-8".toMediaType())
 
                 val request = Request.Builder()
-                    .url("https://texttospeech.googleapis.com/v1/text:synthesize")
+                    .url(CLOUD_TTS_URL)
                     .header("X-Goog-Api-Key", apiKey)
                     .post(requestBody)
                     .build()
 
                 val responseBody = okHttpClient.newCall(request).awaitStringOrNull {
-                    Log.w(TAG, "Google TTS API returned HTTP ${it.code}")
+                    Log.w(TAG, "Cloud TTS API returned HTTP ${it.code}")
                 }
                 if (responseBody.isNullOrBlank()) {
                     return@runCatching null
@@ -317,16 +380,120 @@ internal class AnnouncementPreGenerator(
                 }
 
                 val audioBytes = Base64.decode(audioBase64, Base64.DEFAULT)
-
-                val file = File(context.cacheDir, "${UUID.randomUUID()}.mp3")
-                file.createNewFile()
-                file.writeBytes(audioBytes)
-                Log.d(TAG, "Saved pre-generated announcement to ${file.name} (${audioBytes.size} bytes)")
-                file
+                writeAnnouncementFile(audioBytes, "mp3", audioBytes.size)
             }.getOrElse { e ->
                 if (e is CancellationException) throw e
-                Log.w(TAG, "Google TTS API call failed: ${e.message}")
+                Log.w(TAG, "Cloud TTS API call failed: ${e.message}")
                 null
             }
         }
+
+    /** Option 1: Cloud TTS using a Gemini-TTS voice (reuses the Cloud TTS key). */
+    @androidx.annotation.VisibleForTesting
+    internal suspend fun fetchCloudGeminiTtsAudio(text: String, apiKey: String): File? {
+        Log.d(TAG, "Calling Cloud TTS Gemini voice (${TtsModels.CLOUD_TTS_GEMINI_MODEL})")
+        return fetchCloudTtsAudio(
+            text = text,
+            apiKey = apiKey,
+            languageCode = STANDARD_TTS_LANGUAGE,
+            voiceName = TtsModels.GEMINI_VOICE,
+            modelName = TtsModels.CLOUD_TTS_GEMINI_MODEL,
+        )
+    }
+
+    /** Outcome of an Option 2 synthesis attempt, so callers can react to quota exhaustion. */
+    internal sealed interface SynthResult {
+        data class Success(val file: File) : SynthResult
+        data object ResourceExhausted : SynthResult
+        data object Failed : SynthResult
+    }
+
+    /**
+     * Option 2: Gemini API `generateContent` TTS. Returns raw PCM (24 kHz, 16-bit LE) which is
+     * wrapped in a WAV container so it can be played by the existing announcement player.
+     */
+    @androidx.annotation.VisibleForTesting
+    internal suspend fun fetchGeminiApiTtsAudio(text: String, apiKey: String): SynthResult =
+        withContext(Dispatchers.IO) {
+            try {
+                val request = Request.Builder()
+                    .url(TtsModels.GEMINI_API_TTS_URL)
+                    .header("x-goog-api-key", apiKey)
+                    .post(TtsModels.geminiTtsRequestBody(text).toRequestBody("application/json; charset=utf-8".toMediaType()))
+                    .build()
+
+                okHttpClient.newCall(request).await { response ->
+                    when {
+                        response.code == 429 -> SynthResult.ResourceExhausted
+                        !response.isSuccessful -> {
+                            Log.w(TAG, "Gemini API TTS returned HTTP ${response.code}")
+                            SynthResult.Failed
+                        }
+                        else -> {
+                            val responseBody = response.body?.string()
+                            if (responseBody.isNullOrBlank()) return@await SynthResult.Failed
+                            val pcmBase64 = try {
+                                JSONObject(responseBody)
+                                    .getJSONArray("candidates").getJSONObject(0)
+                                    .getJSONObject("content").getJSONArray("parts").getJSONObject(0)
+                                    .getJSONObject("inlineData").getString("data")
+                            } catch (e: Exception) {
+                                Log.w(TAG, "Gemini API TTS response missing inline audio data")
+                                return@await SynthResult.Failed
+                            }
+                            val pcm = Base64.decode(pcmBase64, Base64.DEFAULT)
+                            SynthResult.Success(writeWavFile(pcm, GEMINI_TTS_SAMPLE_RATE, channels = 1))
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.w(TAG, "Gemini API TTS call failed: ${e.message}")
+                SynthResult.Failed
+            }
+        }
+
+    private fun writeAnnouncementFile(bytes: ByteArray, extension: String, pcmSize: Int): File {
+        val file = File(context.cacheDir, "${UUID.randomUUID()}.$extension")
+        file.createNewFile()
+        file.writeBytes(bytes)
+        Log.d(TAG, "Saved pre-generated announcement to ${file.name} (${bytes.size} bytes, pcm=$pcmSize)")
+        return file
+    }
+
+    /**
+     * Streams a 44-byte RIFF/WAVE header followed by raw 16-bit little-endian PCM straight to the
+     * cache file, avoiding a second full-size copy of the audio buffer.
+     */
+    private fun writeWavFile(pcm: ByteArray, sampleRate: Int, channels: Int): File {
+        val file = File(context.cacheDir, "${UUID.randomUUID()}.wav")
+        java.io.FileOutputStream(file).use { out ->
+            out.write(wavHeader(pcm.size, sampleRate, channels))
+            out.write(pcm)
+        }
+        Log.d(TAG, "Saved pre-generated announcement to ${file.name} (${44 + pcm.size} bytes, pcm=${pcm.size})")
+        return file
+    }
+
+    /** Builds the 44-byte RIFF/WAVE header for 16-bit little-endian PCM. */
+    private fun wavHeader(dataSize: Int, sampleRate: Int, channels: Int): ByteArray {
+        val bitsPerSample = 16
+        val blockAlign = channels * bitsPerSample / 8
+        val byteRate = sampleRate * blockAlign
+        val header = java.nio.ByteBuffer.allocate(44).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        header.put("RIFF".toByteArray(Charsets.US_ASCII))
+        header.putInt(36 + dataSize)
+        header.put("WAVE".toByteArray(Charsets.US_ASCII))
+        header.put("fmt ".toByteArray(Charsets.US_ASCII))
+        header.putInt(16)                       // PCM subchunk size
+        header.putShort(1)                      // audio format = PCM
+        header.putShort(channels.toShort())
+        header.putInt(sampleRate)
+        header.putInt(byteRate)
+        header.putShort(blockAlign.toShort())
+        header.putShort(bitsPerSample.toShort())
+        header.put("data".toByteArray(Charsets.US_ASCII))
+        header.putInt(dataSize)
+        return header.array()
+    }
 }

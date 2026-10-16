@@ -1,6 +1,7 @@
 package com.example.mymediaplayer
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,6 +18,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -31,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.mymediaplayer.shared.TtsBackend
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -41,9 +44,11 @@ fun SettingsScreen(
     onToggleTrackVoiceOutro: () -> Unit,
     cloudAnnouncementKiloKey: String,
     cloudAnnouncementTtsKey: String,
+    cloudAnnouncementGeminiKey: String,
+    ttsBackend: String,
     debugCloudAnnouncements: Boolean,
     onSetDebugCloudAnnouncements: (Boolean) -> Unit,
-    onSaveCloudAnnouncementKeys: (kiloKey: String, ttsKey: String, onValidated: () -> Unit) -> Unit,
+    onSaveCloudAnnouncementSettings: (kiloKey: String, ttsKey: String, geminiKey: String, backend: String, onValidated: () -> Unit) -> Unit,
     bluetoothAutoPlayEnabled: Boolean,
     onToggleBluetoothAutoPlay: () -> Unit,
     onAddCurrentBluetoothDevice: () -> Unit,
@@ -87,9 +92,11 @@ fun SettingsScreen(
         CloudAnnouncementSettingsDialog(
             cloudAnnouncementKiloKey = cloudAnnouncementKiloKey,
             cloudAnnouncementTtsKey = cloudAnnouncementTtsKey,
+            cloudAnnouncementGeminiKey = cloudAnnouncementGeminiKey,
+            ttsBackend = ttsBackend,
             debugCloudAnnouncements = debugCloudAnnouncements,
             onSetDebugCloudAnnouncements = onSetDebugCloudAnnouncements,
-            onSaveCloudAnnouncementKeys = onSaveCloudAnnouncementKeys,
+            onSaveCloudAnnouncementSettings = onSaveCloudAnnouncementSettings,
             onDismissRequest = { setShowCloudAnnouncementSettingsDialog(false) }
         )
     }
@@ -245,13 +252,17 @@ private fun SettingsClickRow(
 internal fun CloudAnnouncementSettingsDialog(
     cloudAnnouncementKiloKey: String,
     cloudAnnouncementTtsKey: String,
+    cloudAnnouncementGeminiKey: String,
+    ttsBackend: String,
     debugCloudAnnouncements: Boolean,
     onSetDebugCloudAnnouncements: (Boolean) -> Unit,
-    onSaveCloudAnnouncementKeys: (String, String, () -> Unit) -> Unit,
+    onSaveCloudAnnouncementSettings: (String, String, String, String, () -> Unit) -> Unit,
     onDismissRequest: () -> Unit
 ) {
     val (kiloKeyInput, setKiloKeyInput) = remember { mutableStateOf(cloudAnnouncementKiloKey) }
     val (ttsKeyInput, setTtsKeyInput) = remember { mutableStateOf(cloudAnnouncementTtsKey) }
+    val (geminiKeyInput, setGeminiKeyInput) = remember { mutableStateOf(cloudAnnouncementGeminiKey) }
+    val (backendInput, setBackendInput) = remember { mutableStateOf(ttsBackend) }
     AlertDialog(
         onDismissRequest = onDismissRequest,
         title = { Text("AI Announcement Settings") },
@@ -261,6 +272,27 @@ internal fun CloudAnnouncementSettingsDialog(
                     "API keys for cloud-generated announcements. Kilo works anonymously (no key needed). Google TTS key optional for higher quality.",
                     style = MaterialTheme.typography.bodySmall
                 )
+                Text(
+                    "Voice engine",
+                    style = MaterialTheme.typography.titleSmall
+                )
+                TtsBackend.entries.forEach { option ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { setBackendInput(option.storageValue) },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = backendInput == option.storageValue,
+                            onClick = { setBackendInput(option.storageValue) }
+                        )
+                        Text(
+                            text = option.displayName,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
                 TextField(
                     value = kiloKeyInput,
                     onValueChange = setKiloKeyInput,
@@ -274,6 +306,15 @@ internal fun CloudAnnouncementSettingsDialog(
                     value = ttsKeyInput,
                     onValueChange = setTtsKeyInput,
                     label = { Text("Google Cloud TTS key (optional)") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                TextField(
+                    value = geminiKeyInput,
+                    onValueChange = setGeminiKeyInput,
+                    label = { Text("Gemini API key (optional)") },
+                    placeholder = { Text("For Gemini API TTS engine") },
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
                     modifier = Modifier.fillMaxWidth()
@@ -301,7 +342,13 @@ internal fun CloudAnnouncementSettingsDialog(
         confirmButton = {
             TextButton(
                 onClick = {
-                    onSaveCloudAnnouncementKeys(kiloKeyInput.trim(), ttsKeyInput.trim(), onDismissRequest)
+                    onSaveCloudAnnouncementSettings(
+                        kiloKeyInput.trim(),
+                        ttsKeyInput.trim(),
+                        geminiKeyInput.trim(),
+                        backendInput,
+                        onDismissRequest
+                    )
                 }
             ) { Text("Save") }
         },
