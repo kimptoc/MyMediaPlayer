@@ -1187,23 +1187,19 @@ class MainActivity : ComponentActivity() {
         backend: String,
         onValidated: () -> Unit
     ) {
+        val selectedBackend = com.example.mymediaplayer.shared.TtsBackend.fromStorage(backend)
         cloudAnnouncementKiloKey.value = kilo
         cloudAnnouncementTtsKey.value = tts
         cloudAnnouncementGeminiKey.value = gemini
-        ttsBackend.value = com.example.mymediaplayer.shared.TtsBackend.fromStorage(backend).storageValue
+        ttsBackend.value = selectedBackend.storageValue
         ApiKeyStore.getPrefs(this)?.edit {
             putString(ApiKeyStore.KEY_KILO, kilo)
             putString(ApiKeyStore.KEY_CLOUD_TTS, tts)
             putString(ApiKeyStore.KEY_GEMINI, gemini)
-            putString(ApiKeyStore.KEY_TTS_BACKEND, com.example.mymediaplayer.shared.TtsBackend.fromStorage(backend).storageValue)
+            putString(ApiKeyStore.KEY_TTS_BACKEND, selectedBackend.storageValue)
         }
         lifecycleScope.launch {
             val (kiloResult, ttsResult) = ApiKeyStore.validateKeys(this@MainActivity)
-            val geminiResult = if (gemini.isBlank()) {
-                ApiKeyStore.ValidationResult.Success
-            } else {
-                ApiKeyStore.validateGeminiKey(gemini)
-            }
             val kiloMsg = when (kiloResult) {
                 is ApiKeyStore.ValidationResult.Success -> if (kilo.isBlank()) "Kilo API: Anonymous mode" else "Kilo API: OK"
                 is ApiKeyStore.ValidationResult.Error -> "Kilo API: ${kiloResult.message}"
@@ -1212,11 +1208,21 @@ class MainActivity : ComponentActivity() {
                 is ApiKeyStore.ValidationResult.Success -> if (tts.isBlank()) "Google TTS: Using on-device" else "Google TTS: OK"
                 is ApiKeyStore.ValidationResult.Error -> "Google TTS: Not configured (using on-device)"
             }
-            val geminiMsg = when (geminiResult) {
-                is ApiKeyStore.ValidationResult.Success -> if (gemini.isBlank()) "Gemini API: Not configured" else "Gemini API: OK"
-                is ApiKeyStore.ValidationResult.Error -> "Gemini API: ${geminiResult.message}"
+            // Only validate (and bill) the Gemini key when the Gemini API engine is selected.
+            val geminiMsg: String? = if (selectedBackend == com.example.mymediaplayer.shared.TtsBackend.GEMINI_API) {
+                if (gemini.isBlank()) {
+                    "Gemini API: Not configured"
+                } else {
+                    when (val result = ApiKeyStore.validateGeminiKey(gemini)) {
+                        is ApiKeyStore.ValidationResult.Success -> "Gemini API: OK"
+                        is ApiKeyStore.ValidationResult.Error -> "Gemini API: ${result.message}"
+                    }
+                }
+            } else {
+                null
             }
-            Toast.makeText(this@MainActivity, "$kiloMsg\n$ttsMsg\n$geminiMsg", Toast.LENGTH_LONG).show()
+            val message = listOfNotNull(kiloMsg, ttsMsg, geminiMsg).joinToString("\n")
+            Toast.makeText(this@MainActivity, message, Toast.LENGTH_LONG).show()
             onValidated()
         }
     }

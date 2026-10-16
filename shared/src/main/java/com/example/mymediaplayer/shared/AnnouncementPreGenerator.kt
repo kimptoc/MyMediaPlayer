@@ -197,14 +197,8 @@ internal class AnnouncementPreGenerator(
 
         Log.d(TAG, "Synthesising with backend=$backend")
         return when (backend) {
-            TtsBackend.STANDARD ->
-                ttsKey?.let { fetchCloudTtsAudio(text, it, languageCode = STANDARD_TTS_LANGUAGE, voiceName = STANDARD_TTS_VOICES.random(), modelName = null) }
-                    ?: warnMissingKey("standard")
-
-            TtsBackend.CLOUD_GEMINI ->
-                ttsKey?.let { fetchCloudGeminiTtsAudio(text, it) }
-                    ?: warnMissingKey("cloud_gemini")
-
+            TtsBackend.STANDARD -> synthesizeStandard(text, ttsKey)
+            TtsBackend.CLOUD_GEMINI -> synthesizeCloudGemini(text, ttsKey)
             TtsBackend.GEMINI_API -> synthesizeWithGeminiApi(text, geminiKey, ttsKey)
         }
     }
@@ -214,26 +208,54 @@ internal class AnnouncementPreGenerator(
         return null
     }
 
+    private suspend fun synthesizeStandard(text: String, ttsKey: String?): File? {
+        if (ttsKey == null) return warnMissingKey("standard")
+        return fetchCloudTtsAudio(
+            text,
+            ttsKey,
+            languageCode = STANDARD_TTS_LANGUAGE,
+            voiceName = STANDARD_TTS_VOICES.random(),
+            modelName = null,
+        )
+    }
+
+    private suspend fun synthesizeCloudGemini(text: String, ttsKey: String?): File? {
+        if (ttsKey == null) return warnMissingKey("cloud_gemini")
+        return fetchCloudGeminiTtsAudio(text, ttsKey)
+    }
+
+    /**
+     * Cloud TTS fallback chain used when the Gemini API backend cannot synthesise: try the
+     * Gemini voice first, then the standard voice, and finally give up (on-device TTS).
+     */
+    private suspend fun synthesizeCloudFallback(text: String, ttsKey: String?): File? {
+        if (ttsKey == null) {
+            Log.w(TAG, "No Cloud TTS key for fallback — using on-device TTS")
+            return null
+        }
+        return fetchCloudGeminiTtsAudio(text, ttsKey) ?: synthesizeStandard(text, ttsKey)
+    }
+
     /**
      * Option 2 (Gemini API) with graceful degradation: on resource exhaustion (HTTP 429) or
-     * failure, fall back to Option 1 (Cloud TTS Gemini voice) when a Cloud TTS key is present,
-     * otherwise to the standard Cloud TTS voice, and finally to on-device TTS (null).
+     * failure, fall back to the Cloud TTS Gemini voice, then the standard Cloud TTS voice, and
+     * finally to on-device TTS (null).
      */
     @androidx.annotation.VisibleForTesting
     internal suspend fun synthesizeWithGeminiApi(text: String, geminiKey: String?, ttsKey: String?): File? {
         if (geminiKey == null) {
             Log.w(TAG, "Gemini API backend selected but no Gemini key — trying Cloud TTS")
-            return ttsKey?.let { fetchCloudGeminiTtsAudio(text, it) }
+            return synthesizeCloudFallback(text, ttsKey)
         }
         return when (val result = fetchGeminiApiTtsAudio(text, geminiKey)) {
             is SynthResult.Success -> result.file
             SynthResult.ResourceExhausted -> {
-                Log.w(TAG, "Gemini API TTS quota exhausted (429) — falling back to Cloud TTS Gemini voice")
-                ttsKey?.let { fetchCloudGeminiTtsAudio(text, it) }
+                Log.w(TAG, "Gemini API TTS quota exhausted (429) — falling back to Cloud TTS")
+                synthesizeCloudFallback(text, ttsKey)
             }
             SynthResult.Failed -> {
-                Log.w(TAG, "Gemini API TTS failed — falling back to Cloud TTS Gemini voice")
-                ttsKey?.let { fetchCloudGeminiTtsAudio(text, it) }
+                Log.w(TAG, "Gemini API TTS failed — falling back to Cloud TTS")
+                synthesizeCloudFallback(text, ttsKey)
             }
         }
     }
@@ -380,6 +402,10 @@ internal class AnnouncementPreGenerator(
                 }
 
                 val audioBytes = Base64.decode(audioBase64, Base64.DEFAULT)
+                if (audioBytes.isEmpty()) {
+                    Log.w(TAG, "Cloud TTS API returned empty audio content")
+                    return@runCatching null
+                }
                 writeAnnouncementFile(audioBytes, "mp3", audioBytes.size)
             }.getOrElse { e ->
                 if (e is CancellationException) throw e
@@ -432,17 +458,21 @@ internal class AnnouncementPreGenerator(
                         else -> {
                             val responseBody = response.body?.string()
                             if (responseBody.isNullOrBlank()) return@await SynthResult.Failed
-                            val pcmBase64 = try {
-                                JSONObject(responseBody)
-                                    .getJSONArray("candidates").getJSONObject(0)
-                                    .getJSONObject("content").getJSONArray("parts").getJSONObject(0)
-                                    .getJSONObject("inlineData").getString("data")
+                            val inline = try {
+                                findInlineAudio(JSONObject(responseBody))
                             } catch (e: Exception) {
+                                null
+                            }
+                            if (inline == null) {
                                 Log.w(TAG, "Gemini API TTS response missing inline audio data")
                                 return@await SynthResult.Failed
                             }
-                            val pcm = Base64.decode(pcmBase64, Base64.DEFAULT)
-                            SynthResult.Success(writeWavFile(pcm, GEMINI_TTS_SAMPLE_RATE, channels = 1))
+                            val pcm = Base64.decode(inline.first, Base64.DEFAULT)
+                            if (pcm.isEmpty()) {
+                                Log.w(TAG, "Gemini API TTS returned empty audio data")
+                                return@await SynthResult.Failed
+                            }
+                            SynthResult.Success(writeWavFile(pcm, inline.second, channels = 1))
                         }
                     }
                 }
@@ -452,6 +482,32 @@ internal class AnnouncementPreGenerator(
                 SynthResult.Failed
             }
         }
+
+    /**
+     * Finds the first inline audio part in a Gemini `generateContent` response, without assuming
+     * the audio is the first part. Returns the base64 payload and the sample rate parsed from the
+     * part's `mimeType` (defaulting to 24 kHz when absent).
+     */
+    private fun findInlineAudio(responseJson: JSONObject): Pair<String, Int>? {
+        val candidates = responseJson.optJSONArray("candidates") ?: return null
+        for (i in 0 until candidates.length()) {
+            val parts = candidates.optJSONObject(i)
+                ?.optJSONObject("content")
+                ?.optJSONArray("parts") ?: continue
+            for (j in 0 until parts.length()) {
+                val inline = parts.optJSONObject(j)?.optJSONObject("inlineData") ?: continue
+                val data = inline.optString("data")
+                if (data.isNullOrEmpty()) continue
+                return data to parseSampleRate(inline.optString("mimeType"))
+            }
+        }
+        return null
+    }
+
+    private fun parseSampleRate(mimeType: String?): Int {
+        val match = Regex("rate=(\\d+)").find(mimeType ?: "")
+        return match?.groupValues?.get(1)?.toIntOrNull() ?: GEMINI_TTS_SAMPLE_RATE
+    }
 
     private fun writeAnnouncementFile(bytes: ByteArray, extension: String, pcmSize: Int): File {
         val file = File(context.cacheDir, "${UUID.randomUUID()}.$extension")

@@ -12,6 +12,7 @@ import okio.Buffer
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -149,5 +150,83 @@ class AnnouncementPreGeneratorBackendTest {
 
         assertNotNull(file)
         assertTrue(lastCloudTtsBody?.contains(TtsModels.CLOUD_TTS_GEMINI_MODEL) == true)
+    }
+
+    @Test
+    fun geminiApi_quotaExhausted_andCloudGeminiForbidden_fallsBackToStandardVoice() = runTest {
+        var standardBody: String? = null
+        AnnouncementPreGenerator.testInterceptor = okhttp3.Interceptor { chain ->
+            if (chain.request().url.host.contains("generativelanguage")) {
+                response(chain, 429, "{}")
+            } else {
+                val body = chain.request().body?.let { b -> Buffer().also { b.writeTo(it) }.readUtf8() }
+                if (body?.contains(TtsModels.CLOUD_TTS_GEMINI_MODEL) == true) {
+                    response(chain, 403, "{}")
+                } else {
+                    standardBody = body
+                    response(chain, 200, "{\"audioContent\":\"${pcmBase64(4)}\"}")
+                }
+            }
+        }
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val generator = preGen(context, this.testScheduler)
+
+        val file = generator.synthesizeWithGeminiApi("hello", geminiKey = "gemini_key", ttsKey = "tts_key")
+
+        assertNotNull("Standard voice fallback should produce audio", file)
+        assertTrue(
+            "Standard fallback must not request the Gemini model",
+            standardBody?.contains(TtsModels.CLOUD_TTS_GEMINI_MODEL) != true,
+        )
+        assertTrue("Standard fallback should omit voice.modelName", standardBody?.contains("modelName") != true)
+    }
+
+    @Test
+    fun cloudTts_emptyAudioContent_returnsNull() = runTest {
+        AnnouncementPreGenerator.testInterceptor = okhttp3.Interceptor { chain ->
+            response(chain, 200, "{\"audioContent\":\"\"}")
+        }
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val generator = preGen(context, this.testScheduler)
+
+        assertNull(generator.fetchCloudGeminiTtsAudio("hi", "tts_key"))
+    }
+
+    @Test
+    fun geminiApi_emptyAudioData_returnsFailed() = runTest {
+        AnnouncementPreGenerator.testInterceptor = okhttp3.Interceptor { chain ->
+            response(chain, 200, "{\"candidates\":[{\"content\":{\"parts\":[{\"inlineData\":{\"data\":\"\"}}]}}]}")
+        }
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val generator = preGen(context, this.testScheduler)
+
+        assertEquals(AnnouncementPreGenerator.SynthResult.Failed, generator.fetchGeminiApiTtsAudio("hi", "fake_key"))
+    }
+
+    @Test
+    fun geminiApi_audioPartNotFirst_isFoundAndRateParsedFromMimeType() = runTest {
+        AnnouncementPreGenerator.testInterceptor = okhttp3.Interceptor { chain ->
+            response(
+                chain,
+                200,
+                "{\"candidates\":[{\"content\":{\"parts\":[" +
+                    "{\"text\":\"thinking out loud\"}," +
+                    "{\"inlineData\":{\"mimeType\":\"audio/L16;codec=pcm;rate=16000\",\"data\":\"${pcmBase64(8)}\"}}" +
+                    "]}}]}",
+            )
+        }
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val generator = preGen(context, this.testScheduler)
+
+        val result = generator.fetchGeminiApiTtsAudio("hi", "fake_key")
+
+        assertTrue(result is AnnouncementPreGenerator.SynthResult.Success)
+        val bytes = (result as AnnouncementPreGenerator.SynthResult.Success).file.readBytes()
+        // sample rate lives at bytes 24..27 of the WAV header, little-endian.
+        val sampleRate = (bytes[24].toInt() and 0xff) or
+            ((bytes[25].toInt() and 0xff) shl 8) or
+            ((bytes[26].toInt() and 0xff) shl 16) or
+            ((bytes[27].toInt() and 0xff) shl 24)
+        assertEquals(16000, sampleRate)
     }
 }
