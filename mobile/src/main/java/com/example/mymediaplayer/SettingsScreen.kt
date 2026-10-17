@@ -268,7 +268,10 @@ internal fun CloudAnnouncementSettingsDialog(
         onDismissRequest = onDismissRequest,
         title = { Text("AI Announcement Settings") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 Text(
                     "API keys for cloud-generated announcements. Kilo works anonymously (no key needed). Google TTS key optional for higher quality.",
                     style = MaterialTheme.typography.bodySmall
