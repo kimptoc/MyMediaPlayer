@@ -782,6 +782,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         playlistQueue = if (shuffle) list.shuffled() else list
         currentQueueIndex = 0
         currentPlaylistName = queueTitle
+        resetRepeatOneForNewQueue()
         updateSessionQueue()
         playTrack(playlistQueue[currentQueueIndex])
     }
@@ -2384,6 +2385,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         currentPlaylistName = playlistInfo?.displayName?.removeSuffix(".m3u")
             ?: Uri.parse(playlistUriToRead).lastPathSegment?.removeSuffix(".m3u")
             ?: "Playlist"
+        resetRepeatOneForNewQueue()
         updateSessionQueue()
         playTrack(playlistQueue[currentQueueIndex])
         savePlaybackSnapshot()
@@ -2399,6 +2401,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         playlistQueue = playlistTracks
         currentQueueIndex = 0
         currentPlaylistName = smartPlaylistTitleFromId(smartId)
+        resetRepeatOneForNewQueue()
         updateSessionQueue()
         playTrack(playlistQueue[currentQueueIndex])
         savePlaybackSnapshot()
@@ -2596,6 +2599,18 @@ class MyMusicService : MediaBrowserServiceCompat() {
         playQueueAndSaveSnapshot(matches, wantsShuffle, finalPlaylistName)
     }
 
+    /**
+     * Repeat One is saved between sessions and can be switched on from the car without the
+     * phone showing it, so a fresh shuffle or Play All would otherwise replay its first song
+     * forever (#519). Repeat All is kept because it still plays the whole new queue.
+     */
+    private fun resetRepeatOneForNewQueue() {
+        if (repeatMode == PlaybackStateCompat.REPEAT_MODE_ONE) {
+            repeatMode = PlaybackStateCompat.REPEAT_MODE_NONE
+            session.setRepeatMode(repeatMode)
+        }
+    }
+
     private fun playQueueAndSaveSnapshot(
         tracks: List<MediaFileInfo>,
         wantsShuffle: Boolean,
@@ -2604,6 +2619,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         playlistQueue = if (wantsShuffle) tracks.shuffled() else tracks
         currentQueueIndex = 0
         currentPlaylistName = playlistName
+        resetRepeatOneForNewQueue()
         updateSessionQueue()
         playTrack(playlistQueue[currentQueueIndex])
         savePlaybackSnapshot()

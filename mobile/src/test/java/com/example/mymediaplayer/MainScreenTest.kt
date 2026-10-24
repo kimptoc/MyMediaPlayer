@@ -1,5 +1,6 @@
 package com.example.mymediaplayer
 
+import android.support.v4.media.session.PlaybackStateCompat
 import org.junit.Test
 import org.junit.Assert.assertEquals
 
@@ -51,5 +52,23 @@ class MainScreenTest {
     fun formatPlaybackDuration_negativeMs() {
         // coerceAtLeast(0L) should handle this
         assertEquals("0:00", formatPlaybackDuration(-1000L))
+    }
+
+    @Test
+    fun repeatModeLabel_showsEachMode() {
+        assertEquals("Repeat: Off", repeatModeLabel(PlaybackStateCompat.REPEAT_MODE_NONE))
+        assertEquals("Repeat: All", repeatModeLabel(PlaybackStateCompat.REPEAT_MODE_ALL))
+        assertEquals("Repeat: One", repeatModeLabel(PlaybackStateCompat.REPEAT_MODE_ONE))
+        assertEquals("Repeat: All", repeatModeLabel(PlaybackStateCompat.REPEAT_MODE_GROUP))
+        assertEquals("Repeat: Off", repeatModeLabel(PlaybackStateCompat.REPEAT_MODE_INVALID))
+    }
+
+    @Test
+    fun nextRepeatMode_cyclesOffAllOne() {
+        assertEquals(PlaybackStateCompat.REPEAT_MODE_ALL, nextRepeatMode(PlaybackStateCompat.REPEAT_MODE_NONE))
+        assertEquals(PlaybackStateCompat.REPEAT_MODE_ONE, nextRepeatMode(PlaybackStateCompat.REPEAT_MODE_ALL))
+        assertEquals(PlaybackStateCompat.REPEAT_MODE_NONE, nextRepeatMode(PlaybackStateCompat.REPEAT_MODE_ONE))
+        assertEquals(PlaybackStateCompat.REPEAT_MODE_ONE, nextRepeatMode(PlaybackStateCompat.REPEAT_MODE_GROUP))
+        assertEquals(PlaybackStateCompat.REPEAT_MODE_ALL, nextRepeatMode(PlaybackStateCompat.REPEAT_MODE_INVALID))
     }
 }

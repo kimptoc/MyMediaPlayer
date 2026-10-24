@@ -313,6 +313,7 @@ fun PlaybackDialogs(
     onPrev: () -> Unit,
     onNext: () -> Unit,
     onToggleFlag: (String) -> Unit,
+    onToggleRepeat: () -> Unit,
     showQueueDialog: Boolean,
     setShowQueueDialog: (Boolean) -> Unit,
     onQueueItemSelected: (Long) -> Unit
@@ -336,6 +337,7 @@ fun PlaybackDialogs(
             hasNext = playbackState.hasNext,
             isPlayingPlaylist = playbackState.isPlayingPlaylist,
             isFlagged = isFlagged,
+            repeatMode = playbackState.repeatMode,
             onSeekTo = onSeekTo,
             onPlayPause = onPlayPause,
             onPrev = onPrev,
@@ -345,6 +347,7 @@ fun PlaybackDialogs(
                     onToggleFlag(currentMediaId)
                 }
             },
+            onToggleRepeat = onToggleRepeat,
             onDismiss = { setShowExpandedNowPlayingDialog(false) }
         )
     }
