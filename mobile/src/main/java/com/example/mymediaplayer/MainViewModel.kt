@@ -155,6 +155,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         ConcurrentHashMap.newKeySet()
     private var treeUri: Uri? = null
     private var libraryRestoreClaimed = false
+
+    /**
+     * Scan limit waiting on the media permission prompt. Kept here, not in the activity, so a
+     * rotation while the prompt is open doesn't drop the scan the user is about to allow.
+     */
+    var pendingWholeDriveScanLimit: Int? = null
     private var playlistTreeUri: Uri? = null
     private var metadataKey: String? = null
 

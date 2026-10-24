@@ -130,7 +130,6 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
         private const val ACTION_SET_MEDIA_FILES = "SET_MEDIA_FILES"
         private const val ACTION_REFRESH_LIBRARY = "REFRESH_LIBRARY"
-        @VisibleForTesting
         internal const val ACTION_KEEP_ALIVE = "KEEP_ALIVE"
         private const val ACTION_SET_PLAYLISTS = "SET_PLAYLISTS"
         private const val ACTION_PLAY_SEARCH_LIST = "PLAY_SEARCH_LIST"

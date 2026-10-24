@@ -112,7 +112,6 @@ class MainActivity : ComponentActivity() {
     private var lastSentPlaylistUris: List<String>? = null
     private var pendingScanLimit: Int = MediaCacheService.MAX_CACHE_SIZE
     private var pendingDeepScan: Boolean = false
-    private var pendingWholeDriveScanLimit: Int? = null
 
     private var lastPlaybackState: PlaybackStateCompat? = null
     private var lastMetadata: MediaMetadataCompat? = null
@@ -255,8 +254,8 @@ class MainActivity : ComponentActivity() {
 
     private val requestMediaReadPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            val limit = pendingWholeDriveScanLimit
-            pendingWholeDriveScanLimit = null
+            val limit = viewModel.pendingWholeDriveScanLimit
+            viewModel.pendingWholeDriveScanLimit = null
             if (granted && limit != null) {
                 getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit {
                     putInt(KEY_SCAN_LIMIT, limit)
@@ -706,7 +705,7 @@ class MainActivity : ComponentActivity() {
             if (hasMediaReadPermission()) {
                 viewModel.scanWholeDevice(limit)
             } else {
-                pendingWholeDriveScanLimit = limit
+                viewModel.pendingWholeDriveScanLimit = limit
                 requestMediaReadPermission.launch(requiredMediaReadPermission())
             }
             return
@@ -927,7 +926,7 @@ class MainActivity : ComponentActivity() {
             }
             viewModel.scanWholeDevice(limit, forceRescan = true)
         } else {
-            pendingWholeDriveScanLimit = limit
+            viewModel.pendingWholeDriveScanLimit = limit
             requestMediaReadPermission.launch(requiredMediaReadPermission())
         }
     }
