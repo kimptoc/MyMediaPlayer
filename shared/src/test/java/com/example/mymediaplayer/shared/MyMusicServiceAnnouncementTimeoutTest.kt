@@ -2,6 +2,7 @@ package com.example.mymediaplayer.shared
 
 import android.os.Looper
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -9,6 +10,7 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowLog
 import java.time.Duration
 
 /**
@@ -45,11 +47,13 @@ class MyMusicServiceAnnouncementTimeoutTest {
         var completions = 0
         val finish = service.guardAnnouncementCompletion { completions++ }
 
+        ShadowLog.clear()
         finish()
         finish()
         idleFor(Duration.ofSeconds(30))
 
         assertEquals(1, completions)
+        assertFalse(timeoutLogged())
     }
 
     @Test
@@ -60,10 +64,12 @@ class MyMusicServiceAnnouncementTimeoutTest {
         // A new track starting abandons the announcement via clearPendingIntro().
         val clear = MyMusicService::class.java.getDeclaredMethod("clearPendingIntro")
         clear.isAccessible = true
+        ShadowLog.clear()
         clear.invoke(service)
         idleFor(Duration.ofSeconds(30))
 
         assertEquals(0, completions)
+        assertFalse(timeoutLogged())
     }
 
     @Test
@@ -76,6 +82,23 @@ class MyMusicServiceAnnouncementTimeoutTest {
 
         assertEquals(1, completions)
     }
+
+    @Test
+    fun replacedAnnouncementFinishing_doesNotCancelNewerTimeout() {
+        var oldCompletions = 0
+        var newCompletions = 0
+        val oldFinish = service.guardAnnouncementCompletion { oldCompletions++ }
+        service.guardAnnouncementCompletion { newCompletions++ }
+
+        oldFinish()
+        idleFor(Duration.ofSeconds(21))
+
+        assertEquals(1, oldCompletions)
+        assertEquals(1, newCompletions)
+    }
+
+    private fun timeoutLogged(): Boolean =
+        ShadowLog.getLogsForTag("MyMusicService").any { it.msg.contains("did not finish within") }
 
     private fun idleFor(duration: Duration) = shadowOf(Looper.getMainLooper()).idleFor(duration)
 }

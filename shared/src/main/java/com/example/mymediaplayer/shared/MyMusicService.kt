@@ -230,7 +230,6 @@ class MyMusicService : MediaBrowserServiceCompat() {
         // Upper bound on an intro/outro (cloud audio wait + speech) so a TTS engine that
         // never reports completion can't stall playback.
         private const val ANNOUNCEMENT_TIMEOUT_MS = 20_000L
-        private val ANNOUNCEMENT_TIMEOUT_TOKEN = Any()
         private const val TTS_SPEECH_RATE = 0.93f
         private const val TTS_PITCH = 1.04f
         internal const val ALBUM_ART_TARGET_SIZE_PX = 512
@@ -290,6 +289,10 @@ class MyMusicService : MediaBrowserServiceCompat() {
     // Track that couldn't start because audio focus was refused or delayed (#518).
     private var trackAwaitingAudioFocus: MediaFileInfo? = null
     private var audioFocusRetryCount: Int = 0
+    // Repeat All only wraps past a failed last track if some track has played through since
+    // the previous error wrap; otherwise a queue that fails everywhere would loop forever,
+    // as a successful prepare resets consecutivePlaybackErrors.
+    private var trackCompletedSinceErrorWrap: Boolean = true
     private val audioFocusRetryRunnable = Runnable {
         trackAwaitingAudioFocus?.let { startTrack(it) }
     }
@@ -321,6 +324,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
     private var announcementPlayer: MediaPlayer? = null
     private val announcementJobRef = java.util.concurrent.atomic.AtomicReference<kotlinx.coroutines.Job?>(null)
     private val pendingAnnouncementFinish = AtomicReference<(() -> Unit)?>(null)
+    // Handler token for the current announcement's timeout, so each one only cancels its own.
+    private val announcementTimeoutToken = AtomicReference<Any?>(null)
 
     private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
         when (focusChange) {
@@ -417,8 +422,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }
 
         override fun onPause() {
-            // Drop a pending (delayed) focus request so it can't grant focus while paused.
-            if (isAwaitingAudioFocus()) abandonAudioFocus()
+            // Drop a pending (delayed) focus request so it can't grant focus while paused:
+            // either a track waiting to start, or a resume waiting on AUDIOFOCUS_GAIN.
+            if (isAwaitingAudioFocus() || resumeOnAudioFocusGain) abandonAudioFocus()
             cancelAudioFocusWait()
             resumeOnAudioFocusGain = false
             unduckIfNeeded()
@@ -833,7 +839,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         notificationManager.cancel(NOW_PLAYING_NOTIFICATION_ID)
         serviceScope.cancel()
         cancelAudioFocusWait()
-        mainHandler.removeCallbacksAndMessages(ANNOUNCEMENT_TIMEOUT_TOKEN)
+        cancelAnnouncementTimeout()
         releaseMediaPlayer()
         abandonAudioFocus()
         synchronized(pendingResults) {
@@ -1875,6 +1881,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         val job = serviceScope.launch {
             val audioFile = announcementPreGenerator?.getReadyAudio(fileInfo, isIntro = true)
             mainHandler.post {
+                if (!isCurrentAnnouncement(finish)) return@post
                 if (audioFile != null) {
                     if (debugCloudAnnouncementsEnabled) {
                         Toast.makeText(this@MyMusicService, "Using cloud intro (Kilo + Google TTS)", Toast.LENGTH_SHORT).show()
@@ -1918,6 +1925,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         val job = serviceScope.launch {
             val audioFile = announcementPreGenerator?.getReadyAudio(fileInfo, isIntro = false)
             mainHandler.post {
+                if (!isCurrentAnnouncement(finish)) return@post
                 if (audioFile != null) {
                     if (debugCloudAnnouncementsEnabled) {
                             Toast.makeText(this@MyMusicService, "Using cloud outro (Kilo + Google TTS)", Toast.LENGTH_SHORT).show()
@@ -2144,25 +2152,32 @@ class MyMusicService : MediaBrowserServiceCompat() {
      */
     @VisibleForTesting
     internal fun guardAnnouncementCompletion(onComplete: () -> Unit): () -> Unit {
+        val token = Any()
         val done = AtomicBoolean(false)
         val finish: () -> Unit = {
             if (done.compareAndSet(false, true)) {
-                mainHandler.removeCallbacksAndMessages(ANNOUNCEMENT_TIMEOUT_TOKEN)
+                mainHandler.removeCallbacksAndMessages(token)
                 onComplete()
             }
         }
-        mainHandler.removeCallbacksAndMessages(ANNOUNCEMENT_TIMEOUT_TOKEN)
+        announcementTimeoutToken.getAndSet(token)?.let { mainHandler.removeCallbacksAndMessages(it) }
         pendingAnnouncementFinish.set(finish)
         mainHandler.postAtTime(
             {
-                Log.w("MyMusicService", "Announcement did not finish within ${ANNOUNCEMENT_TIMEOUT_MS}ms, continuing")
-                skipPendingAnnouncement()
+                if (isCurrentAnnouncement(finish)) {
+                    Log.w("MyMusicService", "Announcement did not finish within ${ANNOUNCEMENT_TIMEOUT_MS}ms, continuing")
+                    skipPendingAnnouncement()
+                }
             },
-            ANNOUNCEMENT_TIMEOUT_TOKEN,
+            token,
             SystemClock.uptimeMillis() + ANNOUNCEMENT_TIMEOUT_MS
         )
         return finish
     }
+
+    /** False once [finish]'s announcement has been abandoned or replaced, so it mustn't start speaking. */
+    private fun isCurrentAnnouncement(finish: () -> Unit): Boolean =
+        pendingAnnouncementFinish.get() === finish
 
     /** Stops any announcement in progress and carries on as if it had finished. */
     @VisibleForTesting
@@ -2172,8 +2187,12 @@ class MyMusicService : MediaBrowserServiceCompat() {
         finish?.invoke()
     }
 
+    private fun cancelAnnouncementTimeout() {
+        announcementTimeoutToken.getAndSet(null)?.let { mainHandler.removeCallbacksAndMessages(it) }
+    }
+
     private fun clearPendingIntro() {
-        mainHandler.removeCallbacksAndMessages(ANNOUNCEMENT_TIMEOUT_TOKEN)
+        cancelAnnouncementTimeout()
         pendingAnnouncementFinish.set(null)
         announcementJobRef.getAndSet(null)?.cancel()
         releaseAnnouncementPlayer()
@@ -2185,9 +2204,10 @@ class MyMusicService : MediaBrowserServiceCompat() {
         val nextIndex = nextQueueIndexForError(
             currentQueueIndex,
             playlistQueue.size,
-            repeatAll = repeatMode == PlaybackStateCompat.REPEAT_MODE_ALL
+            repeatAll = repeatMode == PlaybackStateCompat.REPEAT_MODE_ALL && trackCompletedSinceErrorWrap
         )
         return if (nextIndex != null) {
+            if (nextIndex < currentQueueIndex) trackCompletedSinceErrorWrap = false
             currentQueueIndex = nextIndex
             true
         } else {
@@ -2226,6 +2246,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
     }
 
     private fun onTrackCompleted() {
+        trackCompletedSinceErrorWrap = true
         if (playlistQueue.isNotEmpty()) {
             if (repeatMode == PlaybackStateCompat.REPEAT_MODE_ONE &&
                 currentQueueIndex in playlistQueue.indices
@@ -2330,9 +2351,14 @@ class MyMusicService : MediaBrowserServiceCompat() {
         // Keep any pending resume position so a later retry or play still seeks to it.
         savePlaybackSnapshot(positionMsOverride = pendingResumePositionMs ?: 0L)
         updatePlaybackState(PlaybackStateCompat.STATE_PAUSED)
-        if (!delayed && audioFocusRetryCount < MAX_AUDIO_FOCUS_RETRIES) {
-            audioFocusRetryCount += 1
-            mainHandler.postDelayed(audioFocusRetryRunnable, AUDIO_FOCUS_RETRY_DELAY_MS)
+        if (!delayed) {
+            if (audioFocusRetryCount < MAX_AUDIO_FOCUS_RETRIES) {
+                audioFocusRetryCount += 1
+                mainHandler.postDelayed(audioFocusRetryRunnable, AUDIO_FOCUS_RETRY_DELAY_MS)
+            } else {
+                // Out of retries: stop waiting, so only an explicit play restarts the track.
+                trackAwaitingAudioFocus = null
+            }
         }
     }
 

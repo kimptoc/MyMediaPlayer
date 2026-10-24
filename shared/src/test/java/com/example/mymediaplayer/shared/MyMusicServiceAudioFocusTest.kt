@@ -10,6 +10,7 @@ import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -93,10 +94,14 @@ class MyMusicServiceAudioFocusTest {
         idle()
         idleFor(Duration.ofSeconds(60))
 
-        assertNull(getField("mediaPlayer"))
+        assertFalse(service.isAwaitingAudioFocus())
         assertEquals(PlaybackStateCompat.STATE_PAUSED, playbackState())
 
+        // Retries have stopped: focus becoming available doesn't start anything by itself.
         setFocusResponse(AudioManager.AUDIOFOCUS_REQUEST_GRANTED)
+        idleFor(Duration.ofSeconds(30))
+        assertNull(getField("mediaPlayer"))
+
         getCallback().onPlay()
         idle()
 
@@ -134,6 +139,23 @@ class MyMusicServiceAudioFocusTest {
 
         assertFalse(service.isAwaitingAudioFocus())
         assertNull(getField("mediaPlayer"))
+    }
+
+    @Test
+    fun pauseWhileResumeAwaitsDelayedFocus_abandonsRequest() {
+        val player = MediaPlayer()
+        player.setDataSource(service, Uri.parse(song1.uriString))
+        player.prepare()
+        setField("mediaPlayer", player)
+        setFocusResponse(AudioManager.AUDIOFOCUS_REQUEST_DELAYED)
+
+        getCallback().onPlay()
+        assertFalse(player.isPlaying)
+
+        getCallback().onPause()
+
+        assertNotNull(shadowOf(audioManager).lastAbandonedAudioFocusRequest)
+        assertNull(getField("audioFocusRequest"))
     }
 
     private fun setFocusResponse(response: Int) {

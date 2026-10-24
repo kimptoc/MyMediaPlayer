@@ -20,6 +20,9 @@ class MyMusicServicePlaybackErrorTest {
     @Before
     fun setup() {
         EncryptedPrefsManager.clearCacheForTesting()
+        // The service caches its prefs statically; without this, a repeat mode saved by one
+        // test is restored by the next.
+        MyMusicService.clearPrefsCacheForTesting()
     }
 
     // When the consecutive-error budget is exhausted, Android Auto must see STATE_ERROR
@@ -97,6 +100,33 @@ class MyMusicServicePlaybackErrorTest {
         service.handlePlaybackError("last track failed")
 
         assertEquals(0, getQueueIndex(service))
+    }
+
+    // #518: a second error wrap with no track played through in between stops instead of
+    // looping, so a queue where every track fails can't cycle forever.
+    @Test
+    fun handlePlaybackError_repeatAllWithoutCompletedTrack_doesNotWrapAgain() {
+        val service = Robolectric.buildService(MyMusicService::class.java).create().get()
+        service.mediaCacheService.addFile(
+            MediaFileInfo(uriString = "content://test/1", displayName = "a.mp3", sizeBytes = 1L)
+        )
+        service.mediaCacheService.addFile(
+            MediaFileInfo(uriString = "content://test/2", displayName = "b.mp3", sizeBytes = 1L)
+        )
+        setPlaylistQueue(service, service.mediaCacheService.cachedFiles)
+        setQueueIndex(service, 1)
+        val repeatField = MyMusicService::class.java.getDeclaredField("repeatMode")
+        repeatField.isAccessible = true
+        repeatField.setInt(service, PlaybackStateCompat.REPEAT_MODE_ALL)
+        val wrapField = MyMusicService::class.java.getDeclaredField("trackCompletedSinceErrorWrap")
+        wrapField.isAccessible = true
+        wrapField.setBoolean(service, false)
+
+        service.handlePlaybackError("last track failed again")
+
+        assertEquals(1, getQueueIndex(service))
+        val state = MediaControllerCompat(service, service.sessionToken!!).playbackState?.state
+        assertEquals(PlaybackStateCompat.STATE_ERROR, state)
     }
 
     private fun setConsecutiveErrors(service: MyMusicService, count: Int) {
