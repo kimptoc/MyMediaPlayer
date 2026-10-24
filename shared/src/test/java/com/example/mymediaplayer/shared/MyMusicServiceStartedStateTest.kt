@@ -1,6 +1,8 @@
 package com.example.mymediaplayer.shared
 
+import android.app.Service
 import android.content.ComponentName
+import android.content.Intent
 import android.net.Uri
 import android.os.Looper
 import org.junit.Assert.assertEquals
@@ -52,26 +54,49 @@ class MyMusicServiceStartedStateTest {
         }
     }
 
+    // Robolectric doesn't destroy a service when its last client unbinds, so these tests check
+    // the started state that prevents it; the unbind itself was checked on a device.
     @Test
     fun playing_startsTheService() {
-        service.playProvidedUriListForTesting(songs.map { it.uriString }, shuffle = false, queueTitle = "Test list")
-        idle()
+        play()
 
         val started = shadowOf(RuntimeEnvironment.getApplication()).nextStartedService
         assertNotNull("playing must start the service so unbinding doesn't destroy it", started)
         assertEquals(ComponentName(service, MyMusicService::class.java), started.component)
+        assertEquals(MyMusicService.ACTION_KEEP_ALIVE, started.action)
         assertFalse(shadowOf(service).isStoppedBySelf)
     }
 
     @Test
-    fun stopping_releasesTheStartedService() {
-        service.playProvidedUriListForTesting(songs.map { it.uriString }, shuffle = false, queueTitle = "Test list")
+    fun keepAliveStart_isNotSticky() {
+        val intent = Intent(service, MyMusicService::class.java).setAction(MyMusicService.ACTION_KEEP_ALIVE)
+
+        assertEquals(Service.START_NOT_STICKY, service.onStartCommand(intent, 0, 1))
+    }
+
+    @Test
+    fun playbackGivingUpOnErrors_releasesTheStartedService() {
+        play()
+
+        service.handlePlaybackErrorForTesting("broken file")
         idle()
+
+        assertTrue(shadowOf(service).isStoppedBySelf)
+    }
+
+    @Test
+    fun stopping_releasesTheStartedService() {
+        play()
 
         service.handleStopForTesting()
         idle()
 
         assertTrue(shadowOf(service).isStoppedBySelf)
+    }
+
+    private fun play() {
+        service.playProvidedUriListForTesting(songs.map { it.uriString }, shuffle = false, queueTitle = "Test list")
+        idle()
     }
 
     private fun idle() {

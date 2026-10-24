@@ -130,6 +130,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
         private const val ACTION_SET_MEDIA_FILES = "SET_MEDIA_FILES"
         private const val ACTION_REFRESH_LIBRARY = "REFRESH_LIBRARY"
+        @VisibleForTesting
+        internal const val ACTION_KEEP_ALIVE = "KEEP_ALIVE"
         private const val ACTION_SET_PLAYLISTS = "SET_PLAYLISTS"
         private const val ACTION_PLAY_SEARCH_LIST = "PLAY_SEARCH_LIST"
         private const val ACTION_PLAY_UI_LIST = "PLAY_UI_LIST"
@@ -856,7 +858,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
     // startForeground(), so starting from the background is allowed.
     private fun ensureStartedService() {
         if (isStartedService) return
-        runCatching { startService(Intent(this, MyMusicService::class.java)) }
+        runCatching { startService(Intent(this, MyMusicService::class.java).setAction(ACTION_KEEP_ALIVE)) }
             .onSuccess { isStartedService = true }
             .onFailure { Log.w("MyMusicService", "Failed to start service", it) }
     }
@@ -896,6 +898,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Not sticky: if the process is killed there's no playback to come back to.
+        if (intent?.action == ACTION_KEEP_ALIVE) return START_NOT_STICKY
         if (intent?.action == ACTION_BT_AUTOPLAY) {
             session.controller.transportControls.play()
             return START_NOT_STICKY
@@ -2257,6 +2261,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
             Log.w("MyMusicService", "Too many consecutive playback errors, stopping recovery")
             updatePlaybackState(PlaybackStateCompat.STATE_ERROR, errorMessage = message)
             teardownPlayer()
+            releaseStartedService()
             consecutivePlaybackErrors = 0
             return
         }
@@ -2269,6 +2274,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         Log.w("MyMusicService", "Unable to recover playback error: $message")
         updatePlaybackState(PlaybackStateCompat.STATE_ERROR, errorMessage = message)
         teardownPlayer()
+        releaseStartedService()
         consecutivePlaybackErrors = 0
     }
 
@@ -3535,7 +3541,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 else -> {
                     stopForeground(STOP_FOREGROUND_REMOVE)
                     notificationManager.cancel(NOW_PLAYING_NOTIFICATION_ID)
-                    // ERROR is left started: error recovery may go on to the next track.
+                    // Not on ERROR: a failed request (e.g. an unknown playlist) can report it while
+                    // a song is still playing. handlePlaybackError releases when it gives up.
                     if (state == PlaybackStateCompat.STATE_STOPPED) releaseStartedService()
                 }
             }
@@ -3756,6 +3763,12 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
     @VisibleForTesting
     internal fun handlePlayForTesting() = callback.onPlay()
+
+    @VisibleForTesting
+    internal fun handlePlaybackErrorForTesting(message: String) {
+        consecutivePlaybackErrors = MAX_CONSECUTIVE_PLAYBACK_ERRORS
+        handlePlaybackError(message)
+    }
 
     @VisibleForTesting
     internal fun handleStopForTesting() = handleStop()
