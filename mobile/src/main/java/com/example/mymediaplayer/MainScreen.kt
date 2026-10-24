@@ -2,6 +2,7 @@ package com.example.mymediaplayer
 
 import android.graphics.Bitmap
 import android.os.SystemClock
+import android.support.v4.media.session.PlaybackStateCompat
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -466,6 +467,7 @@ fun MainScreen(
         onPrev = onPrev,
         onNext = onNext,
         onToggleFlag = onToggleFlag,
+        onToggleRepeat = onToggleRepeat,
         showQueueDialog = showQueueDialog,
         setShowQueueDialog = setShowQueueDialog,
         onQueueItemSelected = onQueueItemSelected
@@ -2282,11 +2284,13 @@ fun ExpandedNowPlayingDialog(
     hasNext: Boolean,
     isPlayingPlaylist: Boolean,
     isFlagged: Boolean = false,
+    repeatMode: Int = PlaybackStateCompat.REPEAT_MODE_NONE,
     onSeekTo: (Long) -> Unit,
     onPlayPause: () -> Unit,
     onPrev: () -> Unit,
     onNext: () -> Unit,
     onToggleFlag: () -> Unit = {},
+    onToggleRepeat: () -> Unit = {},
     onDismiss: () -> Unit
 ) {
     val now = SystemClock.elapsedRealtime()
@@ -2404,12 +2408,40 @@ fun ExpandedNowPlayingDialog(
                         )
                     }
                 }
+                TextButton(onClick = onToggleRepeat) {
+                    Text(
+                        repeatModeLabel(repeatMode),
+                        color = if (isRepeatActive(repeatMode)) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    )
+                }
             }
         },
         confirmButton = {
             TextButton(onClick = onDismiss) { Text("Close") }
         }
     )
+}
+
+/** Cycles the phone's repeat button: Off → All → One → Off. */
+internal fun nextRepeatMode(currentMode: Int): Int = when (currentMode) {
+    PlaybackStateCompat.REPEAT_MODE_ALL, PlaybackStateCompat.REPEAT_MODE_GROUP -> PlaybackStateCompat.REPEAT_MODE_ONE
+    PlaybackStateCompat.REPEAT_MODE_ONE -> PlaybackStateCompat.REPEAT_MODE_NONE
+    else -> PlaybackStateCompat.REPEAT_MODE_ALL
+}
+
+internal fun isRepeatActive(repeatMode: Int): Boolean =
+    repeatMode == PlaybackStateCompat.REPEAT_MODE_ALL ||
+        repeatMode == PlaybackStateCompat.REPEAT_MODE_GROUP ||
+        repeatMode == PlaybackStateCompat.REPEAT_MODE_ONE
+
+internal fun repeatModeLabel(repeatMode: Int): String = when {
+    !isRepeatActive(repeatMode) -> "Repeat: Off"
+    repeatMode == PlaybackStateCompat.REPEAT_MODE_ONE -> "Repeat: One"
+    else -> "Repeat: All"
 }
 
 internal fun formatPlaybackDuration(durationMs: Long): String {

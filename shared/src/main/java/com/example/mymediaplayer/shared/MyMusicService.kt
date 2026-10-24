@@ -481,9 +481,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }
 
         override fun onSetRepeatMode(repeatMode: Int) {
-            this@MyMusicService.repeatMode = repeatMode
-            session.setRepeatMode(repeatMode)
-            savePlaybackSnapshot()
+            applyRepeatMode(repeatMode)
         }
 
         override fun onSeekTo(pos: Long) {
@@ -821,6 +819,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         playlistQueue = if (shuffle) list.shuffled() else list
         currentQueueIndex = 0
         currentPlaylistName = queueTitle
+        resetRepeatOneForNewQueue()
         updateSessionQueue()
         playTrack(playlistQueue[currentQueueIndex])
     }
@@ -2534,6 +2533,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         currentPlaylistName = playlistInfo?.displayName?.removeSuffix(".m3u")
             ?: Uri.parse(playlistUriToRead).lastPathSegment?.removeSuffix(".m3u")
             ?: "Playlist"
+        resetRepeatOneForNewQueue()
         updateSessionQueue()
         playTrack(playlistQueue[currentQueueIndex])
         savePlaybackSnapshot()
@@ -2549,6 +2549,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         playlistQueue = playlistTracks
         currentQueueIndex = 0
         currentPlaylistName = smartPlaylistTitleFromId(smartId)
+        resetRepeatOneForNewQueue()
         updateSessionQueue()
         playTrack(playlistQueue[currentQueueIndex])
         savePlaybackSnapshot()
@@ -2601,6 +2602,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 currentPlaylistName = null
             } else {
                 currentPlaylistName = getPlaylistNameForSingleItem(parentId, searchList.isNotEmpty(), listFromParent.isEmpty())
+                // Tapping a song in an album or list starts a whole new queue from it.
+                if (playlistQueue.size > 1) resetRepeatOneForNewQueue()
             }
         } else {
             playlistQueue = emptyList()
@@ -2746,6 +2749,23 @@ class MyMusicService : MediaBrowserServiceCompat() {
         playQueueAndSaveSnapshot(matches, wantsShuffle, finalPlaylistName)
     }
 
+    /**
+     * Repeat One is saved between sessions and can be switched on from the car without the
+     * phone showing it, so a fresh shuffle or Play All would otherwise replay its first song
+     * forever (#519). Repeat All is kept because it still plays the whole new queue.
+     */
+    private fun resetRepeatOneForNewQueue() {
+        if (repeatMode == PlaybackStateCompat.REPEAT_MODE_ONE) {
+            applyRepeatMode(PlaybackStateCompat.REPEAT_MODE_NONE)
+        }
+    }
+
+    private fun applyRepeatMode(mode: Int) {
+        repeatMode = mode
+        session.setRepeatMode(mode)
+        savePlaybackSnapshot()
+    }
+
     private fun playQueueAndSaveSnapshot(
         tracks: List<MediaFileInfo>,
         wantsShuffle: Boolean,
@@ -2754,6 +2774,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         playlistQueue = if (wantsShuffle) tracks.shuffled() else tracks
         currentQueueIndex = 0
         currentPlaylistName = playlistName
+        resetRepeatOneForNewQueue()
         updateSessionQueue()
         playTrack(playlistQueue[currentQueueIndex])
         savePlaybackSnapshot()
@@ -3657,6 +3678,13 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
     @VisibleForTesting
     internal suspend fun handlePlaySingleItemForTesting(mediaId: String) = handlePlaySingleItem(mediaId)
+
+    @VisibleForTesting
+    internal suspend fun handlePlaySmartPlaylistForTesting(smartId: String) =
+        handlePlaySmartPlaylist(SMART_PLAYLIST_PREFIX + smartId)
+
+    @VisibleForTesting
+    internal fun setRepeatModeForTesting(mode: Int) = applyRepeatMode(mode)
 
     @VisibleForTesting
     internal fun queuePreservationGuardWouldFire(mediaId: String): Boolean =

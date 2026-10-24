@@ -516,12 +516,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun toggleRepeatMode(currentMode: Int) {
-        val nextMode = when (currentMode) {
-            PlaybackStateCompat.REPEAT_MODE_ALL -> PlaybackStateCompat.REPEAT_MODE_ONE
-            PlaybackStateCompat.REPEAT_MODE_ONE -> PlaybackStateCompat.REPEAT_MODE_NONE
-            else -> PlaybackStateCompat.REPEAT_MODE_ALL
-        }
-        mediaController?.transportControls?.setRepeatMode(nextMode)
+        mediaController?.transportControls?.setRepeatMode(nextRepeatMode(currentMode))
     }
 
     private fun skipToQueueItem(queueId: Long) {
