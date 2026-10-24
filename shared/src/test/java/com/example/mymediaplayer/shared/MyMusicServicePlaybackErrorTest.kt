@@ -1,5 +1,6 @@
 package com.example.mymediaplayer.shared
 
+import android.net.Uri
 import android.support.v4.media.session.MediaControllerCompat
 import android.support.v4.media.session.PlaybackStateCompat
 import org.junit.Assert.assertEquals
@@ -9,6 +10,8 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowMediaPlayer
+import org.robolectric.shadows.util.DataSource
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
@@ -65,6 +68,35 @@ class MyMusicServicePlaybackErrorTest {
         // The queue index advanced, proving the advance branch was taken (not error-state path)
         val queueIndex = getQueueIndex(service)
         assertEquals(1, queueIndex)
+    }
+
+    // #518: with Repeat All, a failure on the last track wraps to the start like a normal
+    // completion would, instead of stopping playback.
+    @Test
+    fun handlePlaybackError_onLastTrackWithRepeatAll_wrapsToStart() {
+        val service = Robolectric.buildService(MyMusicService::class.java).create().get()
+        service.mediaCacheService.addFile(
+            MediaFileInfo(uriString = "content://test/1", displayName = "a.mp3", sizeBytes = 1L)
+        )
+        service.mediaCacheService.addFile(
+            MediaFileInfo(uriString = "content://test/2", displayName = "b.mp3", sizeBytes = 1L)
+        )
+        setPlaylistQueue(service, service.mediaCacheService.cachedFiles)
+        setQueueIndex(service, 1)
+        // Register the files so the wrapped-to track loads instead of failing in turn.
+        listOf("content://test/1", "content://test/2").forEach { uri ->
+            ShadowMediaPlayer.addMediaInfo(
+                DataSource.toDataSource(service, Uri.parse(uri)),
+                ShadowMediaPlayer.MediaInfo(1000, 0)
+            )
+        }
+        val repeatField = MyMusicService::class.java.getDeclaredField("repeatMode")
+        repeatField.isAccessible = true
+        repeatField.setInt(service, PlaybackStateCompat.REPEAT_MODE_ALL)
+
+        service.handlePlaybackError("last track failed")
+
+        assertEquals(0, getQueueIndex(service))
     }
 
     private fun setConsecutiveErrors(service: MyMusicService, count: Int) {
