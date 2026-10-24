@@ -285,6 +285,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
     private var currentQueueIndex: Int = -1
     private var currentPlaylistName: String? = null
     private var pendingQueueRestoreUris: List<String>? = null
+    private var isStartedService = false
     private var repeatMode: Int = PlaybackStateCompat.REPEAT_MODE_NONE
     private var pendingResumePositionMs: Long? = null
     private var resumeOnAudioFocusGain: Boolean = false
@@ -847,6 +848,23 @@ class MyMusicService : MediaBrowserServiceCompat() {
         if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL) {
             mediaCacheService.trimMemory()
         }
+    }
+
+    // A service that is only bound is destroyed as soon as its last client unbinds, which the
+    // phone app does whenever rotation recreates its activity (#516). Starting ourselves while
+    // playing keeps the player alive across that; stopping releases it again. Called after
+    // startForeground(), so starting from the background is allowed.
+    private fun ensureStartedService() {
+        if (isStartedService) return
+        runCatching { startService(Intent(this, MyMusicService::class.java)) }
+            .onSuccess { isStartedService = true }
+            .onFailure { Log.w("MyMusicService", "Failed to start service", it) }
+    }
+
+    private fun releaseStartedService() {
+        if (!isStartedService) return
+        isStartedService = false
+        stopSelf()
     }
 
     override fun onDestroy() {
@@ -3508,6 +3526,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
             when (state) {
                 PlaybackStateCompat.STATE_PLAYING -> {
                     startForeground(NOW_PLAYING_NOTIFICATION_ID, notification)
+                    ensureStartedService()
                 }
                 PlaybackStateCompat.STATE_PAUSED -> {
                     stopForeground(STOP_FOREGROUND_DETACH)
@@ -3516,6 +3535,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 else -> {
                     stopForeground(STOP_FOREGROUND_REMOVE)
                     notificationManager.cancel(NOW_PLAYING_NOTIFICATION_ID)
+                    // ERROR is left started: error recovery may go on to the next track.
+                    if (state == PlaybackStateCompat.STATE_STOPPED) releaseStartedService()
                 }
             }
         }.onFailure {
