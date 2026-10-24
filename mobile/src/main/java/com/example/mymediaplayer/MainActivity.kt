@@ -277,11 +277,15 @@ class MainActivity : ComponentActivity() {
         refreshBluetoothState()
         maybeRequestPostNotifications()
 
-        restoreLastTreeUri()
+        // The ViewModel keeps its library across rotation; reloading it would reset the library
+        // view and re-announce the cache load (#516).
+        if (needsLibraryRestore(viewModel.uiState.value.scan)) restoreLastTreeUri()
         showPlaylistSaveFolderPrompt.value = !hasValidPlaylistSaveFolder()
 
         setupMediaBrowser()
-        handleIncomingIntent(intent)
+        // A recreated activity gets its launch intent again; acting on it would replay
+        // e.g. a voice search and restart playback.
+        if (savedInstanceState == null) handleIncomingIntent(intent)
 
         observeViewModel()
 
@@ -1243,3 +1247,7 @@ class MainActivity : ComponentActivity() {
     }
 
 }
+
+/** Whether the activity must reload the saved library, i.e. its ViewModel doesn't hold one yet. */
+internal fun needsLibraryRestore(scan: ScanState): Boolean =
+    !scan.isScanning && scan.scannedFiles.isEmpty()
