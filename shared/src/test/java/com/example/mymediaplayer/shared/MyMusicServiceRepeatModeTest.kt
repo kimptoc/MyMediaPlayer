@@ -118,15 +118,7 @@ class MyMusicServiceRepeatModeTest {
 
     /** The service path behind the phone's Play/Shuffle buttons (ACTION_PLAY_UI_LIST). */
     private fun playUiList(shuffle: Boolean) {
-        val method = MyMusicService::class.java.getDeclaredMethod(
-            "playProvidedUriList",
-            List::class.java,
-            Boolean::class.javaPrimitiveType,
-            String::class.java,
-            Boolean::class.javaPrimitiveType
-        )
-        method.isAccessible = true
-        method.invoke(service, songs.map { it.uriString }, shuffle, "Test list", false)
+        service.playProvidedUriListForTesting(songs.map { it.uriString }, shuffle, "Test list")
         idle()
     }
 
