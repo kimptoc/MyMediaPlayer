@@ -160,4 +160,38 @@ class ApiKeyStoreTest {
         val expectedErrorTts = ApiKeyStore.ValidationResult.Error("Connection failed: No internet connection")
         assertEquals(Pair(expectedErrorKilo, expectedErrorTts), result)
     }
+
+    @Test
+    fun validateGeminiKey_withSuccessfulResponse_returnsSuccess() = runBlocking {
+        ApiKeyStore.testInterceptor = okhttp3.Interceptor { chain ->
+            okhttp3.Response.Builder()
+                .request(chain.request())
+                .protocol(okhttp3.Protocol.HTTP_1_1)
+                .code(200)
+                .message("OK")
+                .body("{}".toResponseBody("application/json".toMediaTypeOrNull()))
+                .build()
+        }
+
+        val result = ApiKeyStore.validateGeminiKey("fake_gemini_key")
+
+        assertEquals(ApiKeyStore.ValidationResult.Success, result)
+    }
+
+    @Test
+    fun validateGeminiKey_withFailedResponse_returnsError() = runBlocking {
+        ApiKeyStore.testInterceptor = okhttp3.Interceptor { chain ->
+            okhttp3.Response.Builder()
+                .request(chain.request())
+                .protocol(okhttp3.Protocol.HTTP_1_1)
+                .code(403)
+                .message("Forbidden")
+                .body("{}".toResponseBody("application/json".toMediaTypeOrNull()))
+                .build()
+        }
+
+        val result = ApiKeyStore.validateGeminiKey("fake_gemini_key")
+
+        assertEquals(ApiKeyStore.ValidationResult.Error("HTTP 403: API request failed"), result)
+    }
 }
