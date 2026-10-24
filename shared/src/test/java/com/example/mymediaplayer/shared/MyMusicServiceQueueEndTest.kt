@@ -5,6 +5,7 @@ import android.os.Looper
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -110,6 +111,27 @@ class MyMusicServiceQueueEndTest {
         assertNotEquals(lastSong, restarted.currentPlaylistQueue()[0])
     }
 
+    @Test
+    fun playAfterFinishedQueue_onColdStartBeforeCacheLoads_restartsQueue() = runBlocking {
+        playUiList(shuffle = false)
+        finishQueue()
+
+        // A fresh process whose library cache hasn't loaded yet, so the saved queue is
+        // still pending (#382).
+        MyMusicService.clearPrefsCacheForTesting()
+        val restarted = Robolectric.buildService(MyMusicService::class.java).create().get()
+        registerPlayableSongs(restarted)
+        restarted.restorePlaybackSnapshot()
+        assertTrue(restarted.hasPendingQueueRestore())
+
+        restarted.handlePlayForTesting()
+        idle()
+
+        assertEquals(songs.map { it.uriString }, restarted.currentPlaylistQueue().map { it.uriString })
+        assertEquals(0, restarted.currentQueueIndexForTesting())
+        assertEquals(songs[0].uriString, restarted.currentMediaIdForTesting())
+    }
+
     /** Puts the service where it ends up when the last song completes with repeat off. */
     private fun finishQueue() {
         service.setQueueIndexForTesting(service.currentPlaylistQueue().lastIndex)
@@ -119,15 +141,7 @@ class MyMusicServiceQueueEndTest {
 
     /** The service path behind the phone's Play/Shuffle buttons (ACTION_PLAY_UI_LIST). */
     private fun playUiList(shuffle: Boolean) {
-        val method = MyMusicService::class.java.getDeclaredMethod(
-            "playProvidedUriList",
-            List::class.java,
-            Boolean::class.javaPrimitiveType,
-            String::class.java,
-            Boolean::class.javaPrimitiveType
-        )
-        method.isAccessible = true
-        method.invoke(service, songs.map { it.uriString }, shuffle, "Test list", false)
+        service.playProvidedUriListForTesting(songs.map { it.uriString }, shuffle, "Test list")
         idle()
     }
 

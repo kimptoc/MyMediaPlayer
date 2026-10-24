@@ -62,6 +62,21 @@ class PlaybackQueueHelpersTest {
     }
 
     @Test
+    fun reshuffleForNewPass_withDuplicateOfLastPlayed_neverOpensWithIt() {
+        val queue = listOf(1, 2, 5, 3, 5)
+        repeat(200) { seed ->
+            val reshuffled = reshuffleForNewPass(queue, lastPlayed = 5, random = Random(seed))
+            assertEquals(queue.sorted(), reshuffled.sorted())
+            assertTrue("seed $seed opened with the last song", reshuffled[0] != 5)
+        }
+    }
+
+    @Test
+    fun reshuffleForNewPass_whenEverySongIsLastPlayed_keepsQueue() {
+        assertEquals(listOf(5, 5), reshuffleForNewPass(listOf(5, 5), lastPlayed = 5))
+    }
+
+    @Test
     fun reshuffleForNewPass_singleSongQueue() {
         assertEquals(listOf(7), reshuffleForNewPass(listOf(7), lastPlayed = 7))
         assertEquals(emptyList<Int>(), reshuffleForNewPass(emptyList(), lastPlayed = null))

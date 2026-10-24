@@ -32,9 +32,14 @@ internal fun shouldRetryPlaybackError(consecutiveErrors: Int, maxErrors: Int): B
  */
 internal fun <T> reshuffleForNewPass(queue: List<T>, lastPlayed: T?, random: Random = Random.Default): List<T> {
     val shuffled = queue.shuffled(random).toMutableList()
-    if (shuffled.size > 1 && shuffled[0] == lastPlayed) {
-        val swapWith = 1 + random.nextInt(shuffled.size - 1)
-        shuffled[0] = shuffled[swapWith].also { shuffled[swapWith] = shuffled[0] }
+    if (lastPlayed != null && shuffled.firstOrNull() == lastPlayed) {
+        // Swap with a different song, not just a different index, so a queue holding the
+        // same song twice still doesn't open with it.
+        val candidates = shuffled.indices.filter { shuffled[it] != lastPlayed }
+        if (candidates.isNotEmpty()) {
+            val swapWith = candidates[random.nextInt(candidates.size)]
+            shuffled[0] = shuffled[swapWith].also { shuffled[swapWith] = shuffled[0] }
+        }
     }
     return shuffled
 }

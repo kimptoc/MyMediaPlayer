@@ -376,9 +376,15 @@ class MyMusicService : MediaBrowserServiceCompat() {
         override fun onPlay() {
             Log.d("MyMusicService", "callback.onPlay()")
             resumeOnAudioFocusGain = false
-            if (mediaPlayer == null && queueFinished && playlistQueue.isNotEmpty()) {
-                restartFinishedQueue()
-                return
+            if (mediaPlayer == null && queueFinished) {
+                // On a cold start the finished queue may still be waiting for the library
+                // cache. Resolve it now so Play restarts it rather than replaying the last
+                // song; refreshQueueMetadata() fills in titles once the cache loads.
+                resolvePendingQueueIfNeeded()
+                if (playlistQueue.isNotEmpty()) {
+                    restartFinishedQueue()
+                    return
+                }
             }
             if (mediaPlayer == null) {
                 val resumeFromQueue =
@@ -3722,6 +3728,10 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
     @VisibleForTesting
     internal fun setRepeatModeForTesting(mode: Int) = applyRepeatMode(mode)
+
+    @VisibleForTesting
+    internal fun playProvidedUriListForTesting(uris: List<String>, shuffle: Boolean, queueTitle: String) =
+        playProvidedUriList(uris, shuffle, queueTitle, setSearchResults = false)
 
     @VisibleForTesting
     internal fun handlePlayForTesting() = callback.onPlay()
