@@ -104,6 +104,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
         private const val KEY_RESUME_QUEUE_TITLE = "resume_queue_title"
         private const val KEY_RESUME_POSITION_MS = "resume_position_ms"
         private const val KEY_RESUME_REPEAT_MODE = "resume_repeat_mode"
+        private const val KEY_RESUME_QUEUE_SHUFFLED = "resume_queue_shuffled"
+        private const val KEY_RESUME_QUEUE_FINISHED = "resume_queue_finished"
         private const val KEY_FAVORITE_URIS = "favorite_uris"
         private const val KEY_PLAY_COUNTS = "play_counts"
         private const val KEY_LAST_PLAYED_AT = "last_played_at"
@@ -293,6 +295,10 @@ class MyMusicService : MediaBrowserServiceCompat() {
     // the previous error wrap; otherwise a queue that fails everywhere would loop forever,
     // as a successful prepare resets consecutivePlaybackErrors.
     private var trackCompletedSinceErrorWrap: Boolean = true
+    // Whether the current queue was built shuffled, and whether it has played to its end,
+    // so Play after the end starts a new pass instead of replaying the last song (#517).
+    private var queueIsShuffled: Boolean = false
+    private var queueFinished: Boolean = false
     private val audioFocusRetryRunnable = Runnable {
         trackAwaitingAudioFocus?.let { startTrack(it) }
     }
@@ -370,6 +376,10 @@ class MyMusicService : MediaBrowserServiceCompat() {
         override fun onPlay() {
             Log.d("MyMusicService", "callback.onPlay()")
             resumeOnAudioFocusGain = false
+            if (mediaPlayer == null && queueFinished && playlistQueue.isNotEmpty()) {
+                restartFinishedQueue()
+                return
+            }
             if (mediaPlayer == null) {
                 val resumeFromQueue =
                     if (playlistQueue.isNotEmpty() && currentQueueIndex in playlistQueue.indices) {
@@ -446,6 +456,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     updateSessionQueue()
                     playTrack(playlistQueue[currentQueueIndex])
                 } else {
+                    queueFinished = true
                     handleStop()
                 }
                 return
@@ -817,6 +828,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         lastSearchQuery = null
         lastSearchResults = if (setSearchResults) list else emptyList()
         playlistQueue = if (shuffle) list.shuffled() else list
+        queueIsShuffled = shuffle
         currentQueueIndex = 0
         currentPlaylistName = queueTitle
         resetRepeatOneForNewQueue()
@@ -1831,6 +1843,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
     private fun playTrack(fileInfo: MediaFileInfo) {
         audioFocusRetryCount = 0
+        queueFinished = false
         startTrack(fileInfo)
     }
 
@@ -2264,6 +2277,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 updateSessionQueue()
                 playTrack(playlistQueue[currentQueueIndex])
             } else {
+                queueFinished = true
                 handleStop()
             }
         } else {
@@ -2529,6 +2543,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
             return
         }
         playlistQueue = playlistTracks
+        queueIsShuffled = false
         currentQueueIndex = 0
         currentPlaylistName = playlistInfo?.displayName?.removeSuffix(".m3u")
             ?: Uri.parse(playlistUriToRead).lastPathSegment?.removeSuffix(".m3u")
@@ -2547,6 +2562,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
             return
         }
         playlistQueue = playlistTracks
+        queueIsShuffled = false
         currentQueueIndex = 0
         currentPlaylistName = smartPlaylistTitleFromId(smartId)
         resetRepeatOneForNewQueue()
@@ -2595,6 +2611,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
         if (parentList.isNotEmpty()) {
             playlistQueue = parentList
+            queueIsShuffled = false
             currentQueueIndex = parentList.indexOfFirst { it.uriString == resolvedMediaId }
             if (currentQueueIndex < 0) {
                 playlistQueue = emptyList()
@@ -2760,6 +2777,23 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }
     }
 
+    /**
+     * Play after the queue has played to its end: start again from the first song, or for a
+     * shuffled queue, a fresh shuffle of the same songs (#517).
+     */
+    private fun restartFinishedQueue() {
+        pendingResumePositionMs = null
+        if (queueIsShuffled) {
+            playlistQueue = reshuffleForNewPass(
+                playlistQueue,
+                lastPlayed = playlistQueue.getOrNull(currentQueueIndex)
+            )
+        }
+        currentQueueIndex = 0
+        updateSessionQueue()
+        playTrack(playlistQueue[currentQueueIndex])
+    }
+
     private fun applyRepeatMode(mode: Int) {
         repeatMode = mode
         session.setRepeatMode(mode)
@@ -2772,6 +2806,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         playlistName: String
     ) {
         playlistQueue = if (wantsShuffle) tracks.shuffled() else tracks
+        queueIsShuffled = wantsShuffle
         currentQueueIndex = 0
         currentPlaylistName = playlistName
         resetRepeatOneForNewQueue()
@@ -3627,6 +3662,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
         val prefs = getPrefs(this@MyMusicService)
         repeatMode = prefs.getInt(KEY_RESUME_REPEAT_MODE, PlaybackStateCompat.REPEAT_MODE_NONE)
         session.setRepeatMode(repeatMode)
+        queueIsShuffled = prefs.getBoolean(KEY_RESUME_QUEUE_SHUFFLED, false)
+        queueFinished = prefs.getBoolean(KEY_RESUME_QUEUE_FINISHED, false)
 
         val queueUrisRaw = prefs.getString(KEY_RESUME_QUEUE_URIS, null).orEmpty()
         val queueUris = if (queueUrisRaw.isBlank()) {
@@ -3687,6 +3724,26 @@ class MyMusicService : MediaBrowserServiceCompat() {
     internal fun setRepeatModeForTesting(mode: Int) = applyRepeatMode(mode)
 
     @VisibleForTesting
+    internal fun handlePlayForTesting() = callback.onPlay()
+
+    @VisibleForTesting
+    internal fun handleStopForTesting() = handleStop()
+
+    @VisibleForTesting
+    internal fun onTrackCompletedForTesting() = onTrackCompleted()
+
+    @VisibleForTesting
+    internal fun currentQueueIndexForTesting(): Int = currentQueueIndex
+
+    @VisibleForTesting
+    internal fun currentMediaIdForTesting(): String? = currentMediaId
+
+    @VisibleForTesting
+    internal fun setQueueIndexForTesting(index: Int) {
+        currentQueueIndex = index
+    }
+
+    @VisibleForTesting
     internal fun queuePreservationGuardWouldFire(mediaId: String): Boolean =
         playlistQueue.isNotEmpty() &&
             currentQueueIndex in playlistQueue.indices &&
@@ -3701,6 +3758,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
             .putString(KEY_RESUME_MEDIA_URI, currentUri)
             .putLong(KEY_RESUME_POSITION_MS, position)
             .putInt(KEY_RESUME_REPEAT_MODE, repeatMode)
+            .putBoolean(KEY_RESUME_QUEUE_SHUFFLED, queueIsShuffled)
+            .putBoolean(KEY_RESUME_QUEUE_FINISHED, queueFinished)
         // While a queue restore is still pending (#382), playlistQueue is
         // deliberately empty — writing it now would permanently overwrite the
         // real saved queue still sitting in prefs before it's ever resolved
