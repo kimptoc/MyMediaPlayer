@@ -28,6 +28,21 @@ class PlaybackQueueHelpersTest {
     }
 
     @Test
+    fun nextQueueIndexForError_wrapsToStartWhenRepeatAll() {
+        assertEquals(0, nextQueueIndexForError(currentIndex = 2, queueSize = 3, repeatAll = true))
+    }
+
+    @Test
+    fun nextQueueIndexForError_repeatAllStillAdvancesMidQueue() {
+        assertEquals(2, nextQueueIndexForError(currentIndex = 1, queueSize = 3, repeatAll = true))
+    }
+
+    @Test
+    fun nextQueueIndexForError_repeatAllDoesNotRetrySingleTrack() {
+        assertEquals(null, nextQueueIndexForError(currentIndex = 0, queueSize = 1, repeatAll = true))
+    }
+
+    @Test
     fun shouldRetryPlaybackError_respectsLimit() {
         assertTrue(shouldRetryPlaybackError(consecutiveErrors = 0, maxErrors = 3))
         assertTrue(shouldRetryPlaybackError(consecutiveErrors = 2, maxErrors = 3))
