@@ -71,4 +71,17 @@ class MainScreenTest {
         assertEquals(PlaybackStateCompat.REPEAT_MODE_ONE, nextRepeatMode(PlaybackStateCompat.REPEAT_MODE_GROUP))
         assertEquals(PlaybackStateCompat.REPEAT_MODE_ALL, nextRepeatMode(PlaybackStateCompat.REPEAT_MODE_INVALID))
     }
+
+    @Test
+    fun isRepeatActive_matchesLabel() {
+        listOf(
+            PlaybackStateCompat.REPEAT_MODE_INVALID,
+            PlaybackStateCompat.REPEAT_MODE_NONE,
+            PlaybackStateCompat.REPEAT_MODE_ONE,
+            PlaybackStateCompat.REPEAT_MODE_ALL,
+            PlaybackStateCompat.REPEAT_MODE_GROUP
+        ).forEach { mode ->
+            assertEquals(repeatModeLabel(mode) != "Repeat: Off", isRepeatActive(mode))
+        }
+    }
 }

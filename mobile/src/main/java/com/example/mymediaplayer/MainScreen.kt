@@ -2411,10 +2411,10 @@ fun ExpandedNowPlayingDialog(
                 TextButton(onClick = onToggleRepeat) {
                     Text(
                         repeatModeLabel(repeatMode),
-                        color = if (repeatMode == PlaybackStateCompat.REPEAT_MODE_NONE) {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        } else {
+                        color = if (isRepeatActive(repeatMode)) {
                             MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
                         }
                     )
                 }
@@ -2433,10 +2433,15 @@ internal fun nextRepeatMode(currentMode: Int): Int = when (currentMode) {
     else -> PlaybackStateCompat.REPEAT_MODE_ALL
 }
 
-internal fun repeatModeLabel(repeatMode: Int): String = when (repeatMode) {
-    PlaybackStateCompat.REPEAT_MODE_ALL, PlaybackStateCompat.REPEAT_MODE_GROUP -> "Repeat: All"
-    PlaybackStateCompat.REPEAT_MODE_ONE -> "Repeat: One"
-    else -> "Repeat: Off"
+internal fun isRepeatActive(repeatMode: Int): Boolean =
+    repeatMode == PlaybackStateCompat.REPEAT_MODE_ALL ||
+        repeatMode == PlaybackStateCompat.REPEAT_MODE_GROUP ||
+        repeatMode == PlaybackStateCompat.REPEAT_MODE_ONE
+
+internal fun repeatModeLabel(repeatMode: Int): String = when {
+    !isRepeatActive(repeatMode) -> "Repeat: Off"
+    repeatMode == PlaybackStateCompat.REPEAT_MODE_ONE -> "Repeat: One"
+    else -> "Repeat: All"
 }
 
 internal fun formatPlaybackDuration(durationMs: Long): String {

@@ -1,6 +1,7 @@
 package com.example.mymediaplayer.shared
 
 import android.os.Looper
+import android.support.v4.media.session.MediaControllerCompat
 import android.support.v4.media.session.PlaybackStateCompat
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -21,6 +22,7 @@ import org.robolectric.annotation.Config
 class MyMusicServiceRepeatModeTest {
 
     private lateinit var service: MyMusicService
+    private lateinit var controller: MediaControllerCompat
 
     private val songs = (1..3).map {
         MediaFileInfo(
@@ -37,6 +39,7 @@ class MyMusicServiceRepeatModeTest {
         MyMusicService.clearPrefsCacheForTesting()
         service = Robolectric.buildService(MyMusicService::class.java).create().get()
         songs.forEach { service.mediaCacheService.addFile(it) }
+        controller = MediaControllerCompat(service, service.sessionToken!!)
     }
 
     @Test
@@ -45,7 +48,7 @@ class MyMusicServiceRepeatModeTest {
 
         playUiList(shuffle = true)
 
-        assertEquals(PlaybackStateCompat.REPEAT_MODE_NONE, repeatMode())
+        assertRepeatMode(PlaybackStateCompat.REPEAT_MODE_NONE)
     }
 
     @Test
@@ -54,7 +57,7 @@ class MyMusicServiceRepeatModeTest {
 
         playUiList(shuffle = false)
 
-        assertEquals(PlaybackStateCompat.REPEAT_MODE_NONE, repeatMode())
+        assertRepeatMode(PlaybackStateCompat.REPEAT_MODE_NONE)
     }
 
     @Test
@@ -63,23 +66,54 @@ class MyMusicServiceRepeatModeTest {
 
         playUiList(shuffle = true)
 
-        assertEquals(PlaybackStateCompat.REPEAT_MODE_ALL, repeatMode())
+        assertRepeatMode(PlaybackStateCompat.REPEAT_MODE_ALL)
     }
 
     @Test
-    fun playingSingleSong_withRepeatOne_keepsRepeatOne() = runBlocking {
+    fun smartPlaylist_withRepeatOne_turnsRepeatOff() = runBlocking {
+        setRepeatMode(PlaybackStateCompat.REPEAT_MODE_ONE)
+
+        service.handlePlaySmartPlaylistForTesting("recently_added")
+        idle()
+
+        assertRepeatMode(PlaybackStateCompat.REPEAT_MODE_NONE)
+    }
+
+    @Test
+    fun tappingSongThatStartsNewQueue_withRepeatOne_turnsRepeatOff() = runBlocking {
         setRepeatMode(PlaybackStateCompat.REPEAT_MODE_ONE)
 
         service.handlePlaySingleItemForTesting(songs[1].uriString)
         idle()
 
-        assertEquals(PlaybackStateCompat.REPEAT_MODE_ONE, repeatMode())
+        assertEquals(songs.size, service.currentPlaylistQueue().size)
+        assertRepeatMode(PlaybackStateCompat.REPEAT_MODE_NONE)
+    }
+
+    @Test
+    fun replayingCurrentSong_withRepeatOne_keepsRepeatOne() = runBlocking {
+        service.handlePlaySingleItemForTesting(songs[1].uriString)
+        idle()
+        setRepeatMode(PlaybackStateCompat.REPEAT_MODE_ONE)
+
+        // e.g. a Bluetooth reconnect re-sending the current track keeps the existing queue
+        service.handlePlaySingleItemForTesting(service.currentPlaylistQueue()[currentQueueIndex()].uriString)
+        idle()
+
+        assertRepeatMode(PlaybackStateCompat.REPEAT_MODE_ONE)
     }
 
     private fun setRepeatMode(mode: Int) {
-        val field = MyMusicService::class.java.getDeclaredField("repeatMode")
-        field.isAccessible = true
-        field.setInt(service, mode)
+        service.setRepeatModeForTesting(mode)
+        idle()
+        assertRepeatMode(mode)
+    }
+
+    /** Checks the mode controllers (phone, Android Auto) see and the one restored next session. */
+    private fun assertRepeatMode(expected: Int) {
+        assertEquals("session repeat mode", expected, controller.repeatMode)
+        val saved = MyMusicService.getPrefs(service).getInt("resume_repeat_mode", -1)
+        assertEquals("saved repeat mode", expected, saved)
     }
 
     /** The service path behind the phone's Play/Shuffle buttons (ACTION_PLAY_UI_LIST). */
@@ -96,8 +130,8 @@ class MyMusicServiceRepeatModeTest {
         idle()
     }
 
-    private fun repeatMode(): Int {
-        val field = MyMusicService::class.java.getDeclaredField("repeatMode")
+    private fun currentQueueIndex(): Int {
+        val field = MyMusicService::class.java.getDeclaredField("currentQueueIndex")
         field.isAccessible = true
         return field.getInt(service)
     }

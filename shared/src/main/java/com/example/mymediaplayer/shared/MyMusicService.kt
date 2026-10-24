@@ -442,9 +442,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }
 
         override fun onSetRepeatMode(repeatMode: Int) {
-            this@MyMusicService.repeatMode = repeatMode
-            session.setRepeatMode(repeatMode)
-            savePlaybackSnapshot()
+            applyRepeatMode(repeatMode)
         }
 
         override fun onSeekTo(pos: Long) {
@@ -2454,6 +2452,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 currentPlaylistName = null
             } else {
                 currentPlaylistName = getPlaylistNameForSingleItem(parentId, searchList.isNotEmpty(), listFromParent.isEmpty())
+                // Tapping a song in an album or list starts a whole new queue from it.
+                if (playlistQueue.size > 1) resetRepeatOneForNewQueue()
             }
         } else {
             playlistQueue = emptyList()
@@ -2606,9 +2606,14 @@ class MyMusicService : MediaBrowserServiceCompat() {
      */
     private fun resetRepeatOneForNewQueue() {
         if (repeatMode == PlaybackStateCompat.REPEAT_MODE_ONE) {
-            repeatMode = PlaybackStateCompat.REPEAT_MODE_NONE
-            session.setRepeatMode(repeatMode)
+            applyRepeatMode(PlaybackStateCompat.REPEAT_MODE_NONE)
         }
+    }
+
+    private fun applyRepeatMode(mode: Int) {
+        repeatMode = mode
+        session.setRepeatMode(mode)
+        savePlaybackSnapshot()
     }
 
     private fun playQueueAndSaveSnapshot(
@@ -3522,6 +3527,13 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
     @VisibleForTesting
     internal suspend fun handlePlaySingleItemForTesting(mediaId: String) = handlePlaySingleItem(mediaId)
+
+    @VisibleForTesting
+    internal suspend fun handlePlaySmartPlaylistForTesting(smartId: String) =
+        handlePlaySmartPlaylist(SMART_PLAYLIST_PREFIX + smartId)
+
+    @VisibleForTesting
+    internal fun setRepeatModeForTesting(mode: Int) = applyRepeatMode(mode)
 
     @VisibleForTesting
     internal fun queuePreservationGuardWouldFire(mediaId: String): Boolean =
