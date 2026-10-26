@@ -57,4 +57,15 @@ class AnnouncementPreGeneratorSanitizationTest {
 
         assertEquals("Bearer sk_test_123scriptalert1/scriptDROPTABLE", capturedAuthHeader)
     }
+
+    @Test
+    fun fetchKiloText_keepsTheDotsInAJwtKey() = runTest {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val preGen = AnnouncementPreGenerator(context, TestScope(this.testScheduler))
+        val jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyIn0.c2lnbmF0dXJlLXBhcnQ_-x"
+
+        preGen.fetchKiloText(title = "Test Title", artist = "Test Artist", isIntro = true, apiKey = " $jwt\n")
+
+        assertEquals("Bearer $jwt", capturedAuthHeader)
+    }
 }

@@ -375,7 +375,8 @@ internal class AnnouncementPreGenerator(
             "Radio outro for \"$title\" by $artistName. Include both artist and song. Max 8 words total. Examples: \"That was $title by $artistName\", \"Thanks for listening to $title\". Just the text, no quotes."
         }
 
-        val sanitizedKey = apiKey?.replace(Regex("[^A-Za-z0-9+/=\\-_]"), "")?.trim()
+        // Kilo keys are JWTs, whose three parts are joined by dots, so dots must survive.
+        val sanitizedKey = apiKey?.replace(Regex("[^A-Za-z0-9+/=.\\-_]"), "")?.trim()
         val isAnon = sanitizedKey.isNullOrBlank()
         val authHeader = if (isAnon) "Bearer anonymous" else "Bearer $sanitizedKey"
         val model = if (isAnon) "kilo/auto-free" else "anthropic/claude-sonnet-4-6"
