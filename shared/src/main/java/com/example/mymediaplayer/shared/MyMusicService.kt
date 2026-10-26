@@ -17,6 +17,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.os.SystemClock
 import android.provider.DocumentsContract
 import android.provider.MediaStore
@@ -236,6 +237,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
         // Upper bound on an intro/outro (cloud audio wait + speech) so a TTS engine that
         // never reports completion can't stall playback.
         private const val ANNOUNCEMENT_TIMEOUT_MS = 20_000L
+        // Safety net for the between-songs wake lock. The longest real gap is ~30s of audio-focus
+        // retries plus an intro, and each new track renews it.
+        private const val GAP_WAKE_LOCK_TIMEOUT_MS = 120_000L
         private const val TTS_SPEECH_RATE = 0.93f
         private const val TTS_PITCH = 1.04f
         internal const val ALBUM_ART_TARGET_SIZE_PX = 512
@@ -270,6 +274,17 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
     private lateinit var session: MediaSessionCompat
     private var mediaPlayer: MediaPlayer? = null
+
+    /**
+     * Keeps the CPU awake between songs, from one ending to the next starting, covering the
+     * outro, intro, audio-focus waits and prepare. While a song plays, [MediaPlayer.setWakeMode]
+     * does the job, so this is released then.
+     */
+    private val gapWakeLock: PowerManager.WakeLock by lazy {
+        (getSystemService(POWER_SERVICE) as PowerManager)
+            .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MyMediaPlayer:betweenSongs")
+            .apply { setReferenceCounted(false) }
+    }
     internal val mediaCacheService = MediaCacheService()
     private val playlistService = PlaylistService()
     private val playlistShortIds = mutableMapOf<String, String>() // shortId -> uriString
@@ -884,6 +899,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         cancelAudioFocusWait()
         cancelAnnouncementTimeout()
         releaseMediaPlayer()
+        releaseWakeLockBetweenSongs()
         abandonAudioFocus()
         synchronized(pendingResults) {
             pendingResults.clear()
@@ -1852,6 +1868,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                         .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
                         .build()
                 )
+                setWakeMode(this@MyMusicService, PowerManager.PARTIAL_WAKE_LOCK)
                 setDataSource(this@MyMusicService, uri)
                 setOnPreparedListener {
                     consecutivePlaybackErrors = 0
@@ -1867,6 +1884,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     maybeSpeakTrackIntroThenStart(enrichedFileInfo, this)
                 }
                 setOnCompletionListener {
+                    holdWakeLockBetweenSongs()
                     Log.d("MyMusicService", "Track completed: ${enrichedFileInfo.cleanTitle}, calling maybeSpeakTrackFinished")
                     maybeSpeakTrackFinishedThenAdvance(enrichedFileInfo)
                 }
@@ -1910,6 +1928,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
     /** Like [playTrack] but keeps the audio-focus retry count, for retries of the same track. */
     private fun startTrack(fileInfo: MediaFileInfo) {
+        holdWakeLockBetweenSongs()
         clearPendingIntro()
         cancelAudioFocusWait()
         releaseMediaPlayer()
@@ -1937,6 +1956,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 if (mediaPlayer !== preparedPlayer) return@post
                 runCatching {
                     preparedPlayer.start()
+                    releaseWakeLockBetweenSongs()
                     updatePlaybackState(PlaybackStateCompat.STATE_PLAYING)
                     savePlaybackSnapshot()
                 }.onFailure { error ->
@@ -2015,6 +2035,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                     .build()
             )
+            player.setWakeMode(this, PowerManager.PARTIAL_WAKE_LOCK)
             player.setDataSource(file.absolutePath)
             player.setOnCompletionListener {
                 releaseAnnouncementPlayer()
@@ -3159,7 +3180,20 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }
     }
 
+    private fun holdWakeLockBetweenSongs() {
+        runCatching { gapWakeLock.acquire(GAP_WAKE_LOCK_TIMEOUT_MS) }
+            .onFailure { Log.w("MyMusicService", "Could not hold wake lock between songs", it) }
+    }
+
+    private fun releaseWakeLockBetweenSongs() {
+        runCatching { if (gapWakeLock.isHeld) gapWakeLock.release() }
+    }
+
+    @VisibleForTesting
+    internal fun isGapWakeLockHeldForTesting(): Boolean = gapWakeLock.isHeld
+
     private fun teardownPlayer() {
+        releaseWakeLockBetweenSongs()
         resumeOnAudioFocusGain = false
         val lastPosition = currentPositionSafeMs()
         releaseMediaPlayer()
