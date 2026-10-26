@@ -51,6 +51,9 @@ internal class AnnouncementPreGenerator(
     companion object {
         private const val TAG = "AnnouncementPreGen"
         private const val KILO_MODEL_ANON = "kilo/auto-free"
+        /** Kilo's auto router picks a low-cost model, which is plenty for a one-line intro. */
+        @androidx.annotation.VisibleForTesting
+        internal const val KILO_MODEL_WITH_KEY = "kilo-auto/efficient"
         private const val READY_TIMEOUT_MS = 5000L
 
         /** How long to stop calling the Gemini API after it reports its quota is used up (429). */
@@ -379,7 +382,7 @@ internal class AnnouncementPreGenerator(
         val sanitizedKey = apiKey?.replace(Regex("[^A-Za-z0-9+/=.\\-_]"), "")?.trim()
         val isAnon = sanitizedKey.isNullOrBlank()
         val authHeader = if (isAnon) "Bearer anonymous" else "Bearer $sanitizedKey"
-        val model = if (isAnon) "kilo/auto-free" else "anthropic/claude-sonnet-4-6"
+        val model = if (isAnon) "kilo/auto-free" else KILO_MODEL_WITH_KEY
 
         try {
             val bodyString = JSONObject().apply {

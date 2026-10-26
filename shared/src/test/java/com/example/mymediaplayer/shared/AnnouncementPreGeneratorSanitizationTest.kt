@@ -21,11 +21,13 @@ import okhttp3.ResponseBody.Companion.toResponseBody
 class AnnouncementPreGeneratorSanitizationTest {
 
     private var capturedAuthHeader: String? = null
+    private var capturedBody: String? = null
 
     @Before
     fun setup() {
         AnnouncementPreGenerator.testInterceptor = okhttp3.Interceptor { chain ->
             capturedAuthHeader = chain.request().header("Authorization")
+            capturedBody = chain.request().body?.let { b -> okio.Buffer().also { b.writeTo(it) }.readUtf8() }
             okhttp3.Response.Builder()
                 .request(chain.request())
                 .protocol(okhttp3.Protocol.HTTP_1_1)
@@ -67,5 +69,15 @@ class AnnouncementPreGeneratorSanitizationTest {
         preGen.fetchKiloText(title = "Test Title", artist = "Test Artist", isIntro = true, apiKey = " $jwt\n")
 
         assertEquals("Bearer $jwt", capturedAuthHeader)
+    }
+
+    @Test
+    fun fetchKiloText_withKey_usesTheEfficientAutoModel() = runTest {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val preGen = AnnouncementPreGenerator(context, TestScope(this.testScheduler))
+
+        preGen.fetchKiloText(title = "Test Title", artist = "Test Artist", isIntro = true, apiKey = "key")
+
+        assertEquals("kilo-auto/efficient", org.json.JSONObject(capturedBody!!).getString("model"))
     }
 }
