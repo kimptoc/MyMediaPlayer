@@ -245,15 +245,8 @@ internal class AnnouncementPreGenerator(
             return Generated.Failed("no cloud TTS key")
         }
 
-        Log.d(TAG, "Calling Kilo API for: $title")
-        val textFromApi = fetchKiloText(title, artist, isIntro, kiloKey)
-        Log.d(TAG, "Kilo returned: $textFromApi")
-        val text = textFromApi ?: run {
-            val fallback = getStockPhrase(title, artist, isIntro)
-            Log.d(TAG, "Using stock phrase: $fallback")
-            fallback
-        }
-        Log.d(TAG, "Using text: $text")
+        val (text, lineSource) = fetchLine(title, artist, isIntro, geminiKey, kiloKey)
+        Log.d(TAG, "Using text from $lineSource: $text")
 
         Log.d(TAG, "Synthesising with backend=$backend")
         val failures = mutableListOf<String>()
@@ -262,7 +255,7 @@ internal class AnnouncementPreGenerator(
             TtsBackend.CLOUD_GEMINI -> synthesizeCloudGemini(text, ttsKey, failures)
             TtsBackend.GEMINI_API -> synthesizeWithGeminiApi(text, geminiKey, ttsKey, failures)
         }
-        return announcement?.let { Generated.Done(it) }
+        return announcement?.let { Generated.Done(it.copy(voice = "${it.voice}, line by $lineSource")) }
             ?: Generated.Failed(failures.joinToString("; ").ifEmpty { "no voice produced audio" })
     }
 
@@ -364,6 +357,82 @@ internal class AnnouncementPreGenerator(
         }
     }
 
+    /**
+     * Writes the announcement line and says who wrote it: Gemini when there is a Gemini key
+     * (a cheap text model whose quota is separate from the TTS model's), then Kilo, then a
+     * stock phrase.
+     */
+    @androidx.annotation.VisibleForTesting
+    internal suspend fun fetchLine(
+        title: String,
+        artist: String?,
+        isIntro: Boolean,
+        geminiKey: String?,
+        kiloKey: String?,
+    ): Pair<String, String> {
+        if (geminiKey != null) {
+            fetchGeminiText(title, artist, isIntro, geminiKey)?.let { return it to "Gemini" }
+        }
+        Log.d(TAG, "Calling Kilo API for: $title")
+        val kiloText = fetchKiloText(title, artist, isIntro, kiloKey)
+        Log.d(TAG, "Kilo returned: $kiloText")
+        if (kiloText != null) return kiloText to "Kilo"
+        return getStockPhrase(title, artist, isIntro) to "stock phrase"
+    }
+
+    private fun linePrompt(title: String, artist: String?, isIntro: Boolean): String {
+        val artistName = artist ?: "Unknown"
+        return if (isIntro) {
+            "Radio intro for \"$title\" by $artistName. Include both artist and song. Max 8 words total. Examples: \"Up next: $title by $artistName\", \"Here's $title from $artistName\". Just the text, no quotes."
+        } else {
+            "Radio outro for \"$title\" by $artistName. Include both artist and song. Max 8 words total. Examples: \"That was $title by $artistName\", \"Thanks for listening to $title\". Just the text, no quotes."
+        }
+    }
+
+    /** Asks Gemini's cheapest text model for the line; null if it fails, so Kilo can try. */
+    @androidx.annotation.VisibleForTesting
+    internal suspend fun fetchGeminiText(
+        title: String,
+        artist: String?,
+        isIntro: Boolean,
+        apiKey: String,
+    ): String? = withContext(Dispatchers.IO) {
+        try {
+            val body = JSONObject().apply {
+                put("contents", JSONArray().put(JSONObject().apply {
+                    put("parts", JSONArray().put(JSONObject().put("text", linePrompt(title, artist, isIntro))))
+                }))
+                put("generationConfig", JSONObject().apply {
+                    put("maxOutputTokens", 40)
+                    put("thinkingConfig", JSONObject().put("thinkingBudget", 0))
+                })
+            }.toString()
+            val request = Request.Builder()
+                .url(TtsModels.GEMINI_TEXT_URL)
+                .header("x-goog-api-key", apiKey)
+                .post(body.toRequestBody("application/json; charset=utf-8".toMediaType()))
+                .build()
+            val responseText = okHttpClient.newCall(request).awaitStringOrNull {
+                Log.w(TAG, "Gemini text HTTP ${it.code}: falling back to Kilo")
+            } ?: return@withContext null
+            val parts = JSONObject(responseText).optJSONArray("candidates")
+                ?.optJSONObject(0)?.optJSONObject("content")?.optJSONArray("parts")
+                ?: return@withContext null
+            val line = (0 until parts.length())
+                .mapNotNull { parts.optJSONObject(it)?.optString("text")?.takeIf { t -> t.isNotBlank() } }
+                .joinToString(" ")
+                .trim()
+                .trim('"')
+                .takeIf { it.isNotBlank() }
+            if (line == null) Log.w(TAG, "Gemini text returned no line: falling back to Kilo")
+            line
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.w(TAG, "Gemini text call failed: ${e.message}")
+            null
+        }
+    }
+
     @androidx.annotation.VisibleForTesting
     internal suspend fun fetchKiloText(
         title: String,
@@ -371,12 +440,7 @@ internal class AnnouncementPreGenerator(
         isIntro: Boolean,
         apiKey: String?,
     ): String? = withContext(Dispatchers.IO) {
-        val artistName = artist ?: "Unknown"
-        val prompt = if (isIntro) {
-            "Radio intro for \"$title\" by $artistName. Include both artist and song. Max 8 words total. Examples: \"Up next: $title by $artistName\", \"Here's $title from $artistName\". Just the text, no quotes."
-        } else {
-            "Radio outro for \"$title\" by $artistName. Include both artist and song. Max 8 words total. Examples: \"That was $title by $artistName\", \"Thanks for listening to $title\". Just the text, no quotes."
-        }
+        val prompt = linePrompt(title, artist, isIntro)
 
         // Kilo keys are JWTs, whose three parts are joined by dots, so dots must survive.
         val sanitizedKey = apiKey?.replace(Regex("[^A-Za-z0-9+/=.\\-_]"), "")?.trim()

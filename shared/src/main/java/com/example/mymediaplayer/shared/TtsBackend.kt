@@ -32,6 +32,11 @@ object TtsModels {
     const val CLOUD_TTS_GEMINI_MODEL = "gemini-2.5-flash-tts"
     const val GEMINI_VOICE = "Kore"
 
+    /** Cheapest Gemini text model, for writing the announcement line. */
+    const val GEMINI_TEXT_MODEL = "gemini-2.5-flash-lite"
+    const val GEMINI_TEXT_URL =
+        "https://generativelanguage.googleapis.com/v1beta/models/$GEMINI_TEXT_MODEL:generateContent"
+
     const val GEMINI_API_TTS_URL =
         "https://generativelanguage.googleapis.com/v1beta/models/$GEMINI_API_TTS_MODEL:generateContent"
 
