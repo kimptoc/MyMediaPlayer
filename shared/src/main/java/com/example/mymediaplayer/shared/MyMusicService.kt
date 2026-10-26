@@ -519,7 +519,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
             } else {
                 PlaybackStateCompat.STATE_PAUSED
             }
-            updatePlaybackState(state)
+            // seekTo is asynchronous, so currentPosition may still be the old position.
+            updatePlaybackState(state, positionMsOverride = clamped)
             savePlaybackSnapshot(positionMsOverride = clamped)
         }
 
@@ -1823,9 +1824,10 @@ class MyMusicService : MediaBrowserServiceCompat() {
         if (!trackVoiceIntroEnabled && !trackVoiceOutroEnabled) return
         val player = mediaPlayer ?: return
         val durationMs = runCatching { player.duration.toLong() }.getOrDefault(0L)
-        val delayMs = if (durationMs > 0L) {
-            (durationMs - positionMs - PRE_GENERATE_BEFORE_END_MS).coerceAtLeast(0L)
-        } else 0L
+        // Without a length there is no "near the end"; generating now would spend quota on a
+        // song that may be skipped. The announcement then falls back to on-device TTS.
+        if (durationMs <= 0L) return
+        val delayMs = (durationMs - positionMs - PRE_GENERATE_BEFORE_END_MS).coerceAtLeast(0L)
         mainHandler.postDelayed(endOfTrackPreGeneration, delayMs)
     }
 
@@ -3172,8 +3174,12 @@ class MyMusicService : MediaBrowserServiceCompat() {
         consecutivePlaybackErrors = 0
     }
 
-    private fun updatePlaybackState(state: Int, errorMessage: String? = null) {
-        val position = mediaPlayer?.currentPosition?.toLong() ?: 0L
+    private fun updatePlaybackState(
+        state: Int,
+        errorMessage: String? = null,
+        positionMsOverride: Long? = null,
+    ) {
+        val position = positionMsOverride ?: mediaPlayer?.currentPosition?.toLong() ?: 0L
         scheduleEndOfTrackPreGeneration(state, position)
         val speed = if (state == PlaybackStateCompat.STATE_PLAYING) 1f else 0f
         val playbackActions = resolvePlaybackActions(
@@ -3801,6 +3807,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
     @VisibleForTesting
     internal fun handleSkipToPreviousForTesting() = callback.onSkipToPrevious()
+
+    @VisibleForTesting
+    internal fun handleSeekToForTesting(positionMs: Long) = callback.onSeekTo(positionMs)
 
     @VisibleForTesting
     internal fun handlePlaybackErrorForTesting(message: String) {

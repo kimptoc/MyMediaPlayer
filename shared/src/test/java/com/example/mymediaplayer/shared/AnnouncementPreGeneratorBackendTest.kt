@@ -193,6 +193,16 @@ class AnnouncementPreGeneratorBackendTest {
     }
 
     @Test
+    fun cloudTts_emptyBody_recordsAnEmptyResponse() = runTest {
+        AnnouncementPreGenerator.testInterceptor = okhttp3.Interceptor { chain -> response(chain, 200, "") }
+        val generator = preGen(ApplicationProvider.getApplicationContext(), this.testScheduler)
+        val reasons = mutableListOf<String>()
+
+        assertNull(generator.fetchCloudGeminiTtsAudio("hi", "tts_key", onFailure = { reasons += it }))
+        assertEquals(listOf("empty response"), reasons)
+    }
+
+    @Test
     fun geminiApi_emptyAudioData_returnsFailed() = runTest {
         AnnouncementPreGenerator.testInterceptor = okhttp3.Interceptor { chain ->
             response(chain, 200, "{\"candidates\":[{\"content\":{\"parts\":[{\"inlineData\":{\"data\":\"\"}}]}}]}")

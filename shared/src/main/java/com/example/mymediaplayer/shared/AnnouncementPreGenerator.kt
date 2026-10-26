@@ -107,6 +107,9 @@ internal class AnnouncementPreGenerator(
     /** Until this [clock] time, the Gemini API is skipped because it reported its quota used up. */
     @Volatile private var geminiCooldownUntil = 0L
 
+    /** Until this [clock] time, Gemini isn't asked to write the line because its last call failed. */
+    @Volatile private var geminiTextCooldownUntil = 0L
+
     /**
      * Called when [current] starts. Its intro is needed straight away, so it is generated now
      * unless it was already made near the end of the previous track. Everything else is dropped.
@@ -371,7 +374,7 @@ internal class AnnouncementPreGenerator(
         geminiKey: String?,
         kiloKey: String?,
     ): Pair<String, String> {
-        if (geminiKey != null) {
+        if (geminiKey != null && clock() >= geminiTextCooldownUntil) {
             fetchGeminiText(title, artist, isIntro, geminiKey)?.let { return it to "Gemini" }
         }
         Log.d(TAG, "Calling Kilo API for: $title")
@@ -413,8 +416,10 @@ internal class AnnouncementPreGenerator(
                 .post(body.toRequestBody("application/json; charset=utf-8".toMediaType()))
                 .build()
             val responseText = okHttpClient.newCall(request).awaitStringOrNull {
+                // Whether quota, a bad key or a retired model, the next song would fail too.
+                geminiTextCooldownUntil = clock() + GEMINI_QUOTA_COOLDOWN_MS
                 val detail = runCatching { it.peekBody(300).string() }.getOrDefault("")
-                Log.w(TAG, "Gemini text HTTP ${it.code}: falling back to Kilo. $detail")
+                Log.w(TAG, "Gemini text HTTP ${it.code}: falling back to Kilo for ${GEMINI_QUOTA_COOLDOWN_MS / 1000}s. $detail")
             } ?: return@withContext null
             val parts = JSONObject(responseText).optJSONArray("candidates")
                 ?.optJSONObject(0)?.optJSONObject("content")?.optJSONArray("parts")
@@ -543,12 +548,15 @@ internal class AnnouncementPreGenerator(
                     .post(requestBody)
                     .build()
 
+                var httpFailed = false
                 val responseBody = okHttpClient.newCall(request).awaitStringOrNull {
+                    httpFailed = true
                     Log.w(TAG, "Cloud TTS API returned HTTP ${it.code}")
                     onFailure("HTTP ${it.code}")
                 }
                 if (responseBody.isNullOrBlank()) {
-                    if (responseBody != null) onFailure("empty response")
+                    // awaitStringOrNull gives null for both an HTTP error and an empty body.
+                    if (!httpFailed) onFailure("empty response")
                     return@runCatching null
                 }
 

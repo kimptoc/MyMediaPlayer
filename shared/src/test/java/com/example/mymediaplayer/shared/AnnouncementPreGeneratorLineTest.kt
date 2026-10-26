@@ -66,6 +66,30 @@ class AnnouncementPreGeneratorLineTest {
         assertTrue(text, text.contains("Song") && text.contains("Artist"))
     }
 
+    @Test
+    fun geminiFailing_isSkippedUntilTheCooldownEnds() = runTest {
+        respond(gemini = 429 to "{}", kilo = 200 to KILO_LINE)
+        var now = 1_000L
+        val generator = AnnouncementPreGenerator(
+            ApplicationProvider.getApplicationContext<Context>(),
+            TestScope(this.testScheduler),
+            clock = { now },
+        )
+        fun geminiCalls() = requestedUrls.count { it.contains("generativelanguage") }
+
+        generator.fetchLine("One", "Artist", isIntro = true, geminiKey = "g", kiloKey = "k")
+        now += AnnouncementPreGenerator.GEMINI_QUOTA_COOLDOWN_MS - 1
+        val duringCooldown = generator.fetchLine("Two", "Artist", isIntro = true, geminiKey = "g", kiloKey = "k")
+
+        assertEquals("a failing Gemini text call must not be repeated for every song", 1, geminiCalls())
+        assertEquals("Kilo", duringCooldown.second)
+
+        now += 2
+        generator.fetchLine("Three", "Artist", isIntro = true, geminiKey = "g", kiloKey = "k")
+
+        assertEquals("Gemini is tried again once the pause is over", 2, geminiCalls())
+    }
+
     private fun respond(gemini: Pair<Int, String>, kilo: Pair<Int, String>) {
         AnnouncementPreGenerator.testInterceptor = okhttp3.Interceptor { chain ->
             val url = chain.request().url.toString()

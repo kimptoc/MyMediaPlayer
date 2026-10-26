@@ -78,7 +78,28 @@ class MyMusicServiceAnnouncementSchedulingTest {
         assertEquals(setOf(songs[1].uriString to true), scheduled())
     }
 
-    private fun createService(intro: Boolean, outro: Boolean) {
+    @Test
+    fun unknownSongLength_doesNotGenerateStraightAway() {
+        createService(intro = false, outro = true, songMs = -1)
+        play()
+
+        idleFor(1_000)
+        assertEquals(emptySet<Pair<String, Boolean>>(), scheduled())
+    }
+
+    @Test
+    fun seekingNearTheEnd_timesGenerationFromTheNewPosition() {
+        createService(intro = false, outro = true)
+        play()
+        service.handleSeekToForTesting(SONG_MS - MyMusicService.PRE_GENERATE_BEFORE_END_MS - 5_000)
+        idleFor(4_000)
+        assertEquals(emptySet<Pair<String, Boolean>>(), scheduled())
+
+        idleFor(2_000)
+        assertEquals(setOf(songs[0].uriString to false), scheduled())
+    }
+
+    private fun createService(intro: Boolean, outro: Boolean, songMs: Long = SONG_MS) {
         EncryptedPrefsManager.clearCacheForTesting()
         MyMusicService.clearPrefsCacheForTesting()
         // Keeps generation off the real network: a failed ping counts as a poor connection.
@@ -93,7 +114,7 @@ class MyMusicServiceAnnouncementSchedulingTest {
             service.mediaCacheService.addFile(it)
             ShadowMediaPlayer.addMediaInfo(
                 DataSource.toDataSource(service, Uri.parse(it.uriString)),
-                ShadowMediaPlayer.MediaInfo(SONG_MS.toInt(), 0)
+                ShadowMediaPlayer.MediaInfo(songMs.toInt(), 0)
             )
         }
     }
