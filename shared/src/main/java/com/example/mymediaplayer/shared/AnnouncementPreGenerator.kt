@@ -23,6 +23,14 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.ConcurrentHashMap
 
+/** The debug message saying which voice an intro or outro ([kind]) used, or why it fell back. */
+internal fun announcementSourceMessage(kind: String, ready: AnnouncementPreGenerator.ReadyResult?): String =
+    when (ready) {
+        is AnnouncementPreGenerator.ReadyResult.Ready -> "Cloud $kind: ${ready.announcement.voice}"
+        is AnnouncementPreGenerator.ReadyResult.Unavailable -> "Android TTS $kind: ${ready.reason}"
+        null -> "Android TTS $kind: cloud voices not available"
+    }
+
 /**
  * Pre-generates announcement audio for upcoming track intros and outros while the current
  * song is playing, so there is no delay at track boundaries.
@@ -38,11 +46,20 @@ import java.util.concurrent.ConcurrentHashMap
 internal class AnnouncementPreGenerator(
     private val context: Context,
     private val scope: CoroutineScope,
+    private val clock: () -> Long = { android.os.SystemClock.elapsedRealtime() },
 ) {
     companion object {
         private const val TAG = "AnnouncementPreGen"
-        private const val KILO_MODEL_ANON = "kilo/auto-free"
+        /** Kilo's free auto router; the only kind of model Kilo serves without a key. */
+        private const val KILO_MODEL_ANON = "kilo-auto/free"
+        /** Kilo's auto router picks a low-cost model, which is plenty for a one-line intro. */
+        @androidx.annotation.VisibleForTesting
+        internal const val KILO_MODEL_WITH_KEY = "kilo-auto/efficient"
         private const val READY_TIMEOUT_MS = 5000L
+
+        /** How long to stop calling the Gemini API after it reports its quota is used up (429). */
+        @androidx.annotation.VisibleForTesting
+        internal const val GEMINI_QUOTA_COOLDOWN_MS = 60_000L
 
         private const val CLOUD_TTS_URL = "https://texttospeech.googleapis.com/v1/text:synthesize"
         private const val STANDARD_TTS_LANGUAGE = "en-US"
@@ -51,6 +68,9 @@ internal class AnnouncementPreGenerator(
 
         /** Gemini API TTS returns raw 16-bit little-endian PCM at 24 kHz, which we wrap as WAV. */
         private const val GEMINI_TTS_SAMPLE_RATE = 24000
+
+        private const val GEMINI_API_LABEL = "Gemini API"
+        private const val CLOUD_GEMINI_LABEL = "Cloud TTS Gemini voice"
 
         @androidx.annotation.VisibleForTesting
         internal var testInterceptor: okhttp3.Interceptor? = null
@@ -66,54 +86,93 @@ internal class AnnouncementPreGenerator(
 
     private data class CacheKey(val uri: String, val isIntro: Boolean)
 
-    private val cache = ConcurrentHashMap<CacheKey, Deferred<File?>>()
+    /** Announcement audio and the voice that made it. */
+    internal data class Announcement(val file: File, val voice: String)
+
+    /** Result of one generation: the audio, or why every voice failed. */
+    internal sealed interface Generated {
+        data class Done(val announcement: Announcement) : Generated
+        data class Failed(val reason: String) : Generated
+    }
+
+    /** What [getReadyAudio] found: the audio, or why the caller must use on-device TTS. */
+    internal sealed interface ReadyResult {
+        data class Ready(val announcement: Announcement) : ReadyResult
+        data class Unavailable(val reason: String) : ReadyResult
+    }
+
+    private val cache = ConcurrentHashMap<CacheKey, Deferred<Generated>>()
     private val networkChecker = NetworkQualityChecker(context)
 
-    /**
-     * Schedules background generation for:
-     *  - the outro of [current] (needed when [current] finishes)
-     *  - the intro of [next] (needed when [next] starts)
-     *
-     * Evicts any cached entries that are no longer needed to keep the cache small.
-     */
-    fun schedulePreGeneration(current: MediaFileInfo, next: MediaFileInfo?) {
-        scheduleOne(current, isIntro = true)
-        scheduleOne(current, isIntro = false)
-        if (next != null) scheduleOne(next, isIntro = true)
+    /** Until this [clock] time, the Gemini API is skipped because it reported its quota used up. */
+    @Volatile private var geminiCooldownUntil = 0L
 
-        val keysToKeep = setOfNotNull(
-            CacheKey(current.uriString, true),
-            CacheKey(current.uriString, false),
-            next?.let { CacheKey(it.uriString, true) },
-        )
-        evictExcept(keysToKeep)
+    /** Until this [clock] time, Gemini isn't asked to write the line because its last call failed. */
+    @Volatile private var geminiTextCooldownUntil = 0L
+
+    /**
+     * Called when [current] starts. Its intro is needed straight away, so it is generated now
+     * unless it was already made near the end of the previous track. Everything else is dropped.
+     */
+    fun prepareTrackStart(current: MediaFileInfo, introEnabled: Boolean) {
+        val introKey = CacheKey(current.uriString, true)
+        evictExcept(if (introEnabled) setOf(introKey) else emptySet())
+        if (introEnabled) scheduleOne(current, isIntro = true)
     }
 
     /**
-     * Returns the pre-generated audio [File] for [track], or null if it is not ready within
-     * [READY_TIMEOUT_MS] milliseconds or generation failed.  The caller should fall back to
-     * Android TTS when null is returned.
+     * Called shortly before [current] ends: generates its outro and the intro of [next], so a
+     * track that is skipped before then costs no requests.
      */
-    suspend fun getReadyAudio(track: MediaFileInfo, isIntro: Boolean): File? {
+    fun prepareTrackEnd(current: MediaFileInfo, next: MediaFileInfo?, introEnabled: Boolean, outroEnabled: Boolean) {
+        if (outroEnabled) scheduleOne(current, isIntro = false)
+        if (introEnabled && next != null) scheduleOne(next, isIntro = true)
+        evictExcept(
+            setOfNotNull(
+                CacheKey(current.uriString, true),
+                CacheKey(current.uriString, false),
+                next?.let { CacheKey(it.uriString, true) },
+            )
+        )
+    }
+
+    /** The (uri, isIntro) announcements currently generating or generated. */
+    @androidx.annotation.VisibleForTesting
+    internal fun scheduledForTesting(): Set<Pair<String, Boolean>> =
+        cache.keys.map { it.uri to it.isIntro }.toSet()
+
+    /**
+     * Returns the pre-generated audio for [track] if it is ready within [READY_TIMEOUT_MS], or
+     * the reason it isn't. The caller should fall back to Android TTS when it isn't ready.
+     */
+    suspend fun getReadyAudio(track: MediaFileInfo, isIntro: Boolean): ReadyResult {
         val key = CacheKey(track.uriString, isIntro)
         val deferred = cache[key]
         if (deferred == null) {
             Log.d(TAG, "No cached job for ${track.cleanTitle} (intro=$isIntro) - no cache entry")
-            return null
+            return ReadyResult.Unavailable("not generated")
         }
         if (!deferred.isCompleted) {
             Log.d(TAG, "Job not yet complete for ${track.cleanTitle} (intro=$isIntro)")
         }
         val startTime = System.currentTimeMillis()
-        return try {
-            withTimeout(READY_TIMEOUT_MS) { deferred.await() }.also {
-                val elapsed = System.currentTimeMillis() - startTime
-                Log.d(TAG, "Pre-generated audio ready in ${elapsed}ms for ${track.cleanTitle}")
-            }
+        val generated = try {
+            withTimeout(READY_TIMEOUT_MS) { deferred.await() }
         } catch (_: TimeoutCancellationException) {
             val elapsed = System.currentTimeMillis() - startTime
             Log.d(TAG, "Pre-generated audio timed out after ${elapsed}ms (timeout=${READY_TIMEOUT_MS}ms) for ${track.cleanTitle} — falling back to TTS")
-            null
+            return ReadyResult.Unavailable("cloud voice took over ${READY_TIMEOUT_MS / 1000}s")
+        }
+        val elapsed = System.currentTimeMillis() - startTime
+        return when (generated) {
+            is Generated.Done -> {
+                Log.d(TAG, "Pre-generated audio ready in ${elapsed}ms for ${track.cleanTitle} (voice=${generated.announcement.voice})")
+                ReadyResult.Ready(generated.announcement)
+            }
+            is Generated.Failed -> {
+                Log.d(TAG, "No pre-generated audio for ${track.cleanTitle}: ${generated.reason} — falling back to TTS")
+                ReadyResult.Unavailable(generated.reason)
+            }
         }
     }
 
@@ -123,7 +182,7 @@ internal class AnnouncementPreGenerator(
         cache.clear()
         entries.forEach { (_, deferred) ->
             if (deferred.isCompleted) {
-                deferred.getCompleted()?.let { runCatching { it.delete() } }
+                (deferred.getCompleted() as? Generated.Done)?.let { runCatching { it.announcement.file.delete() } }
             } else {
                 deferred.cancel()
             }
@@ -139,7 +198,12 @@ internal class AnnouncementPreGenerator(
         // Only start generation if there is no existing entry for this key.
         val deferred = scope.async(Dispatchers.IO, start = CoroutineStart.LAZY) {
             Log.d(TAG, "Starting cloud generation for: ${track.cleanTitle} (intro=$isIntro)")
-            generateAudio(track.cleanTitle, track.artist?.takeIf { it.isNotBlank() }, isIntro)
+            generateAudio(track.cleanTitle, track.artist?.takeIf { it.isNotBlank() }, isIntro).also {
+                when (it) {
+                    is Generated.Done -> Log.i(TAG, "Announcement for ${track.cleanTitle} (intro=$isIntro) made with ${it.announcement.voice}")
+                    is Generated.Failed -> Log.w(TAG, "No cloud announcement for ${track.cleanTitle} (intro=$isIntro): ${it.reason}")
+                }
+            }
         }
         if (cache.putIfAbsent(key, deferred) == null) {
             deferred.start()
@@ -154,7 +218,7 @@ internal class AnnouncementPreGenerator(
         toRemove.forEach { key ->
             cache.remove(key)?.let { deferred ->
                 if (deferred.isCompleted) {
-                    deferred.getCompleted()?.let { runCatching { it.delete() } }
+                    (deferred.getCompleted() as? Generated.Done)?.let { runCatching { it.announcement.file.delete() } }
                 } else {
                     deferred.cancel()
                 }
@@ -162,17 +226,17 @@ internal class AnnouncementPreGenerator(
         }
     }
 
-    private suspend fun generateAudio(title: String, artist: String?, isIntro: Boolean): File? {
+    private suspend fun generateAudio(title: String, artist: String?, isIntro: Boolean): Generated {
         val quality = networkChecker.check()
         if (quality != NetworkQualityChecker.Quality.GOOD) {
             Log.d(TAG, "Network quality is $quality — skipping cloud pre-generation")
-            return null
+            return Generated.Failed("network ${quality.name.lowercase()}")
         }
 
         val prefs = ApiKeyStore.getPrefs(context)
         if (prefs == null) {
             Log.d(TAG, "No encrypted prefs — skipping cloud pre-generation")
-            return null
+            return Generated.Failed("API keys unreadable")
         }
 
         val kiloKey = prefs.getString(ApiKeyStore.KEY_KILO, null)?.takeIf { it.isNotBlank() }
@@ -182,80 +246,98 @@ internal class AnnouncementPreGenerator(
 
         if (ttsKey == null && geminiKey == null) {
             Log.d(TAG, "No cloud TTS key — will use on-device TTS")
-            return null
+            return Generated.Failed("no cloud TTS key")
         }
 
-        Log.d(TAG, "Calling Kilo API for: $title")
-        val textFromApi = fetchKiloText(title, artist, isIntro, kiloKey)
-        Log.d(TAG, "Kilo returned: $textFromApi")
-        val text = textFromApi ?: run {
-            val fallback = getStockPhrase(title, artist, isIntro)
-            Log.d(TAG, "Using stock phrase: $fallback")
-            fallback
-        }
-        Log.d(TAG, "Using text: $text")
+        val (text, lineSource) = fetchLine(title, artist, isIntro, geminiKey, kiloKey)
+        Log.d(TAG, "Using text from $lineSource: $text")
 
         Log.d(TAG, "Synthesising with backend=$backend")
-        return when (backend) {
-            TtsBackend.STANDARD -> synthesizeStandard(text, ttsKey)
-            TtsBackend.CLOUD_GEMINI -> synthesizeCloudGemini(text, ttsKey)
-            TtsBackend.GEMINI_API -> synthesizeWithGeminiApi(text, geminiKey, ttsKey)
+        val failures = mutableListOf<String>()
+        val announcement = when (backend) {
+            TtsBackend.STANDARD -> synthesizeStandard(text, ttsKey, failures)
+            TtsBackend.CLOUD_GEMINI -> synthesizeCloudGemini(text, ttsKey, failures)
+            TtsBackend.GEMINI_API -> synthesizeWithGeminiApi(text, geminiKey, ttsKey, failures)
         }
+        return announcement?.let { Generated.Done(it.copy(voice = "${it.voice}, line by $lineSource")) }
+            ?: Generated.Failed(failures.joinToString("; ").ifEmpty { "no voice produced audio" })
     }
 
-    private fun warnMissingKey(backend: String): File? {
+    private fun warnMissingKey(backend: String, failures: MutableList<String>): Announcement? {
         Log.w(TAG, "Backend $backend selected but its API key is missing — falling back to on-device TTS")
+        failures += "no key for $backend"
         return null
     }
 
-    private suspend fun synthesizeStandard(text: String, ttsKey: String?): File? {
-        if (ttsKey == null) return warnMissingKey("standard")
+    private suspend fun synthesizeStandard(text: String, ttsKey: String?, failures: MutableList<String>): Announcement? {
+        if (ttsKey == null) return warnMissingKey("standard", failures)
+        val voiceName = STANDARD_TTS_VOICES.random()
+        val label = "Cloud TTS standard voice ($voiceName)"
         return fetchCloudTtsAudio(
             text,
             ttsKey,
             languageCode = STANDARD_TTS_LANGUAGE,
-            voiceName = STANDARD_TTS_VOICES.random(),
+            voiceName = voiceName,
             modelName = null,
-        )
+            onFailure = { failures += "$label: $it" },
+        )?.let { Announcement(it, label) }
     }
 
-    private suspend fun synthesizeCloudGemini(text: String, ttsKey: String?): File? {
-        if (ttsKey == null) return warnMissingKey("cloud_gemini")
-        return fetchCloudGeminiTtsAudio(text, ttsKey)
+    private suspend fun synthesizeCloudGemini(text: String, ttsKey: String?, failures: MutableList<String>): Announcement? {
+        if (ttsKey == null) return warnMissingKey("cloud_gemini", failures)
+        return fetchCloudGeminiTtsAudio(text, ttsKey) { failures += "$CLOUD_GEMINI_LABEL: $it" }
+            ?.let { Announcement(it, CLOUD_GEMINI_LABEL) }
     }
 
     /**
      * Cloud TTS fallback chain used when the Gemini API backend cannot synthesise: try the
      * Gemini voice first, then the standard voice, and finally give up (on-device TTS).
      */
-    private suspend fun synthesizeCloudFallback(text: String, ttsKey: String?): File? {
+    private suspend fun synthesizeCloudFallback(text: String, ttsKey: String?, failures: MutableList<String>): Announcement? {
         if (ttsKey == null) {
             Log.w(TAG, "No Cloud TTS key for fallback — using on-device TTS")
+            failures += "no Cloud TTS key for fallback"
             return null
         }
-        return fetchCloudGeminiTtsAudio(text, ttsKey) ?: synthesizeStandard(text, ttsKey)
+        return synthesizeCloudGemini(text, ttsKey, failures) ?: synthesizeStandard(text, ttsKey, failures)
     }
 
     /**
      * Option 2 (Gemini API) with graceful degradation: on resource exhaustion (HTTP 429) or
      * failure, fall back to the Cloud TTS Gemini voice, then the standard Cloud TTS voice, and
-     * finally to on-device TTS (null).
+     * finally to on-device TTS (null). After a 429 the Gemini API is skipped for
+     * [GEMINI_QUOTA_COOLDOWN_MS], so a used-up quota doesn't cost a failed request per track.
      */
     @androidx.annotation.VisibleForTesting
-    internal suspend fun synthesizeWithGeminiApi(text: String, geminiKey: String?, ttsKey: String?): File? {
+    internal suspend fun synthesizeWithGeminiApi(
+        text: String,
+        geminiKey: String?,
+        ttsKey: String?,
+        failures: MutableList<String> = mutableListOf(),
+    ): Announcement? {
         if (geminiKey == null) {
             Log.w(TAG, "Gemini API backend selected but no Gemini key — trying Cloud TTS")
-            return synthesizeCloudFallback(text, ttsKey)
+            failures += "no Gemini key"
+            return synthesizeCloudFallback(text, ttsKey, failures)
+        }
+        val cooldownLeft = geminiCooldownUntil - clock()
+        if (cooldownLeft > 0) {
+            Log.d(TAG, "Gemini API paused for ${cooldownLeft / 1000}s after quota error — using Cloud TTS")
+            failures += "Gemini API paused after quota error"
+            return synthesizeCloudFallback(text, ttsKey, failures)
         }
         return when (val result = fetchGeminiApiTtsAudio(text, geminiKey)) {
-            is SynthResult.Success -> result.file
+            is SynthResult.Success -> Announcement(result.file, GEMINI_API_LABEL)
             SynthResult.ResourceExhausted -> {
-                Log.w(TAG, "Gemini API TTS quota exhausted (429) — falling back to Cloud TTS")
-                synthesizeCloudFallback(text, ttsKey)
+                geminiCooldownUntil = clock() + GEMINI_QUOTA_COOLDOWN_MS
+                Log.w(TAG, "Gemini API TTS quota exhausted (429) — pausing it for ${GEMINI_QUOTA_COOLDOWN_MS / 1000}s, falling back to Cloud TTS")
+                failures += "Gemini API quota used up (HTTP 429)"
+                synthesizeCloudFallback(text, ttsKey, failures)
             }
             SynthResult.Failed -> {
                 Log.w(TAG, "Gemini API TTS failed — falling back to Cloud TTS")
-                synthesizeCloudFallback(text, ttsKey)
+                failures += "Gemini API failed"
+                synthesizeCloudFallback(text, ttsKey, failures)
             }
         }
     }
@@ -279,6 +361,84 @@ internal class AnnouncementPreGenerator(
         }
     }
 
+    /**
+     * Writes the announcement line and says who wrote it: Gemini when there is a Gemini key
+     * (a cheap text model whose quota is separate from the TTS model's), then Kilo, then a
+     * stock phrase.
+     */
+    @androidx.annotation.VisibleForTesting
+    internal suspend fun fetchLine(
+        title: String,
+        artist: String?,
+        isIntro: Boolean,
+        geminiKey: String?,
+        kiloKey: String?,
+    ): Pair<String, String> {
+        if (geminiKey != null && clock() >= geminiTextCooldownUntil) {
+            fetchGeminiText(title, artist, isIntro, geminiKey)?.let { return it to "Gemini" }
+        }
+        Log.d(TAG, "Calling Kilo API for: $title")
+        val kiloText = fetchKiloText(title, artist, isIntro, kiloKey)
+        Log.d(TAG, "Kilo returned: $kiloText")
+        if (kiloText != null) return kiloText to "Kilo"
+        return getStockPhrase(title, artist, isIntro) to "stock phrase"
+    }
+
+    private fun linePrompt(title: String, artist: String?, isIntro: Boolean): String {
+        val artistName = artist ?: "Unknown"
+        return if (isIntro) {
+            "Radio intro for \"$title\" by $artistName. Include both artist and song. Up to 16 words; vary the wording like a real radio DJ. Examples: \"Up next: $title by $artistName\", \"Here's $title from $artistName\". Just the text, no quotes."
+        } else {
+            "Radio outro for \"$title\" by $artistName. Include both artist and song. Up to 16 words; vary the wording like a real radio DJ. Examples: \"That was $title by $artistName\", \"Thanks for listening to $title\". Just the text, no quotes."
+        }
+    }
+
+    /** Asks Gemini's cheapest text model for the line; null if it fails, so Kilo can try. */
+    @androidx.annotation.VisibleForTesting
+    internal suspend fun fetchGeminiText(
+        title: String,
+        artist: String?,
+        isIntro: Boolean,
+        apiKey: String,
+    ): String? = withContext(Dispatchers.IO) {
+        try {
+            val body = JSONObject().apply {
+                put("contents", JSONArray().put(JSONObject().apply {
+                    put("parts", JSONArray().put(JSONObject().put("text", linePrompt(title, artist, isIntro))))
+                }))
+                // Flash-Lite thinks at its minimal level by default. Gemini 3 rejects the old
+                // thinkingBudget setting with HTTP 400, so no thinkingConfig is sent.
+                put("generationConfig", JSONObject().put("maxOutputTokens", 100))
+            }.toString()
+            val request = Request.Builder()
+                .url(TtsModels.GEMINI_TEXT_URL)
+                .header("x-goog-api-key", apiKey)
+                .post(body.toRequestBody("application/json; charset=utf-8".toMediaType()))
+                .build()
+            val responseText = okHttpClient.newCall(request).awaitStringOrNull {
+                // Whether quota, a bad key or a retired model, the next song would fail too.
+                geminiTextCooldownUntil = clock() + GEMINI_QUOTA_COOLDOWN_MS
+                val detail = runCatching { it.peekBody(300).string() }.getOrDefault("")
+                Log.w(TAG, "Gemini text HTTP ${it.code}: falling back to Kilo for ${GEMINI_QUOTA_COOLDOWN_MS / 1000}s. $detail")
+            } ?: return@withContext null
+            val parts = JSONObject(responseText).optJSONArray("candidates")
+                ?.optJSONObject(0)?.optJSONObject("content")?.optJSONArray("parts")
+                ?: return@withContext null
+            val line = (0 until parts.length())
+                .mapNotNull { parts.optJSONObject(it)?.optString("text")?.takeIf { t -> t.isNotBlank() } }
+                .joinToString(" ")
+                .trim()
+                .trim('"')
+                .takeIf { it.isNotBlank() }
+            if (line == null) Log.w(TAG, "Gemini text returned no line: falling back to Kilo")
+            line
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.w(TAG, "Gemini text call failed: ${e.message}")
+            null
+        }
+    }
+
     @androidx.annotation.VisibleForTesting
     internal suspend fun fetchKiloText(
         title: String,
@@ -286,22 +446,20 @@ internal class AnnouncementPreGenerator(
         isIntro: Boolean,
         apiKey: String?,
     ): String? = withContext(Dispatchers.IO) {
-        val artistName = artist ?: "Unknown"
-        val prompt = if (isIntro) {
-            "Radio intro for \"$title\" by $artistName. Include both artist and song. Max 8 words total. Examples: \"Up next: $title by $artistName\", \"Here's $title from $artistName\". Just the text, no quotes."
-        } else {
-            "Radio outro for \"$title\" by $artistName. Include both artist and song. Max 8 words total. Examples: \"That was $title by $artistName\", \"Thanks for listening to $title\". Just the text, no quotes."
-        }
+        val prompt = linePrompt(title, artist, isIntro)
 
-        val sanitizedKey = apiKey?.replace(Regex("[^A-Za-z0-9+/=\\-_]"), "")?.trim()
+        // Kilo keys are JWTs, whose three parts are joined by dots, so dots must survive.
+        val sanitizedKey = apiKey?.replace(Regex("[^A-Za-z0-9+/=.\\-_]"), "")?.trim()
         val isAnon = sanitizedKey.isNullOrBlank()
         val authHeader = if (isAnon) "Bearer anonymous" else "Bearer $sanitizedKey"
-        val model = if (isAnon) "kilo/auto-free" else "anthropic/claude-sonnet-4-6"
+        val model = if (isAnon) KILO_MODEL_ANON else KILO_MODEL_WITH_KEY
 
         try {
             val bodyString = JSONObject().apply {
                 put("model", model)
-                put("max_tokens", 150)
+                // Kilo's auto models reason first, using 100-150 tokens, and the reasoning
+                // counts toward this limit. At 150 the line often came back empty.
+                put("max_tokens", 500)
                 put("reasoning", JSONObject().apply {
                     put("effort", "low")
                 })
@@ -337,7 +495,8 @@ internal class AnnouncementPreGenerator(
             val message = responseJson.getJSONArray("choices").getJSONObject(0).getJSONObject("message")
             val content = message.optString("content")?.takeIf { it != "null" && it.isNotBlank() }
             if (content == null) {
-                Log.w(TAG, "Kilo no content")
+                val finish = responseJson.getJSONArray("choices").getJSONObject(0).optString("finish_reason")
+                Log.w(TAG, "Kilo no content (finish_reason=$finish)")
                 return@withContext null
             }
             content.trim()
@@ -360,6 +519,7 @@ internal class AnnouncementPreGenerator(
         languageCode: String,
         voiceName: String,
         modelName: String?,
+        onFailure: (String) -> Unit = {},
     ): File? =
         withContext(Dispatchers.IO) {
             runCatching {
@@ -388,35 +548,43 @@ internal class AnnouncementPreGenerator(
                     .post(requestBody)
                     .build()
 
+                var httpFailed = false
                 val responseBody = okHttpClient.newCall(request).awaitStringOrNull {
+                    httpFailed = true
                     Log.w(TAG, "Cloud TTS API returned HTTP ${it.code}")
+                    onFailure("HTTP ${it.code}")
                 }
                 if (responseBody.isNullOrBlank()) {
+                    // awaitStringOrNull gives null for both an HTTP error and an empty body.
+                    if (!httpFailed) onFailure("empty response")
                     return@runCatching null
                 }
 
                 val audioBase64 = try {
                     JSONObject(responseBody).getString("audioContent")
                 } catch (e: Exception) {
+                    onFailure("no audio in response")
                     return@runCatching null
                 }
 
                 val audioBytes = Base64.decode(audioBase64, Base64.DEFAULT)
                 if (audioBytes.isEmpty()) {
                     Log.w(TAG, "Cloud TTS API returned empty audio content")
+                    onFailure("empty audio")
                     return@runCatching null
                 }
                 writeAnnouncementFile(audioBytes, "mp3", audioBytes.size)
             }.getOrElse { e ->
                 if (e is CancellationException) throw e
                 Log.w(TAG, "Cloud TTS API call failed: ${e.message}")
+                onFailure("request failed")
                 null
             }
         }
 
     /** Option 1: Cloud TTS using a Gemini-TTS voice (reuses the Cloud TTS key). */
     @androidx.annotation.VisibleForTesting
-    internal suspend fun fetchCloudGeminiTtsAudio(text: String, apiKey: String): File? {
+    internal suspend fun fetchCloudGeminiTtsAudio(text: String, apiKey: String, onFailure: (String) -> Unit = {}): File? {
         Log.d(TAG, "Calling Cloud TTS Gemini voice (${TtsModels.CLOUD_TTS_GEMINI_MODEL})")
         return fetchCloudTtsAudio(
             text = text,
@@ -424,6 +592,7 @@ internal class AnnouncementPreGenerator(
             languageCode = STANDARD_TTS_LANGUAGE,
             voiceName = TtsModels.GEMINI_VOICE,
             modelName = TtsModels.CLOUD_TTS_GEMINI_MODEL,
+            onFailure = onFailure,
         )
     }
 

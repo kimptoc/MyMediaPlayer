@@ -110,6 +110,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
         private const val KEY_PLAY_COUNTS = "play_counts"
         private const val KEY_LAST_PLAYED_AT = "last_played_at"
         private const val KEY_TRACK_VOICE_INTRO_ENABLED = "track_voice_intro_enabled"
+        /** How long before a track ends its outro and the next intro are generated. */
+        @VisibleForTesting
+        internal const val PRE_GENERATE_BEFORE_END_MS = 30_000L
         private const val KEY_TRACK_VOICE_OUTRO_ENABLED = "track_voice_outro_enabled"
         private const val KEY_DEBUG_CLOUD_ANNOUNCEMENTS = "debug_cloud_announcements"
         private const val KEY_SEARCH_HISTORY = "search_history"
@@ -329,6 +332,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
     private var lastIntroTemplateIndex: Int = -1
     private var lastOutroTemplateIndex: Int = -1
     private var announcementPreGenerator: AnnouncementPreGenerator? = null
+    /** The playing track, with its tag metadata, for generating its outro near the end. */
+    private var announcementTrack: MediaFileInfo? = null
+    private val endOfTrackPreGeneration = Runnable { preGenerateForTrackEnd() }
     private var announcementPlayer: MediaPlayer? = null
     private val announcementJobRef = java.util.concurrent.atomic.AtomicReference<kotlinx.coroutines.Job?>(null)
     private val pendingAnnouncementFinish = AtomicReference<(() -> Unit)?>(null)
@@ -513,7 +519,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
             } else {
                 PlaybackStateCompat.STATE_PAUSED
             }
-            updatePlaybackState(state)
+            // seekTo is asynchronous, so currentPosition may still be the old position.
+            updatePlaybackState(state, positionMsOverride = clamped)
             savePlaybackSnapshot(positionMsOverride = clamped)
         }
 
@@ -886,6 +893,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         session.setCallback(null)
         session.isActive = false
         session.release()
+        mainHandler.removeCallbacks(endOfTrackPreGeneration)
         announcementPreGenerator?.cancelAll()
         announcementPreGenerator = null
         clearPendingIntro()
@@ -1799,13 +1807,39 @@ class MyMusicService : MediaBrowserServiceCompat() {
         } else fileInfo
     }
 
-    private fun schedulePreGenerationIfNeeded(enrichedFileInfo: MediaFileInfo) {
-        if (trackVoiceIntroEnabled || trackVoiceOutroEnabled) {
-            val nextTrack = peekNextQueueTrack()
-            val enrichedNext = nextTrack?.let { enrichWithMetadata(it) }
-            announcementPreGenerator?.schedulePreGeneration(enrichedFileInfo, enrichedNext)
-        }
+    private fun prepareAnnouncementsForTrackStart(enrichedFileInfo: MediaFileInfo) {
+        mainHandler.removeCallbacks(endOfTrackPreGeneration)
+        announcementTrack = enrichedFileInfo
+        announcementPreGenerator?.prepareTrackStart(enrichedFileInfo, trackVoiceIntroEnabled)
     }
+
+    /**
+     * While playing, arranges for the outro and the next intro to be generated
+     * [PRE_GENERATE_BEFORE_END_MS] before the track ends, rather than when it starts, so tracks
+     * that are skipped don't use up the cloud voice's quota.
+     */
+    private fun scheduleEndOfTrackPreGeneration(state: Int, positionMs: Long) {
+        mainHandler.removeCallbacks(endOfTrackPreGeneration)
+        if (state != PlaybackStateCompat.STATE_PLAYING) return
+        if (!trackVoiceIntroEnabled && !trackVoiceOutroEnabled) return
+        val player = mediaPlayer ?: return
+        val durationMs = runCatching { player.duration.toLong() }.getOrDefault(0L)
+        // Without a length there is no "near the end"; generating now would spend quota on a
+        // song that may be skipped. The announcement then falls back to on-device TTS.
+        if (durationMs <= 0L) return
+        val delayMs = (durationMs - positionMs - PRE_GENERATE_BEFORE_END_MS).coerceAtLeast(0L)
+        mainHandler.postDelayed(endOfTrackPreGeneration, delayMs)
+    }
+
+    private fun preGenerateForTrackEnd() {
+        val current = announcementTrack ?: return
+        val next = peekNextQueueTrack()?.let { enrichWithMetadata(it) }
+        announcementPreGenerator?.prepareTrackEnd(current, next, trackVoiceIntroEnabled, trackVoiceOutroEnabled)
+    }
+
+    @VisibleForTesting
+    internal fun scheduledAnnouncementsForTesting(): Set<Pair<String, Boolean>> =
+        announcementPreGenerator?.scheduledForTesting().orEmpty()
 
     private fun prepareAndStartMediaPlayer(fileInfo: MediaFileInfo, enrichedFileInfo: MediaFileInfo) {
         val player = MediaPlayer()
@@ -1893,7 +1927,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         savePlaybackSnapshot()
 
         val enrichedFileInfo = enrichWithMetadata(fileInfo)
-        schedulePreGenerationIfNeeded(enrichedFileInfo)
+        prepareAnnouncementsForTrackStart(enrichedFileInfo)
         prepareAndStartMediaPlayer(fileInfo, enrichedFileInfo)
     }
 
@@ -1918,32 +1952,26 @@ class MyMusicService : MediaBrowserServiceCompat() {
         val title = fileInfo.cleanTitle
         val artist = fileInfo.artist?.takeIf { it.isNotBlank() }
         val job = serviceScope.launch {
-            val audioFile = announcementPreGenerator?.getReadyAudio(fileInfo, isIntro = true)
+            val ready = announcementPreGenerator?.getReadyAudio(fileInfo, isIntro = true)
             mainHandler.post {
                 if (!isCurrentAnnouncement(finish)) return@post
-                if (audioFile != null) {
-                    if (debugCloudAnnouncementsEnabled) {
-                        Toast.makeText(this@MyMusicService, "Using cloud intro (Kilo + Google TTS)", Toast.LENGTH_SHORT).show()
-                    }
-                    playAnnouncementFile(audioFile, finish)
+                showAnnouncementSourceIfDebugging("intro", ready)
+                if (ready is AnnouncementPreGenerator.ReadyResult.Ready) {
+                    playAnnouncementFile(ready.announcement.file, finish)
                 } else {
-                    if (debugCloudAnnouncementsEnabled) {
-                        val prefs = getPrefs(this@MyMusicService)
-                        val hasTtsKey = ApiKeyStore.getPrefs(this@MyMusicService)?.let { p ->
-                            p.getString(ApiKeyStore.KEY_CLOUD_TTS, null)?.isNotBlank() == true
-                        } ?: false
-                        val msg = if (hasTtsKey) {
-                            "Android TTS (cloud gen timed out - increase timeout)"
-                        } else {
-                            "Android TTS (no TTS key - using on-device)"
-                        }
-                        Toast.makeText(this@MyMusicService, msg, Toast.LENGTH_SHORT).show()
-                    }
                     speakWithTts(buildIntroAnnouncement(artist, title), finish)
                 }
             }
         }
         announcementJobRef.set(job)
+    }
+
+    private fun showAnnouncementSourceIfDebugging(kind: String, ready: AnnouncementPreGenerator.ReadyResult?) {
+        val message = announcementSourceMessage(kind, ready)
+        Log.d("MyMusicService", message)
+        if (debugCloudAnnouncementsEnabled) {
+            Toast.makeText(this@MyMusicService, message, Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun maybeSpeakTrackFinishedThenAdvance(fileInfo: MediaFileInfo) {
@@ -1962,26 +1990,13 @@ class MyMusicService : MediaBrowserServiceCompat() {
         val title = fileInfo.cleanTitle
         val artist = fileInfo.artist?.takeIf { it.isNotBlank() }
         val job = serviceScope.launch {
-            val audioFile = announcementPreGenerator?.getReadyAudio(fileInfo, isIntro = false)
+            val ready = announcementPreGenerator?.getReadyAudio(fileInfo, isIntro = false)
             mainHandler.post {
                 if (!isCurrentAnnouncement(finish)) return@post
-                if (audioFile != null) {
-                    if (debugCloudAnnouncementsEnabled) {
-                            Toast.makeText(this@MyMusicService, "Using cloud outro (Kilo + Google TTS)", Toast.LENGTH_SHORT).show()
-                    }
-                    playAnnouncementFile(audioFile, finish)
+                showAnnouncementSourceIfDebugging("outro", ready)
+                if (ready is AnnouncementPreGenerator.ReadyResult.Ready) {
+                    playAnnouncementFile(ready.announcement.file, finish)
                 } else {
-                    if (debugCloudAnnouncementsEnabled) {
-                        val hasTtsKey = ApiKeyStore.getPrefs(this@MyMusicService)?.let { p ->
-                            p.getString(ApiKeyStore.KEY_CLOUD_TTS, null)?.isNotBlank() == true
-                        } ?: false
-                        val msg = if (hasTtsKey) {
-                            "Android TTS (cloud gen timed out - increase timeout)"
-                        } else {
-                            "Android TTS (no TTS key - using on-device)"
-                        }
-                        Toast.makeText(this@MyMusicService, msg, Toast.LENGTH_SHORT).show()
-                    }
                     speakWithTts(buildOutroAnnouncement(artist, title), finish)
                 }
             }
@@ -3159,8 +3174,13 @@ class MyMusicService : MediaBrowserServiceCompat() {
         consecutivePlaybackErrors = 0
     }
 
-    private fun updatePlaybackState(state: Int, errorMessage: String? = null) {
-        val position = mediaPlayer?.currentPosition?.toLong() ?: 0L
+    private fun updatePlaybackState(
+        state: Int,
+        errorMessage: String? = null,
+        positionMsOverride: Long? = null,
+    ) {
+        val position = positionMsOverride ?: mediaPlayer?.currentPosition?.toLong() ?: 0L
+        scheduleEndOfTrackPreGeneration(state, position)
         val speed = if (state == PlaybackStateCompat.STATE_PLAYING) 1f else 0f
         val playbackActions = resolvePlaybackActions(
             state = state,
@@ -3787,6 +3807,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
     @VisibleForTesting
     internal fun handleSkipToPreviousForTesting() = callback.onSkipToPrevious()
+
+    @VisibleForTesting
+    internal fun handleSeekToForTesting(positionMs: Long) = callback.onSeekTo(positionMs)
 
     @VisibleForTesting
     internal fun handlePlaybackErrorForTesting(message: String) {

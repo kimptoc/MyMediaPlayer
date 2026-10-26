@@ -83,7 +83,7 @@ object ApiKeyStore {
             }
 
             val bodyStr = JSONObject().apply {
-                put("model", "kilo/auto")
+                put("model", AnnouncementPreGenerator.KILO_MODEL_WITH_KEY)
                 put("max_tokens", 10)
                 put("messages", JSONArray().put(
                     JSONObject().apply {
