@@ -8,7 +8,9 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -53,14 +55,14 @@ class AnnouncementPreGeneratorTest {
         val cacheField = AnnouncementPreGenerator::class.java.getDeclaredField("cache")
         cacheField.isAccessible = true
         @Suppress("UNCHECKED_CAST")
-        val cache = cacheField.get(preGen) as ConcurrentHashMap<Any, Deferred<File?>>
+        val cache = cacheField.get(preGen) as ConcurrentHashMap<Any, Deferred<AnnouncementPreGenerator.Generated>>
 
         val cacheKeyClass = Class.forName("com.example.mymediaplayer.shared.AnnouncementPreGenerator\$CacheKey")
         val constructor = cacheKeyClass.getDeclaredConstructor(String::class.java, Boolean::class.java)
         constructor.isAccessible = true
         val key = constructor.newInstance("test_uri", true)
 
-        val deferred = CompletableDeferred<File?>()
+        val deferred = CompletableDeferred<AnnouncementPreGenerator.Generated>()
         cache[key] = deferred
 
         val track = MediaFileInfo(
@@ -73,7 +75,7 @@ class AnnouncementPreGeneratorTest {
             sizeBytes = 1000L
         )
 
-        var result: File? = File("dummy")
+        var result: AnnouncementPreGenerator.ReadyResult? = null
         val job = launch {
             result = preGen.getReadyAudio(track, true)
         }
@@ -82,7 +84,7 @@ class AnnouncementPreGeneratorTest {
 
         job.join()
 
-        assertNull(result)
+        assertEquals(AnnouncementPreGenerator.ReadyResult.Unavailable("cloud voice took over 5s"), result)
     }
 
     @Test
@@ -110,7 +112,7 @@ class AnnouncementPreGeneratorTest {
                 sizeBytes = 1000L
             )
 
-            var result: File? = File("dummy")
+            var result: AnnouncementPreGenerator.ReadyResult? = null
             val job = launch {
                 result = preGen.getReadyAudio(track, true)
             }
@@ -118,7 +120,7 @@ class AnnouncementPreGeneratorTest {
             testScheduler.advanceUntilIdle()
             job.join()
 
-            assertNull("Audio should be null due to simulated network exception", result)
+            assertTrue("No audio due to simulated network exception", result is AnnouncementPreGenerator.ReadyResult.Unavailable)
         } finally {
             NetworkQualityCheckerTest.mockFailConnection = false
         }

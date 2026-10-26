@@ -229,4 +229,103 @@ class AnnouncementPreGeneratorBackendTest {
             ((bytes[27].toInt() and 0xff) shl 24)
         assertEquals(16000, sampleRate)
     }
+
+    @Test
+    fun geminiApi_success_reportsGeminiVoice() = runTest {
+        AnnouncementPreGenerator.testInterceptor = okhttp3.Interceptor { chain ->
+            response(chain, 200, "{\"candidates\":[{\"content\":{\"parts\":[{\"inlineData\":{\"data\":\"${pcmBase64()}\"}}]}}]}")
+        }
+        val generator = preGen(ApplicationProvider.getApplicationContext(), this.testScheduler)
+
+        val announcement = generator.synthesizeWithGeminiApi("hello", geminiKey = "gemini_key", ttsKey = "tts_key")
+
+        assertEquals("Gemini API", announcement?.voice)
+    }
+
+    @Test
+    fun geminiApi_quotaExhausted_isSkippedUntilCooldownEnds() = runTest {
+        var geminiCalls = 0
+        AnnouncementPreGenerator.testInterceptor = okhttp3.Interceptor { chain ->
+            if (chain.request().url.host.contains("generativelanguage")) {
+                geminiCalls++
+                response(chain, 429, "{}")
+            } else {
+                response(chain, 200, "{\"audioContent\":\"${pcmBase64(4)}\"}")
+            }
+        }
+        var now = 1_000L
+        val generator = AnnouncementPreGenerator(
+            ApplicationProvider.getApplicationContext(),
+            TestScope(this.testScheduler),
+            clock = { now },
+        )
+
+        generator.synthesizeWithGeminiApi("one", geminiKey = "gemini_key", ttsKey = "tts_key")
+        now += AnnouncementPreGenerator.GEMINI_QUOTA_COOLDOWN_MS - 1
+        val duringCooldown = generator.synthesizeWithGeminiApi("two", geminiKey = "gemini_key", ttsKey = "tts_key")
+
+        assertEquals("a used-up quota must not be asked again straight away", 1, geminiCalls)
+        assertEquals("Cloud TTS Gemini voice", duringCooldown?.voice)
+
+        now += 2
+        generator.synthesizeWithGeminiApi("three", geminiKey = "gemini_key", ttsKey = "tts_key")
+
+        assertEquals("the Gemini API is tried again once the pause is over", 2, geminiCalls)
+    }
+
+    @Test
+    fun everyVoiceFailing_recordsWhyEachOneFailed() = runTest {
+        AnnouncementPreGenerator.testInterceptor = okhttp3.Interceptor { chain ->
+            if (chain.request().url.host.contains("generativelanguage")) {
+                response(chain, 429, "{}")
+            } else {
+                val body = chain.request().body?.let { b -> Buffer().also { b.writeTo(it) }.readUtf8() }
+                response(chain, if (body?.contains(TtsModels.CLOUD_TTS_GEMINI_MODEL) == true) 403 else 429, "{}")
+            }
+        }
+        val generator = preGen(ApplicationProvider.getApplicationContext(), this.testScheduler)
+        val failures = mutableListOf<String>()
+
+        val announcement = generator.synthesizeWithGeminiApi("hello", "gemini_key", "tts_key", failures)
+
+        assertNull(announcement)
+        assertEquals(3, failures.size)
+        assertEquals("Gemini API quota used up (HTTP 429)", failures[0])
+        assertEquals("Cloud TTS Gemini voice: HTTP 403", failures[1])
+        assertTrue(failures[2], failures[2].startsWith("Cloud TTS standard voice (") && failures[2].endsWith("): HTTP 429"))
+    }
+
+    @Test
+    fun fallbackToStandardVoice_reportsStandardVoice() = runTest {
+        AnnouncementPreGenerator.testInterceptor = okhttp3.Interceptor { chain ->
+            if (chain.request().url.host.contains("generativelanguage")) {
+                response(chain, 429, "{}")
+            } else {
+                val body = chain.request().body?.let { b -> Buffer().also { b.writeTo(it) }.readUtf8() }
+                if (body?.contains(TtsModels.CLOUD_TTS_GEMINI_MODEL) == true) {
+                    response(chain, 403, "{}")
+                } else {
+                    response(chain, 200, "{\"audioContent\":\"${pcmBase64(4)}\"}")
+                }
+            }
+        }
+        val generator = preGen(ApplicationProvider.getApplicationContext(), this.testScheduler)
+
+        val announcement = generator.synthesizeWithGeminiApi("hello", geminiKey = "gemini_key", ttsKey = "tts_key")
+
+        assertTrue(announcement?.voice, announcement?.voice?.startsWith("Cloud TTS standard voice (en-US-") == true)
+    }
+
+    @Test
+    fun sourceMessage_namesTheVoiceOrTheReason() {
+        val file = java.io.File("x.wav")
+        assertEquals(
+            "Cloud intro: Gemini API",
+            announcementSourceMessage("intro", AnnouncementPreGenerator.ReadyResult.Ready(AnnouncementPreGenerator.Announcement(file, "Gemini API"))),
+        )
+        assertEquals(
+            "Android TTS outro: Gemini API quota used up (HTTP 429)",
+            announcementSourceMessage("outro", AnnouncementPreGenerator.ReadyResult.Unavailable("Gemini API quota used up (HTTP 429)")),
+        )
+    }
 }
