@@ -50,7 +50,8 @@ internal class AnnouncementPreGenerator(
 ) {
     companion object {
         private const val TAG = "AnnouncementPreGen"
-        private const val KILO_MODEL_ANON = "kilo/auto-free"
+        /** Kilo's free auto router; the only kind of model Kilo serves without a key. */
+        private const val KILO_MODEL_ANON = "kilo-auto/free"
         /** Kilo's auto router picks a low-cost model, which is plenty for a one-line intro. */
         @androidx.annotation.VisibleForTesting
         internal const val KILO_MODEL_WITH_KEY = "kilo-auto/efficient"
@@ -446,12 +447,14 @@ internal class AnnouncementPreGenerator(
         val sanitizedKey = apiKey?.replace(Regex("[^A-Za-z0-9+/=.\\-_]"), "")?.trim()
         val isAnon = sanitizedKey.isNullOrBlank()
         val authHeader = if (isAnon) "Bearer anonymous" else "Bearer $sanitizedKey"
-        val model = if (isAnon) "kilo/auto-free" else KILO_MODEL_WITH_KEY
+        val model = if (isAnon) KILO_MODEL_ANON else KILO_MODEL_WITH_KEY
 
         try {
             val bodyString = JSONObject().apply {
                 put("model", model)
-                put("max_tokens", 150)
+                // Kilo's auto models reason first, using 100-150 tokens, and the reasoning
+                // counts toward this limit. At 150 the line often came back empty.
+                put("max_tokens", 500)
                 put("reasoning", JSONObject().apply {
                     put("effort", "low")
                 })
@@ -487,7 +490,8 @@ internal class AnnouncementPreGenerator(
             val message = responseJson.getJSONArray("choices").getJSONObject(0).getJSONObject("message")
             val content = message.optString("content")?.takeIf { it != "null" && it.isNotBlank() }
             if (content == null) {
-                Log.w(TAG, "Kilo no content")
+                val finish = responseJson.getJSONArray("choices").getJSONObject(0).optString("finish_reason")
+                Log.w(TAG, "Kilo no content (finish_reason=$finish)")
                 return@withContext null
             }
             content.trim()

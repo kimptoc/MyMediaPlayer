@@ -80,4 +80,26 @@ class AnnouncementPreGeneratorSanitizationTest {
 
         assertEquals("kilo-auto/efficient", org.json.JSONObject(capturedBody!!).getString("model"))
     }
+
+    @Test
+    fun fetchKiloText_withoutKey_usesTheFreeAutoModelAnonymously() = runTest {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val preGen = AnnouncementPreGenerator(context, TestScope(this.testScheduler))
+
+        preGen.fetchKiloText(title = "Test Title", artist = "Test Artist", isIntro = true, apiKey = null)
+
+        assertEquals("Bearer anonymous", capturedAuthHeader)
+        assertEquals("kilo-auto/free", org.json.JSONObject(capturedBody!!).getString("model"))
+    }
+
+    @Test
+    fun fetchKiloText_leavesRoomForTheLineAfterReasoning() = runTest {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val preGen = AnnouncementPreGenerator(context, TestScope(this.testScheduler))
+
+        preGen.fetchKiloText(title = "Test Title", artist = "Test Artist", isIntro = true, apiKey = null)
+
+        // The free model used 100-150 tokens reasoning; at 150 the line came back empty.
+        assertEquals(500, org.json.JSONObject(capturedBody!!).getInt("max_tokens"))
+    }
 }
