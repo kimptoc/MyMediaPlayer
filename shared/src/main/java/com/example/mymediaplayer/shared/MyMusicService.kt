@@ -460,7 +460,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
             val nextIndex = currentQueueIndex + 1
             if (nextIndex >= playlistQueue.size) {
                 if (repeatMode == PlaybackStateCompat.REPEAT_MODE_ALL && playlistQueue.isNotEmpty()) {
-                    currentQueueIndex = 0
+                    beginNewPass()
                     updateSessionQueue()
                     playTrack(playlistQueue[currentQueueIndex])
                 } else {
@@ -2246,8 +2246,12 @@ class MyMusicService : MediaBrowserServiceCompat() {
             repeatAll = repeatMode == PlaybackStateCompat.REPEAT_MODE_ALL && trackCompletedSinceErrorWrap
         )
         return if (nextIndex != null) {
-            if (nextIndex < currentQueueIndex) trackCompletedSinceErrorWrap = false
-            currentQueueIndex = nextIndex
+            if (nextIndex < currentQueueIndex) {
+                trackCompletedSinceErrorWrap = false
+                beginNewPass()
+            } else {
+                currentQueueIndex = nextIndex
+            }
             true
         } else {
             false
@@ -2281,10 +2285,16 @@ class MyMusicService : MediaBrowserServiceCompat() {
         val nextIndex = currentQueueIndex + 1
         return when {
             nextIndex < playlistQueue.size -> playlistQueue[nextIndex]
+            // A shuffled queue reshuffles when it wraps (beginNewPass), so its next song isn't
+            // known yet; that song's intro is generated when it starts instead.
+            queueIsShuffled -> null
             repeatMode == PlaybackStateCompat.REPEAT_MODE_ALL && playlistQueue.isNotEmpty() -> playlistQueue[0]
             else -> null
         }
     }
+
+    @VisibleForTesting
+    internal fun peekNextQueueTrackForTesting(): MediaFileInfo? = peekNextQueueTrack()
 
     private fun onTrackCompleted() {
         trackCompletedSinceErrorWrap = true
@@ -2302,7 +2312,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 updateSessionQueue()
                 playTrack(playlistQueue[currentQueueIndex])
             } else if (repeatMode == PlaybackStateCompat.REPEAT_MODE_ALL) {
-                currentQueueIndex = 0
+                beginNewPass()
                 updateSessionQueue()
                 playTrack(playlistQueue[currentQueueIndex])
             } else {
@@ -2812,6 +2822,17 @@ class MyMusicService : MediaBrowserServiceCompat() {
      */
     private fun restartFinishedQueue() {
         pendingResumePositionMs = null
+        beginNewPass()
+        updateSessionQueue()
+        playTrack(playlistQueue[currentQueueIndex])
+    }
+
+    /**
+     * Goes back to the start of the queue for another pass. A shuffled queue gets a fresh
+     * shuffle, so Repeat All doesn't replay the same order every time (#518), and the song that
+     * just played doesn't open the new pass.
+     */
+    private fun beginNewPass() {
         if (queueIsShuffled) {
             playlistQueue = reshuffleForNewPass(
                 playlistQueue,
@@ -2819,8 +2840,6 @@ class MyMusicService : MediaBrowserServiceCompat() {
             )
         }
         currentQueueIndex = 0
-        updateSessionQueue()
-        playTrack(playlistQueue[currentQueueIndex])
     }
 
     private fun applyRepeatMode(mode: Int) {
@@ -3762,6 +3781,12 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
     @VisibleForTesting
     internal fun handlePlayForTesting() = callback.onPlay()
+
+    @VisibleForTesting
+    internal fun handleSkipToNextForTesting() = callback.onSkipToNext()
+
+    @VisibleForTesting
+    internal fun handleSkipToPreviousForTesting() = callback.onSkipToPrevious()
 
     @VisibleForTesting
     internal fun handlePlaybackErrorForTesting(message: String) {
