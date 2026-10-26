@@ -387,9 +387,9 @@ internal class AnnouncementPreGenerator(
     private fun linePrompt(title: String, artist: String?, isIntro: Boolean): String {
         val artistName = artist ?: "Unknown"
         return if (isIntro) {
-            "Radio intro for \"$title\" by $artistName. Include both artist and song. Max 8 words total. Examples: \"Up next: $title by $artistName\", \"Here's $title from $artistName\". Just the text, no quotes."
+            "Radio intro for \"$title\" by $artistName. Include both artist and song. Up to 16 words; vary the wording like a real radio DJ. Examples: \"Up next: $title by $artistName\", \"Here's $title from $artistName\". Just the text, no quotes."
         } else {
-            "Radio outro for \"$title\" by $artistName. Include both artist and song. Max 8 words total. Examples: \"That was $title by $artistName\", \"Thanks for listening to $title\". Just the text, no quotes."
+            "Radio outro for \"$title\" by $artistName. Include both artist and song. Up to 16 words; vary the wording like a real radio DJ. Examples: \"That was $title by $artistName\", \"Thanks for listening to $title\". Just the text, no quotes."
         }
     }
 

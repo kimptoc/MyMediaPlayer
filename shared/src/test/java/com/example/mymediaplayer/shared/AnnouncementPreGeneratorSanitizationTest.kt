@@ -6,6 +6,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -101,5 +102,16 @@ class AnnouncementPreGeneratorSanitizationTest {
 
         // The free model used 100-150 tokens reasoning; at 150 the line came back empty.
         assertEquals(500, org.json.JSONObject(capturedBody!!).getInt("max_tokens"))
+    }
+
+    @Test
+    fun fetchKiloText_promptAllowsUpTo16Words() = runTest {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val preGen = AnnouncementPreGenerator(context, TestScope(this.testScheduler))
+
+        preGen.fetchKiloText(title = "Test Title", artist = "Test Artist", isIntro = false, apiKey = null)
+
+        val prompt = org.json.JSONObject(capturedBody!!).getJSONArray("messages").getJSONObject(0).getString("content")
+        assertTrue(prompt, prompt.contains("Up to 16 words"))
     }
 }
