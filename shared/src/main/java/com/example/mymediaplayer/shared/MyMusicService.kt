@@ -1956,12 +1956,13 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 if (mediaPlayer !== preparedPlayer) return@post
                 runCatching {
                     preparedPlayer.start()
-                    releaseWakeLockBetweenSongs()
                     updatePlaybackState(PlaybackStateCompat.STATE_PLAYING)
                     savePlaybackSnapshot()
                 }.onFailure { error ->
                     Log.w("MyMusicService", "Failed to start playback after intro", error)
                 }
+                // Started or not, the gap is over: a playing player holds its own wake lock.
+                releaseWakeLockBetweenSongs()
             }
         }
         if (!trackVoiceIntroEnabled) {
