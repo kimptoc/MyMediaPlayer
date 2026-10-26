@@ -402,10 +402,9 @@ internal class AnnouncementPreGenerator(
                 put("contents", JSONArray().put(JSONObject().apply {
                     put("parts", JSONArray().put(JSONObject().put("text", linePrompt(title, artist, isIntro))))
                 }))
-                put("generationConfig", JSONObject().apply {
-                    put("maxOutputTokens", 40)
-                    put("thinkingConfig", JSONObject().put("thinkingBudget", 0))
-                })
+                // Flash-Lite thinks at its minimal level by default. Gemini 3 rejects the old
+                // thinkingBudget setting with HTTP 400, so no thinkingConfig is sent.
+                put("generationConfig", JSONObject().put("maxOutputTokens", 100))
             }.toString()
             val request = Request.Builder()
                 .url(TtsModels.GEMINI_TEXT_URL)
@@ -413,7 +412,8 @@ internal class AnnouncementPreGenerator(
                 .post(body.toRequestBody("application/json; charset=utf-8".toMediaType()))
                 .build()
             val responseText = okHttpClient.newCall(request).awaitStringOrNull {
-                Log.w(TAG, "Gemini text HTTP ${it.code}: falling back to Kilo")
+                val detail = runCatching { it.peekBody(300).string() }.getOrDefault("")
+                Log.w(TAG, "Gemini text HTTP ${it.code}: falling back to Kilo. $detail")
             } ?: return@withContext null
             val parts = JSONObject(responseText).optJSONArray("candidates")
                 ?.optJSONObject(0)?.optJSONObject("content")?.optJSONArray("parts")
