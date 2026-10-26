@@ -154,6 +154,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val pendingPlaylistSongCountLoads: MutableSet<String> =
         ConcurrentHashMap.newKeySet()
     private var treeUri: Uri? = null
+    private var libraryRestoreClaimed = false
+
+    /**
+     * Scan limit waiting on the media permission prompt. Kept here, not in the activity, so a
+     * rotation while the prompt is open doesn't drop the scan the user is about to allow.
+     */
+    var pendingWholeDriveScanLimit: Int? = null
     private var playlistTreeUri: Uri? = null
     private var metadataKey: String? = null
 
@@ -455,6 +462,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             .ifBlank { "n/a" }
         return "Whole-drive scan complete in %.1fs • Songs: %d • Types: %s"
             .format(seconds, stats.songsFound, typeSummary)
+    }
+
+    /**
+     * True the first time it's called for this ViewModel, so the activity restores the saved
+     * library once and not again each time rotation recreates it. A new process gets a new
+     * ViewModel, so it restores again after process death.
+     */
+    fun claimLibraryRestore(): Boolean {
+        if (libraryRestoreClaimed) return false
+        libraryRestoreClaimed = true
+        return true
     }
 
     fun setTreeUri(uri: Uri) {
