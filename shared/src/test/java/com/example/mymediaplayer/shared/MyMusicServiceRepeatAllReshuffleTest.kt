@@ -4,7 +4,10 @@ import android.net.Uri
 import android.os.Looper
 import android.support.v4.media.session.PlaybackStateCompat
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -80,6 +83,44 @@ class MyMusicServiceRepeatAllReshuffleTest {
     }
 
     @Test
+    fun shuffledQueue_eachPassIsAFreshShuffle() {
+        startShuffledRepeatAll()
+        val passes = mutableListOf(service.currentPlaylistQueue())
+
+        repeat(5) {
+            service.setQueueIndexForTesting(service.currentPlaylistQueue().lastIndex)
+            service.onTrackCompletedForTesting()
+            idle()
+            passes += service.currentPlaylistQueue()
+        }
+
+        passes.zipWithNext().forEach { (previous, next) ->
+            assertFalse("a pass must not just rotate the last one", isRotation(previous, next))
+            assertFalse("a pass must not just reverse the last one", next == previous.reversed())
+        }
+        assertTrue(
+            "passes should open with different songs",
+            passes.map { it.first() }.toSet().size > 1
+        )
+    }
+
+    @Test
+    fun shuffledQueue_onLastSong_doesNotGuessNextSong() {
+        startShuffledRepeatAll()
+
+        assertNull("the next pass isn't shuffled yet", service.peekNextQueueTrackForTesting())
+    }
+
+    @Test
+    fun plainQueue_onLastSong_peeksFirstSong() {
+        play(shuffle = false)
+        service.setRepeatModeForTesting(PlaybackStateCompat.REPEAT_MODE_ALL)
+        service.setQueueIndexForTesting(songs.lastIndex)
+
+        assertEquals(songs[0].uriString, service.peekNextQueueTrackForTesting()?.uriString)
+    }
+
+    @Test
     fun plainQueue_wrapsInSameOrder() {
         play(shuffle = false)
         service.setRepeatModeForTesting(PlaybackStateCompat.REPEAT_MODE_ALL)
@@ -124,6 +165,9 @@ class MyMusicServiceRepeatAllReshuffleTest {
         assertEquals(0, service.currentQueueIndexForTesting())
         assertEquals(next[0].uriString, service.currentMediaIdForTesting())
     }
+
+    private fun isRotation(a: List<MediaFileInfo>, b: List<MediaFileInfo>): Boolean =
+        (a.indices).any { shift -> a.drop(shift) + a.take(shift) == b }
 
     private fun play(shuffle: Boolean) {
         service.playProvidedUriListForTesting(songs.map { it.uriString }, shuffle, "Test list")

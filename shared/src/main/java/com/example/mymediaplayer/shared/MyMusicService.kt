@@ -2285,10 +2285,16 @@ class MyMusicService : MediaBrowserServiceCompat() {
         val nextIndex = currentQueueIndex + 1
         return when {
             nextIndex < playlistQueue.size -> playlistQueue[nextIndex]
+            // A shuffled queue reshuffles when it wraps (beginNewPass), so its next song isn't
+            // known yet; that song's intro is generated when it starts instead.
+            queueIsShuffled -> null
             repeatMode == PlaybackStateCompat.REPEAT_MODE_ALL && playlistQueue.isNotEmpty() -> playlistQueue[0]
             else -> null
         }
     }
+
+    @VisibleForTesting
+    internal fun peekNextQueueTrackForTesting(): MediaFileInfo? = peekNextQueueTrack()
 
     private fun onTrackCompleted() {
         trackCompletedSinceErrorWrap = true
