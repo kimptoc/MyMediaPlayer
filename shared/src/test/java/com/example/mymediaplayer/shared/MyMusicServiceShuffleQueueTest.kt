@@ -113,6 +113,26 @@ class MyMusicServiceShuffleQueueTest {
         assertEquals(song3.uriString, queue[2].uriString)
     }
 
+    @Test
+    fun shufflingAListThatHasASongTwice_playsItOnce() {
+        val uris = listOf(song1, song2, song1, song3).map { it.uriString }
+
+        service.playProvidedUriListForTesting(uris, shuffle = true, queueTitle = "Mix")
+
+        val queue = service.currentPlaylistQueue().map { it.uriString }
+        assertEquals(listOf(song1, song2, song3).map { it.uriString }.toSet(), queue.toSet())
+        assertEquals(3, queue.size)
+    }
+
+    @Test
+    fun playingAListInOrder_keepsASongThatIsListedTwice() {
+        val uris = listOf(song1, song2, song1, song3).map { it.uriString }
+
+        service.playProvidedUriListForTesting(uris, shuffle = false, queueTitle = "Mix")
+
+        assertEquals(uris, service.currentPlaylistQueue().map { it.uriString })
+    }
+
     private fun setPlaylistQueue(tracks: List<MediaFileInfo>) {
         val field = MyMusicService::class.java.getDeclaredField("playlistQueue")
         field.isAccessible = true

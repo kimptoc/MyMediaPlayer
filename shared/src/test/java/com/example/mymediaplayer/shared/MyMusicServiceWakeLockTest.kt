@@ -4,6 +4,7 @@ import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Looper
 import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.Dispatchers
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -40,6 +41,7 @@ class MyMusicServiceWakeLockTest {
 
     @After
     fun teardown() {
+        MyMusicService.metadataDispatcher = Dispatchers.IO
         ShadowMediaPlayer.setCreateListener(null)
         NetworkQualityChecker.testInterceptor = null
     }
@@ -82,6 +84,8 @@ class MyMusicServiceWakeLockTest {
             .putBoolean("track_voice_outro_enabled", false)
             .commit()
         ShadowMediaPlayer.setCreateListener { player, shadow -> players += player to shadow }
+        // Reads each song's tags inline, so it starts as soon as the main looper is idled.
+        MyMusicService.metadataDispatcher = Dispatchers.Unconfined
         service = Robolectric.buildService(MyMusicService::class.java).create().get()
         songs.forEach {
             service.mediaCacheService.addFile(it)

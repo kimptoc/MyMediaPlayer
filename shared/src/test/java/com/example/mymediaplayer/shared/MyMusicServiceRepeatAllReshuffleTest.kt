@@ -3,6 +3,8 @@ package com.example.mymediaplayer.shared
 import android.net.Uri
 import android.os.Looper
 import android.support.v4.media.session.PlaybackStateCompat
+import kotlinx.coroutines.Dispatchers
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -38,8 +40,15 @@ class MyMusicServiceRepeatAllReshuffleTest {
         )
     }
 
+    @After
+    fun resetTagReading() {
+        MyMusicService.metadataDispatcher = Dispatchers.IO
+    }
+
     @Before
     fun setup() {
+        // Reads each song's tags inline, so it starts as soon as the main looper is idled.
+        MyMusicService.metadataDispatcher = Dispatchers.Unconfined
         EncryptedPrefsManager.clearCacheForTesting()
         MyMusicService.clearPrefsCacheForTesting()
         service = Robolectric.buildService(MyMusicService::class.java).create().get()
