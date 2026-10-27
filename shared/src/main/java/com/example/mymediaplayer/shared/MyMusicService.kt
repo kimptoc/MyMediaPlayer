@@ -326,6 +326,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
     private var lastBrowseParentId: String? = null
     private var lastSearchQuery: String? = null
     private var lastSearchResults: List<MediaFileInfo> = emptyList()
+    private val searchListAssembler = UriListAssembler()
+    private val uiListAssembler = UriListAssembler()
     private var consecutivePlaybackErrors: Int = 0
     // Claimed atomically by tryBeginScan() so two concurrent callers of
     // loadCachedTreeIfAvailable() can never both pass the guard and each build
@@ -657,9 +659,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
             notifyChildrenChanged(DECADES_ID)
         }
 
-        private fun handlePlaySearchList(extras: Bundle?) {
+        fun handlePlaySearchList(extras: Bundle?) {
             if (extras == null) return
-            val uris = extras.getStringArrayList(EXTRA_SEARCH_URIS) ?: return
+            val uris = assembleUriList(searchListAssembler, extras, EXTRA_SEARCH_URIS) ?: return
             val shuffle = extras.getBoolean(EXTRA_SEARCH_SHUFFLE, false)
             playProvidedUriList(
                 uris = uris,
@@ -669,9 +671,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
             )
         }
 
-        private fun handlePlayUiList(extras: Bundle?) {
+        fun handlePlayUiList(extras: Bundle?) {
             if (extras == null) return
-            val uris = extras.getStringArrayList(EXTRA_LIST_URIS) ?: return
+            val uris = assembleUriList(uiListAssembler, extras, EXTRA_LIST_URIS) ?: return
             val shuffle = extras.getBoolean(EXTRA_LIST_SHUFFLE, false)
             val queueTitle = extras.getString(EXTRA_LIST_TITLE).orEmpty()
             playProvidedUriList(
@@ -680,6 +682,19 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 queueTitle = if (queueTitle.isNotBlank()) queueTitle else "All Songs",
                 setSearchResults = false
             )
+        }
+
+        // The full list once its last part arrives; a send without a transfer id is the whole list.
+        private fun assembleUriList(assembler: UriListAssembler, extras: Bundle, urisKey: String): List<String>? {
+            val part = extras.getStringArrayList(urisKey) ?: return null
+            val transferId = extras.getString(UriListTransfer.EXTRA_TRANSFER_ID) ?: return part
+            val partIndex = extras.getInt(UriListTransfer.EXTRA_PART_INDEX, 0)
+            val partCount = extras.getInt(UriListTransfer.EXTRA_PART_COUNT, 1)
+            val complete = assembler.accept(transferId, partIndex, partCount, part)
+            if (complete != null && partCount > 1) {
+                Log.d("MyMusicService", "Received list of ${complete.size} songs in $partCount parts")
+            }
+            return complete
         }
 
         private fun handleSetPlaylists(extras: Bundle?) {
@@ -3833,6 +3848,12 @@ class MyMusicService : MediaBrowserServiceCompat() {
     @VisibleForTesting
     internal fun playProvidedUriListForTesting(uris: List<String>, shuffle: Boolean, queueTitle: String) =
         playProvidedUriList(uris, shuffle, queueTitle, setSearchResults = false)
+
+    @VisibleForTesting
+    internal fun handlePlayUiListForTesting(extras: Bundle) = callback.handlePlayUiList(extras)
+
+    @VisibleForTesting
+    internal fun handlePlaySearchListForTesting(extras: Bundle) = callback.handlePlaySearchList(extras)
 
     @VisibleForTesting
     internal fun handlePlayForTesting() = callback.onPlay()

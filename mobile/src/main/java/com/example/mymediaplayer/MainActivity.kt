@@ -38,6 +38,7 @@ import com.example.mymediaplayer.shared.ApiKeyStore
 import com.example.mymediaplayer.shared.MediaCacheService
 import com.example.mymediaplayer.shared.MyMusicService
 import com.example.mymediaplayer.shared.PlaylistInfo
+import com.example.mymediaplayer.shared.UriListTransfer
 import com.example.mymediaplayer.shared.playlistShortId
 import kotlinx.coroutines.launch
 import androidx.core.content.ContextCompat
@@ -795,18 +796,10 @@ class MainActivity : ComponentActivity() {
     private fun playSearchResults(songs: List<com.example.mymediaplayer.shared.MediaFileInfo>, shuffle: Boolean) {
         val controller = mediaController ?: return
         if (songs.isEmpty()) return
-        if (songs.size > MAX_MEDIA_FILES_FOR_BUNDLE) {
-            val target = if (shuffle) songs.random() else songs.first()
-            sendFilesToServiceIfNeeded(viewModel.uiState.value.scan.scannedFiles)
-            controller.transportControls?.playFromMediaId(target.uriString, null)
-            return
-        }
-        val uris = songs.mapTo(ArrayList(songs.size)) { it.uriString }
-        val bundle = Bundle().apply {
-            putStringArrayList(EXTRA_SEARCH_URIS, uris)
+        sendFilesToServiceIfNeeded(viewModel.uiState.value.scan.scannedFiles)
+        sendUriList(controller, ACTION_PLAY_SEARCH_LIST, songs.map { it.uriString }) {
             putBoolean(EXTRA_SEARCH_SHUFFLE, shuffle)
         }
-        controller.transportControls.sendCustomAction(ACTION_PLAY_SEARCH_LIST, bundle)
     }
 
     private fun playUiList(
@@ -817,26 +810,32 @@ class MainActivity : ComponentActivity() {
         val controller = mediaController ?: return
         if (songs.isEmpty()) return
         sendFilesToServiceIfNeeded(viewModel.uiState.value.scan.scannedFiles)
-        if (songs.size > MAX_MEDIA_FILES_FOR_BUNDLE) {
-            // Too many songs for a Bundle — delegate to the service using its browse IDs
-            val prefix = if (shuffle) "action:shuffle:" else "action:play_all:"
-            val lib = viewModel.uiState.value.library
-            val browseId = when {
-                lib.selectedGenre != null -> "genre:${android.net.Uri.encode(lib.selectedGenre)}"
-                lib.selectedAlbum != null -> "album:${android.net.Uri.encode(lib.selectedAlbum)}"
-                lib.selectedArtist != null -> "artist:${android.net.Uri.encode(lib.selectedArtist)}"
-                else -> "songs"
-            }
-            controller.transportControls.playFromMediaId(prefix + browseId, null)
-            return
-        }
-        val uris = songs.map { it.uriString }
-        val bundle = Bundle().apply {
-            putStringArrayList(EXTRA_LIST_URIS, ArrayList(uris))
+        sendUriList(controller, ACTION_PLAY_UI_LIST, songs.map { it.uriString }) {
             putBoolean(EXTRA_LIST_SHUFFLE, shuffle)
             putString(EXTRA_LIST_TITLE, queueTitle)
         }
-        controller.transportControls.sendCustomAction(ACTION_PLAY_UI_LIST, bundle)
+    }
+
+    // Sends the list in parts that each fit in a Bundle; the service plays it once all have arrived.
+    private fun sendUriList(
+        controller: MediaControllerCompat,
+        action: String,
+        uris: List<String>,
+        options: Bundle.() -> Unit
+    ) {
+        val urisKey = if (action == ACTION_PLAY_SEARCH_LIST) EXTRA_SEARCH_URIS else EXTRA_LIST_URIS
+        val parts = UriListTransfer.split(uris)
+        val transferId = java.util.UUID.randomUUID().toString()
+        parts.forEachIndexed { index, part ->
+            val bundle = Bundle().apply {
+                putStringArrayList(urisKey, ArrayList(part))
+                putString(UriListTransfer.EXTRA_TRANSFER_ID, transferId)
+                putInt(UriListTransfer.EXTRA_PART_INDEX, index)
+                putInt(UriListTransfer.EXTRA_PART_COUNT, parts.size)
+                options()
+            }
+            controller.transportControls.sendCustomAction(action, bundle)
+        }
     }
 
     private fun queueTitleForCurrentUiList(state: MainUiState): String {
