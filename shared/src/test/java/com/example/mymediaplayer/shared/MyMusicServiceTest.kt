@@ -713,12 +713,9 @@ class MyMusicServiceTest {
     @Config(sdk = [33])
     fun restorePlaybackSnapshot_defersQueueRestoreWhenCacheNotLoaded() {
         val service = Robolectric.buildService(MyMusicService::class.java).create().get()
+        writeSavedQueue(service, "content://test/song1\ncontent://test/song2")
         MyMusicService.getPrefs(service)
             .edit()
-            .putString(
-                "resume_queue_uris",
-                "content://test/song1\ncontent://test/song2"
-            )
             .putInt("resume_queue_index", 1)
             .putString("resume_queue_title", "All Songs")
             .apply()
@@ -760,12 +757,9 @@ class MyMusicServiceTest {
     @Config(sdk = [33])
     fun savePlaybackSnapshot_doesNotWipeSavedQueueWhileRestoreIsPending() {
         val service = Robolectric.buildService(MyMusicService::class.java).create().get()
+        writeSavedQueue(service, "content://test/song1\ncontent://test/song2")
         MyMusicService.getPrefs(service)
             .edit()
-            .putString(
-                "resume_queue_uris",
-                "content://test/song1\ncontent://test/song2"
-            )
             .putInt("resume_queue_index", 1)
             .putString("resume_queue_title", "All Songs")
             .apply()
@@ -777,12 +771,13 @@ class MyMusicServiceTest {
         // snapshot save before the real cache load finishes.
         service.savePlaybackSnapshot()
 
+        service.flushQueueWritesForTesting()
         val prefs = MyMusicService.getPrefs(service)
         assertEquals(
             "The original saved queue must survive a snapshot save taken " +
                 "before resolvePendingQueueIfNeeded() runs",
             "content://test/song1\ncontent://test/song2",
-            prefs.getString("resume_queue_uris", null)
+            savedQueueFile(service).readText()
         )
         assertEquals(1, prefs.getInt("resume_queue_index", -1))
         assertEquals("All Songs", prefs.getString("resume_queue_title", null))
@@ -800,9 +795,9 @@ class MyMusicServiceTest {
                 title = "Song One"
             )
         )
+        writeSavedQueue(service, "content://test/song1")
         MyMusicService.getPrefs(service)
             .edit()
-            .putString("resume_queue_uris", "content://test/song1")
             .putInt("resume_queue_index", 0)
             .apply()
 
@@ -886,5 +881,12 @@ class MyMusicServiceTest {
         // Verify migration_completed is marked as true and file is deleted
         assertEquals(true, encryptedPrefs.getBoolean("migration_completed", false))
         assertFalse(standardPrefsFile.exists())
+    }
+
+    private fun savedQueueFile(service: MyMusicService) = java.io.File(service.filesDir, MyMusicService.QUEUE_FILE_NAME)
+
+    private fun writeSavedQueue(service: MyMusicService, uris: String) {
+        service.flushQueueWritesForTesting()
+        savedQueueFile(service).writeText(uris)
     }
 }
