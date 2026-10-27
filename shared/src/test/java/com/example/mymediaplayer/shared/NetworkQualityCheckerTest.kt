@@ -190,9 +190,19 @@ class NetworkQualityCheckerTest {
     }
 
     @Test
+    fun check_vpnLikeLatency_returnsGood() = runBlocking {
+        // Through NordVPN the ping took 530-884ms, and every announcement skipped the cloud
+        // voices under the old 200ms limit, though Gemini works fine at that speed.
+        setupNetworkForPing()
+        mockLatencyMs = 900L
+
+        assertEquals(NetworkQualityChecker.Quality.GOOD, checker.check())
+    }
+
+    @Test
     fun check_latencyOverThreshold_returnsPoor() = runBlocking {
         setupNetworkForPing()
-        mockLatencyMs = 250L
+        mockLatencyMs = 2_500L
 
         assertEquals(NetworkQualityChecker.Quality.POOR, checker.check())
     }
@@ -214,7 +224,7 @@ class NetworkQualityCheckerTest {
         assertEquals(NetworkQualityChecker.Quality.GOOD, checker.check())
 
         // Change the network condition
-        mockLatencyMs = 250L
+        mockLatencyMs = 2_500L
 
         // Without invalidate, it should return the cached value (GOOD)
         assertEquals(NetworkQualityChecker.Quality.GOOD, checker.check())

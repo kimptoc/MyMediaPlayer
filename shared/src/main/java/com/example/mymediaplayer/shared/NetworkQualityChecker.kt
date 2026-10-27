@@ -68,7 +68,9 @@ internal class NetworkQualityChecker(private val context: Context) {
         private const val TAG = "NetworkQualityChecker"
         private const val CACHE_TTL_MS = 60_000L
         private const val PING_TIMEOUT_MS = 2_000
-        private const val GOOD_LATENCY_THRESHOLD_MS = 200L
+        // The ping can include a new HTTPS handshake, and a VPN alone pushed it to 530-884ms.
+        // Cloud announcements take ~3s to make anyway, so only a really slow link counts as poor.
+        private const val GOOD_LATENCY_THRESHOLD_MS = 2_000L
 
         // For testing purposes
         internal var testInterceptor: okhttp3.Interceptor? = null
