@@ -326,6 +326,10 @@ class MyMusicService : MediaBrowserServiceCompat() {
     private var repeatMode: Int = PlaybackStateCompat.REPEAT_MODE_NONE
     private var pendingResumePositionMs: Long? = null
     private var resumeOnAudioFocusGain: Boolean = false
+    // A song is set up but not started yet: it's preparing, its tags are being read, or its
+    // intro is playing. A pause in that time holds the start rather than being lost.
+    private var startPending = false
+    private var pausedBeforeStart = false
     // Track that couldn't start because audio focus was refused or delayed (#518).
     private var trackAwaitingAudioFocus: MediaFileInfo? = null
     private var audioFocusRetryCount: Int = 0
@@ -386,7 +390,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 abandonAudioFocus()
             }
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
-                resumeOnAudioFocusGain = mediaPlayer?.isPlaying == true
+                resumeOnAudioFocusGain = mediaPlayer?.isPlaying == true || (startPending && !pausedBeforeStart)
                 unduckIfNeeded()
                 handlePause()
             }
@@ -405,11 +409,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     startTrack(awaiting)
                     return@OnAudioFocusChangeListener
                 }
-                if (resumeOnAudioFocusGain && mediaPlayer != null && mediaPlayer?.isPlaying == false) {
-                    mediaPlayer?.start()
-                    updatePlaybackState(PlaybackStateCompat.STATE_PLAYING)
-                    savePlaybackSnapshot()
-                }
+                if (resumeOnAudioFocusGain) resumePlayer()
                 resumeOnAudioFocusGain = false
             }
         }
@@ -452,10 +452,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 }
                 else -> return
             }
-            if (mediaPlayer?.isPlaying == false) {
-                mediaPlayer?.start()
-                updatePlaybackState(PlaybackStateCompat.STATE_PLAYING)
-            }
+            resumePlayer()
         }
 
         override fun onPlayFromMediaId(mediaId: String?, extras: Bundle?) {
@@ -1956,6 +1953,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 prepareAsync()
             }
             mediaPlayer = player
+            startPending = true
+            pausedBeforeStart = false
             serviceScope.launch(metadataDispatcher) {
                 val enriched = enrichWithMetadata(fileInfo)
                 mainHandler.post {
@@ -2020,6 +2019,13 @@ class MyMusicService : MediaBrowserServiceCompat() {
         val onComplete: () -> Unit = {
             mainHandler.post {
                 if (mediaPlayer !== preparedPlayer) return@post
+                startPending = false
+                // Paused while it was getting ready: it stays prepared, and Play starts it.
+                if (pausedBeforeStart) {
+                    pausedBeforeStart = false
+                    releaseWakeLockBetweenSongs()
+                    return@post
+                }
                 runCatching {
                     preparedPlayer.start()
                     updatePlaybackState(PlaybackStateCompat.STATE_PLAYING)
@@ -2949,13 +2955,6 @@ class MyMusicService : MediaBrowserServiceCompat() {
      * shuffle, so Repeat All doesn't replay the same order every time (#518), and the song that
      * just played doesn't open the new pass.
      */
-    /**
-     * A shuffle plays each song once, even if the list has it twice (such as an .m3u that lists
-     * it twice) (#518 point 9). Lists played in order keep their repeats.
-     */
-    private fun shuffledWithoutDuplicates(tracks: List<MediaFileInfo>): List<MediaFileInfo> =
-        tracks.distinctBy { it.uriString }.shuffled()
-
     private fun beginNewPass() {
         if (queueIsShuffled) {
             playlistQueue = reshuffleForNewPass(
@@ -2965,6 +2964,13 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }
         currentQueueIndex = 0
     }
+
+    /**
+     * A shuffle plays each song once, even if the list has it twice (such as an .m3u that lists
+     * it twice) (#518 point 9). Lists played in order keep their repeats.
+     */
+    private fun shuffledWithoutDuplicates(tracks: List<MediaFileInfo>): List<MediaFileInfo> =
+        tracks.distinctBy { it.uriString }.shuffled()
 
     private fun applyRepeatMode(mode: Int) {
         repeatMode = mode
@@ -3264,6 +3270,25 @@ class MyMusicService : MediaBrowserServiceCompat() {
         if (mediaPlayer?.isPlaying == true) {
             mediaPlayer?.pause()
             updatePlaybackState(PlaybackStateCompat.STATE_PAUSED)
+            savePlaybackSnapshot()
+        } else if (mediaPlayer != null && startPending && !pausedBeforeStart) {
+            // Paused before the song started: hold it, rather than starting it once it's ready.
+            pausedBeforeStart = true
+            updatePlaybackState(PlaybackStateCompat.STATE_PAUSED)
+            savePlaybackSnapshot()
+        }
+    }
+
+    /** Plays the paused song, or lets a held start go ahead once the song is ready. */
+    private fun resumePlayer() {
+        val player = mediaPlayer ?: return
+        if (startPending) {
+            pausedBeforeStart = false
+            return
+        }
+        if (!player.isPlaying) {
+            player.start()
+            updatePlaybackState(PlaybackStateCompat.STATE_PLAYING)
             savePlaybackSnapshot()
         }
     }
@@ -3943,6 +3968,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
     @VisibleForTesting
     internal fun handlePlayForTesting() = callback.onPlay()
+
+    @VisibleForTesting
+    internal fun handlePauseForTesting() = callback.onPause()
 
     @VisibleForTesting
     internal fun handleSkipToNextForTesting() = callback.onSkipToNext()

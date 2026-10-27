@@ -3,6 +3,8 @@ package com.example.mymediaplayer.shared
 import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Looper
+import android.support.v4.media.session.MediaControllerCompat
+import android.support.v4.media.session.PlaybackStateCompat
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -91,6 +93,39 @@ class MyMusicServiceTagReadingTest {
         assertEquals(songs[1].uriString, service.currentMediaIdForTesting())
     }
 
+    @Test
+    fun pausingBeforeTheSongStarts_holdsIt_andPlayStartsIt() {
+        createService()
+        play()
+
+        service.handlePauseForTesting()
+        tagReads.runAll()
+        idle()
+
+        assertFalse("paused before it started, so it stays paused", players.last().first.isPlaying)
+        assertEquals(PlaybackStateCompat.STATE_PAUSED, playbackState())
+
+        service.handlePlayForTesting()
+        idle()
+
+        assertTrue(players.last().first.isPlaying)
+        assertEquals(PlaybackStateCompat.STATE_PLAYING, playbackState())
+    }
+
+    @Test
+    fun pausingThenPlayingBeforeTheSongStarts_startsItOnceReady() {
+        createService()
+        play()
+
+        service.handlePauseForTesting()
+        service.handlePlayForTesting()
+        tagReads.runAll()
+        idle()
+
+        assertTrue(players.last().first.isPlaying)
+        assertEquals(PlaybackStateCompat.STATE_PLAYING, playbackState())
+    }
+
     private fun createService() {
         EncryptedPrefsManager.clearCacheForTesting()
         MyMusicService.clearPrefsCacheForTesting()
@@ -116,6 +151,9 @@ class MyMusicServiceTagReadingTest {
         service.playProvidedUriListForTesting(songs.map { it.uriString }, shuffle = false, queueTitle = "Test list")
         idle()
     }
+
+    private fun playbackState() =
+        MediaControllerCompat(service, service.sessionToken!!).playbackState?.state
 
     private fun idle() = shadowOf(Looper.getMainLooper()).idle()
 }
