@@ -107,7 +107,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
         private const val KEY_SCAN_LIMIT = "scan_limit"
         private const val KEY_SCAN_WHOLE_DRIVE = "scan_whole_drive"
         private const val KEY_RESUME_MEDIA_URI = "resume_media_uri"
+        // Legacy: the queue's URIs now live in QUEUE_FILE_NAME; read once to migrate.
         private const val KEY_RESUME_QUEUE_URIS = "resume_queue_uris"
+        internal const val QUEUE_FILE_NAME = "playback_queue.txt"
         private const val KEY_RESUME_QUEUE_INDEX = "resume_queue_index"
         private const val KEY_RESUME_QUEUE_TITLE = "resume_queue_title"
         private const val KEY_RESUME_POSITION_MS = "resume_position_ms"
@@ -301,6 +303,16 @@ class MyMusicService : MediaBrowserServiceCompat() {
     private var lastMetadata: MediaMetadataCompat? = null
 
     private var playlistQueue: List<MediaFileInfo> = emptyList()
+    private val queueStore by lazy { QueueStore(File(filesDir, QUEUE_FILE_NAME)) }
+    // True while the restored queue came from the old prefs key, so it still needs writing to
+    // the queue file, after which the key is removed.
+    private var queueRestoredFromLegacyPrefs = false
+    // The queue and title last sent to the session, so an unchanged queue isn't resent per track.
+    // Also touched from refreshQueueMetadata on the IO dispatcher; guarded by sessionQueueLock.
+    private val sessionQueueLock = Any()
+    private var lastSessionQueue: List<MediaFileInfo>? = null
+    private var lastSessionQueueTitle: String? = null
+    private var sessionQueueUpdates = 0
     private var currentQueueIndex: Int = -1
     private var currentPlaylistName: String? = null
     private var pendingQueueRestoreUris: List<String>? = null
@@ -908,6 +920,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
     override fun onDestroy() {
         val lastPosition = currentPositionSafeMs()
         savePlaybackSnapshot(positionMsOverride = lastPosition)
+        // Gets a pending queue write onto disk before the process might be killed; returns at
+        // once when nothing is pending.
+        queueStore.flush()
         stopForeground(STOP_FOREGROUND_REMOVE)
         notificationManager.cancel(NOW_PLAYING_NOTIFICATION_ID)
         serviceScope.cancel()
@@ -2400,6 +2415,20 @@ class MyMusicService : MediaBrowserServiceCompat() {
     }
 
     private fun updateSessionQueue() {
+        // Moving along the queue only changes the active item, which the playback state carries.
+        val queueChanged = synchronized(sessionQueueLock) {
+            val changed = playlistQueue !== lastSessionQueue || currentPlaylistName != lastSessionQueueTitle
+            if (changed) {
+                lastSessionQueue = playlistQueue
+                lastSessionQueueTitle = currentPlaylistName
+                sessionQueueUpdates++
+            }
+            changed
+        }
+        if (!queueChanged) {
+            savePlaybackSnapshot()
+            return
+        }
         if (playlistQueue.isEmpty()) {
             session.setQueue(null)
             session.setQueueTitle(null)
@@ -3757,6 +3786,15 @@ class MyMusicService : MediaBrowserServiceCompat() {
     internal fun currentPlaylistQueue(): List<MediaFileInfo> = playlistQueue
 
     @VisibleForTesting
+    internal fun queueFileWritesForTesting(): Int = queueStore.writeCount
+
+    @VisibleForTesting
+    internal fun sessionQueueUpdatesForTesting(): Int = sessionQueueUpdates
+
+    @VisibleForTesting
+    internal fun flushQueueWritesForTesting() = queueStore.flush()
+
+    @VisibleForTesting
     internal fun hasPendingQueueRestore(): Boolean = pendingQueueRestoreUris != null
 
     @VisibleForTesting
@@ -3777,6 +3815,13 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }
         val clampedIndex = savedIndex.coerceIn(-1, playlistQueue.lastIndex)
         currentQueueIndex = if (clampedIndex >= 0) clampedIndex else 0
+        // The index is saved with every snapshot but the queue only when it changes, so after a
+        // crash they can disagree; the saved song then decides where in the queue we are.
+        val savedMediaUri = getPrefs(this).getString(KEY_RESUME_MEDIA_URI, null)
+        if (savedMediaUri != null && playlistQueue.getOrNull(currentQueueIndex)?.uriString != savedMediaUri) {
+            playlistQueue.indexOfFirst { it.uriString == savedMediaUri }.takeIf { it >= 0 }?.let { currentQueueIndex = it }
+        }
+        if (!queueRestoredFromLegacyPrefs) queueStore.markWritten(playlistQueue)
     }
 
     @VisibleForTesting
@@ -3787,12 +3832,10 @@ class MyMusicService : MediaBrowserServiceCompat() {
         queueIsShuffled = prefs.getBoolean(KEY_RESUME_QUEUE_SHUFFLED, false)
         queueFinished = prefs.getBoolean(KEY_RESUME_QUEUE_FINISHED, false)
 
-        val queueUrisRaw = prefs.getString(KEY_RESUME_QUEUE_URIS, null).orEmpty()
-        val queueUris = if (queueUrisRaw.isBlank()) {
-            emptyList()
-        } else {
-            queueUrisRaw.split('\n').filter { it.isNotBlank() }
-        }
+        val savedQueueUris = queueStore.read()
+        queueRestoredFromLegacyPrefs = savedQueueUris == null && prefs.contains(KEY_RESUME_QUEUE_URIS)
+        val queueUris = savedQueueUris ?: prefs.getString(KEY_RESUME_QUEUE_URIS, null).orEmpty()
+            .split('\n').filter { it.isNotBlank() }
         if (queueUris.isNotEmpty() && mediaCacheService.hasCachedFiles()) {
             resolveQueueUris(queueUris, prefs.getInt(KEY_RESUME_QUEUE_INDEX, -1))
             currentPlaylistName = prefs.getString(KEY_RESUME_QUEUE_TITLE, null)
@@ -3914,9 +3957,15 @@ class MyMusicService : MediaBrowserServiceCompat() {
         // Leave the existing KEY_RESUME_QUEUE_* values untouched until resolved.
         if (pendingQueueRestoreUris == null) {
             editor
-                .putString(KEY_RESUME_QUEUE_URIS, playlistQueue.joinToString("\n") { it.uriString })
                 .putInt(KEY_RESUME_QUEUE_INDEX, currentQueueIndex)
                 .putString(KEY_RESUME_QUEUE_TITLE, currentPlaylistName)
+            queueRestoredFromLegacyPrefs = false
+            queueStore.saveIfChanged(playlistQueue) {
+                // Only once the file holds the queue, so a kill in between can't lose it. Runs on
+                // the writer thread, and only after a successful write.
+                val prefs = getPrefs(this@MyMusicService)
+                if (prefs.contains(KEY_RESUME_QUEUE_URIS)) prefs.edit().remove(KEY_RESUME_QUEUE_URIS).apply()
+            }
         }
         editor.apply()
     }

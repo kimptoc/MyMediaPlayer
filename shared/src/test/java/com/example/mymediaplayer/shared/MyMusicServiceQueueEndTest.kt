@@ -133,8 +133,13 @@ class MyMusicServiceQueueEndTest {
     }
 
     /** Puts the service where it ends up when the last song completes with repeat off. */
+    // Skips to the last song so it is really the current one, then lets it end. Only moving the
+    // queue index would leave the saved song at the start, and a restore trusts the saved song.
     private fun finishQueue() {
-        service.setQueueIndexForTesting(service.currentPlaylistQueue().lastIndex)
+        repeat(service.currentPlaylistQueue().lastIndex) {
+            service.handleSkipToNextForTesting()
+            idle()
+        }
         service.onTrackCompletedForTesting()
         idle()
     }
