@@ -118,8 +118,9 @@ fun MainScreen(
     onDeletePlaylist: (PlaylistInfo) -> Unit,
     onRenamePlaylist: (PlaylistInfo, String) -> Unit,
     onSavePlaylistEdits: (PlaylistInfo, List<MediaFileInfo>) -> Unit,
-    onPlaySongs: (List<MediaFileInfo>) -> Unit,
-    onShuffleSongs: (List<MediaFileInfo>) -> Unit,
+    // The second argument names the queue; null means the open tab's own name.
+    onPlaySongs: (List<MediaFileInfo>, String?) -> Unit,
+    onShuffleSongs: (List<MediaFileInfo>, String?) -> Unit,
     onPlaySearchResults: (List<MediaFileInfo>) -> Unit,
     onShuffleSearchResults: (List<MediaFileInfo>) -> Unit,
     onPlayPlaylist: (PlaylistInfo) -> Unit,
@@ -1277,6 +1278,14 @@ private fun buildSmartPlaylistCounts(
     MainViewModel.SMART_MOST_PLAYED to files.count { (playCounts[it.uriString] ?: 0) > 0 },
     MainViewModel.SMART_NOT_HEARD_RECENTLY to files.size
 )
+
+// Names the Songs tab's queue after its filters, so a decade list isn't called "All Songs".
+internal fun songsQueueTitle(selectedDecade: String?, favoritesOnly: Boolean): String = when {
+    favoritesOnly && selectedDecade != null -> "Favorites ($selectedDecade)"
+    favoritesOnly -> "Favorites"
+    selectedDecade != null -> selectedDecade
+    else -> "All Songs"
+}
 
 private fun decadeLabelForYear(year: Int?): String {
     if (year == null || year <= 0) return "Unknown Decade"
@@ -2654,8 +2663,8 @@ private fun SongsTabContent(
     isPlayingPlaylist: Boolean,
     hasNext: Boolean,
     hasPrev: Boolean,
-    onPlaySongs: (List<MediaFileInfo>) -> Unit,
-    onShuffleSongs: (List<MediaFileInfo>) -> Unit,
+    onPlaySongs: (List<MediaFileInfo>, String?) -> Unit,
+    onShuffleSongs: (List<MediaFileInfo>, String?) -> Unit,
     onStop: () -> Unit,
     onNext: () -> Unit,
     onPrev: () -> Unit,
@@ -2727,8 +2736,8 @@ private fun SongsTabContent(
         isPlayingPlaylist = isPlayingPlaylist,
         hasNext = hasNext,
         hasPrev = hasPrev,
-        onPlay = { onPlaySongs(songsForTab) },
-        onShuffle = { onShuffleSongs(songsForTab) },
+        onPlay = { onPlaySongs(songsForTab, songsQueueTitle(selectedDecade, songsFavoritesOnly)) },
+        onShuffle = { onShuffleSongs(songsForTab, songsQueueTitle(selectedDecade, songsFavoritesOnly)) },
         onStop = onStop,
         onNext = onNext,
         onPrev = onPrev,
@@ -2819,8 +2828,8 @@ private fun MainScreenContent(
     onClearPlaylistSelection: () -> Unit,
     onEnsurePlaylistSongCount: (PlaylistInfo) -> Unit,
     onSavePlaylistEdits: (PlaylistInfo, List<MediaFileInfo>) -> Unit,
-    onPlaySongs: (List<MediaFileInfo>) -> Unit,
-    onShuffleSongs: (List<MediaFileInfo>) -> Unit,
+    onPlaySongs: (List<MediaFileInfo>, String?) -> Unit,
+    onShuffleSongs: (List<MediaFileInfo>, String?) -> Unit,
     onPlaySearchResults: (List<MediaFileInfo>) -> Unit,
     onShuffleSearchResults: (List<MediaFileInfo>) -> Unit,
     onPlayPlaylist: (PlaylistInfo) -> Unit,
@@ -3162,8 +3171,8 @@ private fun MainScreenContent(
                         isPlayingPlaylist = uiState.playback.isPlayingPlaylist,
                         hasNext = uiState.playback.hasNext,
                         hasPrev = uiState.playback.hasPrev,
-                        onPlay = { onPlaySongs(uiState.library.filteredSongs) },
-                        onShuffle = { onShuffleSongs(uiState.library.filteredSongs) },
+                        onPlay = { onPlaySongs(uiState.library.filteredSongs, null) },
+                        onShuffle = { onShuffleSongs(uiState.library.filteredSongs, null) },
                         onStop = onStop,
                         onNext = onNext,
                         onPrev = onPrev,
@@ -3193,8 +3202,8 @@ private fun MainScreenContent(
                         isPlayingPlaylist = uiState.playback.isPlayingPlaylist,
                         hasNext = uiState.playback.hasNext,
                         hasPrev = uiState.playback.hasPrev,
-                        onPlay = { onPlaySongs(uiState.library.filteredSongs) },
-                        onShuffle = { onShuffleSongs(uiState.library.filteredSongs) },
+                        onPlay = { onPlaySongs(uiState.library.filteredSongs, null) },
+                        onShuffle = { onShuffleSongs(uiState.library.filteredSongs, null) },
                         onStop = onStop,
                         onNext = onNext,
                         onPrev = onPrev,
@@ -3224,8 +3233,8 @@ private fun MainScreenContent(
                         isPlayingPlaylist = uiState.playback.isPlayingPlaylist,
                         hasNext = uiState.playback.hasNext,
                         hasPrev = uiState.playback.hasPrev,
-                        onPlay = { onPlaySongs(uiState.library.filteredSongs) },
-                        onShuffle = { onShuffleSongs(uiState.library.filteredSongs) },
+                        onPlay = { onPlaySongs(uiState.library.filteredSongs, null) },
+                        onShuffle = { onShuffleSongs(uiState.library.filteredSongs, null) },
                         onStop = onStop,
                         onNext = onNext,
                         onPrev = onPrev,
