@@ -60,4 +60,23 @@ class QueueStoreTest {
 
         assertEquals(songs.map { it.uriString }, savedWhenCalled)
     }
+
+    @Test
+    fun aFailedWriteIsTriedAgainWithTheSameQueue() {
+        // A plain file where the queue's folder should be makes the write fail.
+        val blocker = File(file.parentFile, "blocked").apply { writeText("") }
+        val store = QueueStore(File(blocker, "queue.txt"))
+        var written = false
+
+        store.saveIfChanged(songs) { written = true }
+        store.flush()
+        assertEquals(false, written)
+
+        blocker.delete()
+        store.saveIfChanged(songs) { written = true }
+        store.flush()
+
+        assertEquals(true, written)
+        assertEquals(songs.map { it.uriString }, store.read())
+    }
 }

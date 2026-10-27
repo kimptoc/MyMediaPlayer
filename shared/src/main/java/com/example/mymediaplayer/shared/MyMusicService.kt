@@ -308,6 +308,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
     // the queue file, after which the key is removed.
     private var queueRestoredFromLegacyPrefs = false
     // The queue and title last sent to the session, so an unchanged queue isn't resent per track.
+    // Also touched from refreshQueueMetadata on the IO dispatcher; guarded by sessionQueueLock.
+    private val sessionQueueLock = Any()
     private var lastSessionQueue: List<MediaFileInfo>? = null
     private var lastSessionQueueTitle: String? = null
     private var sessionQueueUpdates = 0
@@ -918,7 +920,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
     override fun onDestroy() {
         val lastPosition = currentPositionSafeMs()
         savePlaybackSnapshot(positionMsOverride = lastPosition)
-        // Gets the queue onto disk before the process might be killed.
+        // Gets a pending queue write onto disk before the process might be killed; returns at
+        // once when nothing is pending.
         queueStore.flush()
         stopForeground(STOP_FOREGROUND_REMOVE)
         notificationManager.cancel(NOW_PLAYING_NOTIFICATION_ID)
@@ -2413,13 +2416,19 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
     private fun updateSessionQueue() {
         // Moving along the queue only changes the active item, which the playback state carries.
-        if (playlistQueue === lastSessionQueue && currentPlaylistName == lastSessionQueueTitle) {
+        val queueChanged = synchronized(sessionQueueLock) {
+            val changed = playlistQueue !== lastSessionQueue || currentPlaylistName != lastSessionQueueTitle
+            if (changed) {
+                lastSessionQueue = playlistQueue
+                lastSessionQueueTitle = currentPlaylistName
+                sessionQueueUpdates++
+            }
+            changed
+        }
+        if (!queueChanged) {
             savePlaybackSnapshot()
             return
         }
-        lastSessionQueue = playlistQueue
-        lastSessionQueueTitle = currentPlaylistName
-        sessionQueueUpdates++
         if (playlistQueue.isEmpty()) {
             session.setQueue(null)
             session.setQueueTitle(null)
@@ -3950,11 +3959,12 @@ class MyMusicService : MediaBrowserServiceCompat() {
             editor
                 .putInt(KEY_RESUME_QUEUE_INDEX, currentQueueIndex)
                 .putString(KEY_RESUME_QUEUE_TITLE, currentPlaylistName)
-            val legacy = queueRestoredFromLegacyPrefs
             queueRestoredFromLegacyPrefs = false
             queueStore.saveIfChanged(playlistQueue) {
-                // Only once the file holds the queue, so a kill in between can't lose it.
-                if (legacy) getPrefs(this@MyMusicService).edit().remove(KEY_RESUME_QUEUE_URIS).apply()
+                // Only once the file holds the queue, so a kill in between can't lose it. Runs on
+                // the writer thread, and only after a successful write.
+                val prefs = getPrefs(this@MyMusicService)
+                if (prefs.contains(KEY_RESUME_QUEUE_URIS)) prefs.edit().remove(KEY_RESUME_QUEUE_URIS).apply()
             }
         }
         editor.apply()

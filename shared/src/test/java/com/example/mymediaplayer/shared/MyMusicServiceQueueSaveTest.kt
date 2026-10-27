@@ -10,6 +10,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -81,7 +82,10 @@ class MyMusicServiceQueueSaveTest {
         service.flushQueueWritesForTesting()
 
         assertEquals(uris.joinToString("\n"), queueFile().readText())
-        assertFalse(prefs().contains("resume_queue_uris"))
+        assertTrue(
+            "no prefs value holds the queue",
+            prefs().all.values.none { it is String && it.contains(uris.last()) }
+        )
     }
 
     @Test
