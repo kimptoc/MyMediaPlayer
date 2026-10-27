@@ -42,7 +42,7 @@ class MyMusicServiceLargeListTest {
     fun aShuffledUiListOfMoreThan500SongsQueuesExactlyThatList() {
         createService()
 
-        sendInParts { service.handlePlayUiListForTesting(it.apply { putBoolean("list_shuffle", true) }) }
+        sendInParts { service.handlePlayUiListForTesting(it.apply { putBoolean(UriListTransfer.EXTRA_LIST_SHUFFLE, true) }) }
 
         val queue = service.currentPlaylistQueue().map { it.uriString }
         assertEquals(1_200, queue.size)
@@ -55,7 +55,7 @@ class MyMusicServiceLargeListTest {
     fun anUnshuffledUiListKeepsItsOrder() {
         createService()
 
-        sendInParts { service.handlePlayUiListForTesting(it.apply { putBoolean("list_shuffle", false) }) }
+        sendInParts { service.handlePlayUiListForTesting(it.apply { putBoolean(UriListTransfer.EXTRA_LIST_SHUFFLE, false) }) }
 
         assertEquals(list, service.currentPlaylistQueue().map { it.uriString })
     }
@@ -64,8 +64,8 @@ class MyMusicServiceLargeListTest {
     fun shufflingMoreThan500SearchResultsShufflesAllOfThem() {
         createService()
 
-        sendInParts(urisKey = "search_uris") {
-            service.handlePlaySearchListForTesting(it.apply { putBoolean("search_shuffle", true) })
+        sendInParts(urisKey = UriListTransfer.EXTRA_SEARCH_URIS) {
+            service.handlePlaySearchListForTesting(it.apply { putBoolean(UriListTransfer.EXTRA_SEARCH_SHUFFLE, true) })
         }
 
         val queue = service.currentPlaylistQueue().map { it.uriString }
@@ -79,14 +79,14 @@ class MyMusicServiceLargeListTest {
         val parts = UriListTransfer.split(list)
 
         parts.dropLast(1).forEachIndexed { index, part ->
-            service.handlePlayUiListForTesting(partBundle("list_uris", "t", index, parts.size, part))
+            service.handlePlayUiListForTesting(partBundle(UriListTransfer.EXTRA_LIST_URIS, "t", index, parts.size, part))
         }
         idle()
 
         assertTrue(service.currentPlaylistQueue().isEmpty())
     }
 
-    private fun sendInParts(urisKey: String = "list_uris", send: (Bundle) -> Unit) {
+    private fun sendInParts(urisKey: String = UriListTransfer.EXTRA_LIST_URIS, send: (Bundle) -> Unit) {
         val parts = UriListTransfer.split(list)
         parts.forEachIndexed { index, part -> send(partBundle(urisKey, "t", index, parts.size, part)) }
         idle()
@@ -97,7 +97,7 @@ class MyMusicServiceLargeListTest {
         putString(UriListTransfer.EXTRA_TRANSFER_ID, id)
         putInt(UriListTransfer.EXTRA_PART_INDEX, index)
         putInt(UriListTransfer.EXTRA_PART_COUNT, count)
-        putString("list_title", "Test list")
+        putString(UriListTransfer.EXTRA_LIST_TITLE, "Test list")
     }
 
     private fun createService() {

@@ -1,5 +1,12 @@
 package com.example.mymediaplayer.shared
 
+import com.example.mymediaplayer.shared.UriListTransfer.ACTION_PLAY_SEARCH_LIST
+import com.example.mymediaplayer.shared.UriListTransfer.ACTION_PLAY_UI_LIST
+import com.example.mymediaplayer.shared.UriListTransfer.EXTRA_SEARCH_URIS
+import com.example.mymediaplayer.shared.UriListTransfer.EXTRA_SEARCH_SHUFFLE
+import com.example.mymediaplayer.shared.UriListTransfer.EXTRA_LIST_URIS
+import com.example.mymediaplayer.shared.UriListTransfer.EXTRA_LIST_SHUFFLE
+import com.example.mymediaplayer.shared.UriListTransfer.EXTRA_LIST_TITLE
 import android.content.ComponentCallbacks2
 import android.content.Context
 import android.graphics.Bitmap
@@ -136,8 +143,6 @@ class MyMusicService : MediaBrowserServiceCompat() {
         private const val ACTION_REFRESH_LIBRARY = "REFRESH_LIBRARY"
         internal const val ACTION_KEEP_ALIVE = "KEEP_ALIVE"
         private const val ACTION_SET_PLAYLISTS = "SET_PLAYLISTS"
-        private const val ACTION_PLAY_SEARCH_LIST = "PLAY_SEARCH_LIST"
-        private const val ACTION_PLAY_UI_LIST = "PLAY_UI_LIST"
         private const val ACTION_SET_TRACK_VOICE_INTRO = "SET_TRACK_VOICE_INTRO"
         private const val ACTION_SET_TRACK_VOICE_OUTRO = "SET_TRACK_VOICE_OUTRO"
         private const val ACTION_SET_DEBUG_CLOUD = "SET_DEBUG_CLOUD"
@@ -220,11 +225,6 @@ class MyMusicService : MediaBrowserServiceCompat() {
         private const val EXTRA_ADDED_AT = "added_at"
         private const val EXTRA_PLAYLIST_URIS = "playlist_uris"
         private const val EXTRA_PLAYLIST_NAMES = "playlist_names"
-        private const val EXTRA_SEARCH_URIS = "search_uris"
-        private const val EXTRA_SEARCH_SHUFFLE = "search_shuffle"
-        private const val EXTRA_LIST_URIS = "list_uris"
-        private const val EXTRA_LIST_SHUFFLE = "list_shuffle"
-        private const val EXTRA_LIST_TITLE = "list_title"
         private const val EXTRA_TRACK_VOICE_INTRO_ENABLED = "track_voice_intro_enabled"
         private const val EXTRA_TRACK_VOICE_OUTRO_ENABLED = "track_voice_outro_enabled"
         private const val EXTRA_DEBUG_CLOUD_ENABLED = "debug_cloud_enabled"
@@ -326,8 +326,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
     private var lastBrowseParentId: String? = null
     private var lastSearchQuery: String? = null
     private var lastSearchResults: List<MediaFileInfo> = emptyList()
-    private val searchListAssembler = UriListAssembler()
-    private val uiListAssembler = UriListAssembler()
+    private val searchListAssembler = UriListAssembler { Log.w("MyMusicService", "Search list: $it") }
+    private val uiListAssembler = UriListAssembler { Log.w("MyMusicService", "Song list: $it") }
     private var consecutivePlaybackErrors: Int = 0
     // Claimed atomically by tryBeginScan() so two concurrent callers of
     // loadCachedTreeIfAvailable() can never both pass the guard and each build

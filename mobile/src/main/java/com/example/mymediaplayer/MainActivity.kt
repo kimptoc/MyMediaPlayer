@@ -39,6 +39,13 @@ import com.example.mymediaplayer.shared.MediaCacheService
 import com.example.mymediaplayer.shared.MyMusicService
 import com.example.mymediaplayer.shared.PlaylistInfo
 import com.example.mymediaplayer.shared.UriListTransfer
+import com.example.mymediaplayer.shared.UriListTransfer.ACTION_PLAY_SEARCH_LIST
+import com.example.mymediaplayer.shared.UriListTransfer.ACTION_PLAY_UI_LIST
+import com.example.mymediaplayer.shared.UriListTransfer.EXTRA_SEARCH_URIS
+import com.example.mymediaplayer.shared.UriListTransfer.EXTRA_SEARCH_SHUFFLE
+import com.example.mymediaplayer.shared.UriListTransfer.EXTRA_LIST_URIS
+import com.example.mymediaplayer.shared.UriListTransfer.EXTRA_LIST_SHUFFLE
+import com.example.mymediaplayer.shared.UriListTransfer.EXTRA_LIST_TITLE
 import com.example.mymediaplayer.shared.playlistShortId
 import kotlinx.coroutines.launch
 import androidx.core.content.ContextCompat
@@ -74,8 +81,6 @@ class MainActivity : ComponentActivity() {
         private const val ACTION_SET_MEDIA_FILES = "SET_MEDIA_FILES"
         private const val ACTION_REFRESH_LIBRARY = "REFRESH_LIBRARY"
         private const val ACTION_SET_PLAYLISTS = "SET_PLAYLISTS"
-        private const val ACTION_PLAY_SEARCH_LIST = "PLAY_SEARCH_LIST"
-        private const val ACTION_PLAY_UI_LIST = "PLAY_UI_LIST"
         private const val ACTION_SHUFFLE_PREFIX = "action:shuffle:"
         private const val SMART_PLAYLIST_PREFIX = "smart_playlist:"
         private const val PLAYLIST_SHORT_PREFIX = "pl:"
@@ -94,13 +99,10 @@ class MainActivity : ComponentActivity() {
         private const val EXTRA_ADDED_AT = "added_at"
         private const val EXTRA_PLAYLIST_URIS = "playlist_uris"
         private const val EXTRA_PLAYLIST_NAMES = "playlist_names"
-        private const val EXTRA_SEARCH_URIS = "search_uris"
-        private const val EXTRA_SEARCH_SHUFFLE = "search_shuffle"
-        private const val EXTRA_LIST_URIS = "list_uris"
-        private const val EXTRA_LIST_SHUFFLE = "list_shuffle"
-        private const val EXTRA_LIST_TITLE = "list_title"
         private const val EXTRA_TRACK_VOICE_INTRO_ENABLED = "track_voice_intro_enabled"
         private const val EXTRA_TRACK_VOICE_OUTRO_ENABLED = "track_voice_outro_enabled"
+        // Songs per ACTION_SET_MEDIA_FILES Bundle, which carries full metadata for each song.
+        // Separate from UriListTransfer.MAX_URIS_PER_PART, which counts bare URIs.
         private const val MAX_MEDIA_FILES_FOR_BUNDLE = 500
     }
 
@@ -797,7 +799,7 @@ class MainActivity : ComponentActivity() {
         val controller = mediaController ?: return
         if (songs.isEmpty()) return
         sendFilesToServiceIfNeeded(viewModel.uiState.value.scan.scannedFiles)
-        sendUriList(controller, ACTION_PLAY_SEARCH_LIST, songs.map { it.uriString }) {
+        sendUriList(controller, ACTION_PLAY_SEARCH_LIST, EXTRA_SEARCH_URIS, songs.map { it.uriString }) {
             putBoolean(EXTRA_SEARCH_SHUFFLE, shuffle)
         }
     }
@@ -810,20 +812,22 @@ class MainActivity : ComponentActivity() {
         val controller = mediaController ?: return
         if (songs.isEmpty()) return
         sendFilesToServiceIfNeeded(viewModel.uiState.value.scan.scannedFiles)
-        sendUriList(controller, ACTION_PLAY_UI_LIST, songs.map { it.uriString }) {
+        sendUriList(controller, ACTION_PLAY_UI_LIST, EXTRA_LIST_URIS, songs.map { it.uriString }) {
             putBoolean(EXTRA_LIST_SHUFFLE, shuffle)
             putString(EXTRA_LIST_TITLE, queueTitle)
         }
     }
 
     // Sends the list in parts that each fit in a Bundle; the service plays it once all have arrived.
+    // The parts are one-way calls sent back to back, with no acknowledgement. 4,735 songs (10 parts)
+    // arrived intact on an S25; if much larger lists drop parts, the service should ack each one.
     private fun sendUriList(
         controller: MediaControllerCompat,
         action: String,
+        urisKey: String,
         uris: List<String>,
         options: Bundle.() -> Unit
     ) {
-        val urisKey = if (action == ACTION_PLAY_SEARCH_LIST) EXTRA_SEARCH_URIS else EXTRA_LIST_URIS
         val parts = UriListTransfer.split(uris)
         val transferId = java.util.UUID.randomUUID().toString()
         parts.forEachIndexed { index, part ->
