@@ -42,16 +42,19 @@ internal class QueueStore(
             ) return
             writeCount++
         }
-        pendingWrites.incrementAndGet()
-        executor.execute {
-            try {
-                if (write(queue)) {
-                    afterWrite?.invoke()
-                } else {
-                    synchronized(this) { if (lastWritten === queue) lastWritten = null }
+        // Counted and queued together, so flush() never sees the count without the write queued.
+        synchronized(writerLock) {
+            pendingWrites.incrementAndGet()
+            executor.execute {
+                try {
+                    if (write(queue)) {
+                        afterWrite?.invoke()
+                    } else {
+                        synchronized(this) { if (lastWritten === queue) lastWritten = null }
+                    }
+                } finally {
+                    pendingWrites.decrementAndGet()
                 }
-            } finally {
-                pendingWrites.decrementAndGet()
             }
         }
     }
@@ -73,8 +76,11 @@ internal class QueueStore(
 
     /** Waits (briefly) for writes already queued, from any instance; returns at once if none are. */
     fun flush() {
-        if (pendingWrites.get() == 0) return
-        runCatching { executor.submit {}.get(FLUSH_WAIT_MS, TimeUnit.MILLISECONDS) }
+        // The writer runs tasks in order, so this marker finishes after every write queued so far.
+        val marker = synchronized(writerLock) {
+            if (pendingWrites.get() == 0) null else executor.submit {}
+        } ?: return
+        runCatching { marker.get(FLUSH_WAIT_MS, TimeUnit.MILLISECONDS) }
             .onFailure { Log.w(TAG, "Timed out waiting for queue writes", it) }
     }
 
@@ -97,8 +103,10 @@ internal class QueueStore(
         private const val TAG = "QueueStore"
         private const val FLUSH_WAIT_MS = 2_000L
 
-        // Writes queued on sharedWriter and not yet finished, across all instances.
+        // Writes queued on sharedWriter and not yet finished, across all instances. Incremented
+        // and queued under writerLock.
         private val pendingWrites = AtomicInteger()
+        private val writerLock = Any()
 
         // One writer for the process, shared by every service instance, so writes stay in order.
         val sharedWriter: ExecutorService = Executors.newSingleThreadExecutor { runnable ->
