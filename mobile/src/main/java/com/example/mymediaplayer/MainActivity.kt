@@ -387,19 +387,19 @@ class MainActivity : ComponentActivity() {
         toggleRepeatMode(viewModel.uiState.value.playback.repeatMode)
     }
 
-    private fun handlePlaySongs(songs: List<com.example.mymediaplayer.shared.MediaFileInfo>) {
+    private fun handlePlaySongs(songs: List<com.example.mymediaplayer.shared.MediaFileInfo>, queueTitle: String?) {
         playUiList(
             songs = songs,
             shuffle = false,
-            queueTitle = queueTitleForCurrentUiList(viewModel.uiState.value)
+            queueTitle = queueTitle ?: queueTitleForCurrentUiList(viewModel.uiState.value)
         )
     }
 
-    private fun handleShuffleSongs(songs: List<com.example.mymediaplayer.shared.MediaFileInfo>) {
+    private fun handleShuffleSongs(songs: List<com.example.mymediaplayer.shared.MediaFileInfo>, queueTitle: String?) {
         playUiList(
             songs = songs,
             shuffle = true,
-            queueTitle = queueTitleForCurrentUiList(viewModel.uiState.value)
+            queueTitle = queueTitle ?: queueTitleForCurrentUiList(viewModel.uiState.value)
         )
     }
 

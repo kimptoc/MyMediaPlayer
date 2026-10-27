@@ -71,4 +71,12 @@ class MainScreenKtTest {
         org.junit.Assert.assertTrue(isValid)
         assertEquals("OK", helperText)
     }
+
+    @Test
+    fun songsQueueTitle_namesTheQueueAfterItsFilters() {
+        assertEquals("All Songs", songsQueueTitle(selectedDecade = null, favoritesOnly = false))
+        assertEquals("2000s", songsQueueTitle(selectedDecade = "2000s", favoritesOnly = false))
+        assertEquals("Favorites", songsQueueTitle(selectedDecade = null, favoritesOnly = true))
+        assertEquals("Favorites (2000s)", songsQueueTitle(selectedDecade = "2000s", favoritesOnly = true))
+    }
 }
