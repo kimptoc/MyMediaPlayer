@@ -23,7 +23,7 @@ internal class QueueStore(
     private val executor: ExecutorService = sharedWriter
 ) {
     private val atomicFile = AtomicFile(file)
-    // Guarded by this. Reset if a write fails, so the same queue is tried again next time.
+    // Guarded by writerLock. Reset if a write fails, so the same queue is tried again next time.
     private var lastWritten: List<MediaFileInfo>? = null
 
     /** Writes started (not skipped as unchanged), for tests. */
@@ -32,7 +32,9 @@ internal class QueueStore(
 
     /** Writes [queue] unless it's the list last written; [afterWrite] runs once it's on disk. */
     fun saveIfChanged(queue: List<MediaFileInfo>, afterWrite: (() -> Unit)? = null) {
-        synchronized(this) {
+        // Deciding, counting and queueing happen under one lock with flush(), so a flush never
+        // sees nothing pending while a save is on its way.
+        synchronized(writerLock) {
             if (queue === lastWritten) return
             val previous = lastWritten
             lastWritten = queue
@@ -41,16 +43,13 @@ internal class QueueStore(
                 previous.indices.all { previous[it].uriString == queue[it].uriString }
             ) return
             writeCount++
-        }
-        // Counted and queued together, so flush() never sees the count without the write queued.
-        synchronized(writerLock) {
             pendingWrites.incrementAndGet()
             executor.execute {
                 try {
                     if (write(queue)) {
                         afterWrite?.invoke()
                     } else {
-                        synchronized(this) { if (lastWritten === queue) lastWritten = null }
+                        synchronized(writerLock) { if (lastWritten === queue) lastWritten = null }
                     }
                 } finally {
                     pendingWrites.decrementAndGet()
@@ -61,7 +60,7 @@ internal class QueueStore(
 
     /** Records [queue] as already on disk, such as one just restored from this file. */
     fun markWritten(queue: List<MediaFileInfo>) {
-        synchronized(this) { lastWritten = queue }
+        synchronized(writerLock) { lastWritten = queue }
     }
 
     /** The saved URIs, or null if nothing has been saved to the file yet. */
