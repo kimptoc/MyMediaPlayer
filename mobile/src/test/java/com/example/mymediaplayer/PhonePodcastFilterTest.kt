@@ -90,6 +90,22 @@ class PhonePodcastFilterTest {
     }
 
     @Test
+    fun search_findsSongsOnly() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        clearPrefs(app)
+        val viewModel = MainViewModel(app)
+        seedUiState(
+            viewModel,
+            MainUiState(scan = ScanState(scannedFiles = files, lastScanLimit = 10), isPreferencesLoading = false)
+        )
+
+        // "e" is in every title; only the song is found.
+        viewModel.updateSearchQuery("e")
+
+        assertEquals(listOf(song), viewModel.uiState.value.search.searchResults)
+    }
+
+    @Test
     fun smartPlaylists_leaveOutPodcasts() {
         val app = ApplicationProvider.getApplicationContext<Application>()
         clearPrefs(app)

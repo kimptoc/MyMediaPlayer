@@ -5,6 +5,17 @@ import java.util.Locale
 const val PODCAST_GENRE: String = "Podcasts"
 const val RECORDINGS_GENRE: String = "Recordings"
 
+/**
+ * Whether a voice or typed genre request matches [file]. Podcasts and recordings match only
+ * their own genre ("play podcasts"), so a podcast tagged "Rock" isn't played as rock.
+ */
+fun matchesGenreQuery(file: MediaFileInfo, query: String): Boolean =
+    if (file.isMusic) {
+        file.genre?.contains(query, ignoreCase = true) == true
+    } else {
+        libraryGenreOf(file).contains(query.trim(), ignoreCase = true)
+    }
+
 /** The library genre a file is listed under: its own genre for podcasts and recordings. */
 fun libraryGenreOf(file: MediaFileInfo): String = when {
     file.isPodcast -> PODCAST_GENRE

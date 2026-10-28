@@ -122,8 +122,12 @@ class MediaCacheService {
             MediaStore.Audio.Media.RELATIVE_PATH,
             MediaStore.Audio.Media.DURATION,
             MediaStore.Audio.Media.YEAR,
-            MediaStore.Audio.Media.DATE_ADDED
+            MediaStore.Audio.Media.DATE_ADDED,
+            MediaStore.Audio.Media.IS_PODCAST
         )
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            projectionList.add(MediaStore.Audio.Media.IS_AUDIOBOOK)
+        }
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
             projectionList.add(MediaStore.Audio.Media.GENRE)
         }
@@ -153,6 +157,12 @@ class MediaCacheService {
             val addedIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
             val genreIndex = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
                 cursor.getColumnIndex(MediaStore.Audio.Media.GENRE)
+            } else {
+                -1
+            }
+            val isPodcastIndex = cursor.getColumnIndex(MediaStore.Audio.Media.IS_PODCAST)
+            val isAudiobookIndex = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                cursor.getColumnIndex(MediaStore.Audio.Media.IS_AUDIOBOOK)
             } else {
                 -1
             }
@@ -199,7 +209,10 @@ class MediaCacheService {
                         durationMs = durationMs,
                         year = year,
                         addedAtMs = addedAtMs,
-                        isPodcast = isPodcastMedia(osGenre, relativePath),
+                        // Audiobooks are spoken word, listed with podcasts.
+                        isPodcast = isPodcastMedia(osGenre, relativePath) ||
+                            (isPodcastIndex >= 0 && cursor.getInt(isPodcastIndex) != 0) ||
+                            (isAudiobookIndex >= 0 && cursor.getInt(isAudiobookIndex) != 0),
                         isRecording = isRecordingMedia(relativePath) ||
                             (isRecordingIndex >= 0 && cursor.getInt(isRecordingIndex) != 0)
                     )
@@ -690,7 +703,8 @@ class MediaCacheService {
         dao.replacePlaylists(playlists)
     }
 
-    fun persistCache(context: Context, treeUri: Uri, maxFiles: Int, scannedAt: Long = System.currentTimeMillis()) {
+    /** Saves the library and returns the scannedAt it was saved with. */
+    fun persistCache(context: Context, treeUri: Uri, maxFiles: Int, scannedAt: Long = System.currentTimeMillis()): Long {
         val db = MediaCacheDatabase.getInstance(context)
         val dao = db.cacheDao()
         val files = synchronized(cacheLock) { _cachedFiles.toList() }.map {
@@ -721,7 +735,12 @@ class MediaCacheService {
             scannedAt = scannedAt
         )
         dao.replaceCache(files, playlists, state)
+        return scannedAt
     }
+
+    /** When the saved library was scanned, or null when nothing is saved. */
+    fun persistedScannedAt(context: Context): Long? =
+        MediaCacheDatabase.getInstance(context).cacheDao().getScanState()?.scannedAt
 
     @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
     fun addFile(fileInfo: MediaFileInfo) {
@@ -1091,11 +1110,11 @@ class MediaCacheService {
     fun songsForDecade(decade: String): List<MediaFileInfo> =
         decadeIndex[decade]?.toList() ?: emptyList()
 
+    /** Songs only: podcasts and recordings are reached through their own genres (#530). */
     fun searchFiles(query: String): List<MediaFileInfo> {
         val needle = query.trim()
         if (needle.isBlank()) return emptyList()
-        val snapshot = synchronized(cacheLock) { _cachedFiles.toList() }
-        return snapshot.filter { file ->
+        return cachedMusicFiles.filter { file ->
             val haystack = buildString {
                 append(file.cleanTitle)
                 file.artist?.let { append(' ').append(it) }

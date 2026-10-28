@@ -359,6 +359,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
     private val scanGuard = AtomicBoolean(false)
     private val isScanning: Boolean
         get() = scanGuard.get()
+    // scannedAt of the library now in memory, so a refresh reloads only a newer saved scan.
+    @Volatile
+    private var loadedLibraryScannedAt: Long = 0L
     private var isForegroundPromoted: Boolean = false
     private val pendingResults =
         mutableMapOf<String, MutableList<MediaBrowserServiceCompat.Result<MutableList<MediaItem>>>>()
@@ -574,7 +577,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
             when (action) {
                 ACTION_SET_MEDIA_FILES -> handleSetMediaFiles(extras)
-                ACTION_REFRESH_LIBRARY -> loadCachedTreeIfAvailable()
+                ACTION_REFRESH_LIBRARY -> refreshLibraryFromCache()
                 ACTION_PLAY_SEARCH_LIST -> handlePlaySearchList(extras)
                 ACTION_PLAY_UI_LIST -> handlePlayUiList(extras)
                 ACTION_SET_PLAYLISTS -> handleSetPlaylists(extras)
@@ -670,7 +673,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 val treeUriStr = standardPrefs.getString(KEY_TREE_URI, null)
                 if (treeUriStr != null) {
                     val limit = standardPrefs.getInt(KEY_SCAN_LIMIT, MediaCacheService.MAX_CACHE_SIZE)
-                    mediaCacheService.persistCache(this@MyMusicService, Uri.parse(treeUriStr), limit)
+                    loadedLibraryScannedAt =
+                        mediaCacheService.persistCache(this@MyMusicService, Uri.parse(treeUriStr), limit)
                 }
             }
             notifyChildrenChanged(ROOT_ID)
@@ -1728,22 +1732,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
         // synchronous setup below, so the guard can never get stuck claimed.
         var handedOffToCoroutine = false
         try {
-            // Read scan settings from standard prefs — the activity always writes to standard prefs,
-            // but getPrefs() may return encrypted prefs (which can be stale after settings changes).
-            val standardPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val limit = standardPrefs.getInt(KEY_SCAN_LIMIT, MediaCacheService.MAX_CACHE_SIZE)
-            val wholeDriveMode = standardPrefs.getBoolean(KEY_SCAN_WHOLE_DRIVE, false)
-            val uri = if (wholeDriveMode) {
-                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
-            } else {
-                val uriString = standardPrefs.getString(KEY_TREE_URI, null) ?: return
-                val parsed = Uri.parse(uriString)
-                val hasPermission = contentResolver.persistedUriPermissions.any {
-                    it.uri == parsed && it.isReadPermission
-                }
-                if (!hasPermission) return
-                parsed
-            }
+            val (uri, limit) = librarySource() ?: return
+            val wholeDriveMode = uri == MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
 
             folderArtCache.evictAll()
             folderArtNotFound.clear()
@@ -1753,6 +1743,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 try {
                     val persisted = mediaCacheService.loadPersistedCache(this@MyMusicService, uri, limit)
                     val cacheLoadedFromDisk = persisted != null && persisted.files.isNotEmpty()
+                    if (persisted != null) loadedLibraryScannedAt = persisted.scannedAt
                     // Index build is deferred until first browse (see ensureMetadataIndexes()).
                     if (!cacheLoadedFromDisk) {
                         var lastNotify = 0
@@ -1776,27 +1767,82 @@ class MyMusicService : MediaBrowserServiceCompat() {
                             )
                             mediaCacheService.enrichGenresFromMediaStore(this@MyMusicService)
                         }
-                        mediaCacheService.persistCache(this@MyMusicService, uri, limit, scanStartedAt)
+                        loadedLibraryScannedAt =
+                            mediaCacheService.persistCache(this@MyMusicService, uri, limit, scanStartedAt)
                     }
                 } finally {
                     endScan()
-                    resolvePendingQueueIfNeeded()
-                    refreshQueueMetadata()
-                    rebuildPlaylistShortIds()
-                    deliverPendingResults()
-                    notifyChildrenChanged(ROOT_ID)
-                    notifyChildrenChanged(HOME_ID)
-                    notifyChildrenChanged(SONGS_ID)
-                    notifyChildrenChanged(PLAYLISTS_ID)
-                    notifyChildrenChanged(ALBUMS_ID)
-                    notifyChildrenChanged(GENRES_ID)
-                    notifyChildrenChanged(ARTISTS_ID)
-                    notifyChildrenChanged(DECADES_ID)
+                    onLibraryLoaded()
                 }
             }
         } finally {
             if (!handedOffToCoroutine) endScan()
         }
+    }
+
+    private suspend fun onLibraryLoaded() {
+        resolvePendingQueueIfNeeded()
+        refreshQueueMetadata()
+        rebuildPlaylistShortIds()
+        deliverPendingResults()
+        notifyChildrenChanged(ROOT_ID)
+        notifyChildrenChanged(HOME_ID)
+        notifyChildrenChanged(SONGS_ID)
+        notifyChildrenChanged(PLAYLISTS_ID)
+        notifyChildrenChanged(ALBUMS_ID)
+        notifyChildrenChanged(GENRES_ID)
+        notifyChildrenChanged(ARTISTS_ID)
+        notifyChildrenChanged(DECADES_ID)
+    }
+
+    /**
+     * The phone asks for this after it scans a library too big to send. With nothing loaded,
+     * load as usual. Otherwise reload from the saved cache only if the phone has saved a newer
+     * scan than the one in memory; never rescan here, the phone just did.
+     */
+    @VisibleForTesting
+    internal fun refreshLibraryFromCache() {
+        if (!mediaCacheService.hasCachedFiles()) {
+            loadCachedTreeIfAvailable()
+            return
+        }
+        val (uri, limit) = librarySource() ?: return
+        serviceScope.launch {
+            // Checked before claiming the scan guard: while it's held, browse requests wait for
+            // a load, so a refresh with nothing newer must not hold it.
+            val savedAt = mediaCacheService.persistedScannedAt(this@MyMusicService) ?: return@launch
+            if (savedAt <= loadedLibraryScannedAt) return@launch
+            // A load already running will deliver its own results.
+            if (!tryBeginScan()) return@launch
+            try {
+                val persisted = mediaCacheService.loadPersistedCache(this@MyMusicService, uri, limit)
+                if (persisted != null && persisted.files.isNotEmpty()) {
+                    loadedLibraryScannedAt = persisted.scannedAt
+                    Log.i("MyMusicService", "Reloaded library from saved scan at $savedAt (${persisted.files.size} files)")
+                }
+            } finally {
+                endScan()
+                onLibraryLoaded()
+            }
+        }
+    }
+
+    /**
+     * The library's source and limit from the phone's settings, or null if unreadable. Read from
+     * standard prefs: the activity always writes there, but getPrefs() may return encrypted prefs
+     * (which can be stale after settings changes).
+     */
+    private fun librarySource(): Pair<Uri, Int>? {
+        val standardPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val limit = standardPrefs.getInt(KEY_SCAN_LIMIT, MediaCacheService.MAX_CACHE_SIZE)
+        if (standardPrefs.getBoolean(KEY_SCAN_WHOLE_DRIVE, false)) {
+            return MediaStore.Audio.Media.EXTERNAL_CONTENT_URI to limit
+        }
+        val parsed = Uri.parse(standardPrefs.getString(KEY_TREE_URI, null) ?: return null)
+        val hasPermission = contentResolver.persistedUriPermissions.any {
+            it.uri == parsed && it.isReadPermission
+        }
+        return if (hasPermission) parsed to limit else null
     }
 
     private fun deliverPendingResults() {
@@ -2918,7 +2964,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }
         val matches = when {
             focusedMatches != null && focusedMatches.isNotEmpty() -> focusedMatches
-            queryForSongs.isBlank() -> mediaCacheService.cachedFiles
+            queryForSongs.isBlank() -> mediaCacheService.cachedMusicFiles
             else -> mediaCacheService.searchFiles(queryForSongs)
         }
         if (matches.isEmpty()) {
@@ -3037,12 +3083,18 @@ class MyMusicService : MediaBrowserServiceCompat() {
         return false
     }
 
+    // Songs only, unless a genre asks for Podcasts or Recordings (#530).
     private fun refine(
         base: List<MediaFileInfo>?,
         filter: (MediaFileInfo) -> Boolean
     ): List<MediaFileInfo> {
-        val source = base ?: mediaCacheService.cachedFiles
+        val source = base ?: mediaCacheService.cachedMusicFiles
         return source.filter(filter)
+    }
+
+    private fun filesForGenreQuery(base: List<MediaFileInfo>?, query: String): List<MediaFileInfo> {
+        val source = base ?: mediaCacheService.cachedFiles
+        return source.filter { matchesGenreQuery(it, query) }
     }
 
     private fun findMatchesByExplicitFields(
@@ -3069,9 +3121,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
             focusLabel = "Album: $requestedAlbum"
         }
         if (requestedGenre.isNotBlank()) {
-            focusedMatches = refine(focusedMatches) { file ->
-                file.genre?.contains(requestedGenre, ignoreCase = true) == true
-            }
+            focusedMatches = filesForGenreQuery(focusedMatches, requestedGenre)
             focusLabel = "Genre: $requestedGenre"
         }
         if (requestedTitle.isNotBlank()) {
@@ -3096,16 +3146,14 @@ class MyMusicService : MediaBrowserServiceCompat() {
         val focusTitle = mediaFocus.equals(FOCUS_TITLE, ignoreCase = true)
 
         val focusedMatches = when {
-            focusArtist -> mediaCacheService.cachedFiles.filter { file ->
+            focusArtist -> mediaCacheService.cachedMusicFiles.filter { file ->
                 file.artist?.contains(focusQuery, ignoreCase = true) == true
             }
-            focusAlbum -> mediaCacheService.cachedFiles.filter { file ->
+            focusAlbum -> mediaCacheService.cachedMusicFiles.filter { file ->
                 file.album?.contains(focusQuery, ignoreCase = true) == true
             }
-            focusGenre -> mediaCacheService.cachedFiles.filter { file ->
-                file.genre?.contains(focusQuery, ignoreCase = true) == true
-            }
-            focusTitle -> mediaCacheService.cachedFiles.filter { file ->
+            focusGenre -> filesForGenreQuery(null, focusQuery)
+            focusTitle -> mediaCacheService.cachedMusicFiles.filter { file ->
                 file.cleanTitle.contains(focusQuery, ignoreCase = true)
             }
             else -> null
@@ -3120,7 +3168,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
         return Pair(focusedMatches, focusLabel)
     }
 
-    private fun findFocusedMatches(
+    @VisibleForTesting
+    internal fun findFocusedMatches(
         raw: String,
         cleanedQuery: String,
         extras: Bundle?
@@ -3148,6 +3197,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         if (!hasPermission) return
         withContext(Dispatchers.IO) {
             mediaCacheService.loadPersistedCache(this@MyMusicService, uri, limit)
+                ?.let { loadedLibraryScannedAt = it.scannedAt }
         }
     }
 
