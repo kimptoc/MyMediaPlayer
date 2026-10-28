@@ -231,6 +231,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
         private const val EXTRA_DURATIONS = "durations"
         private const val EXTRA_YEARS = "years"
         private const val EXTRA_ADDED_AT = "added_at"
+        private const val EXTRA_IS_PODCAST = "is_podcast"
+        private const val EXTRA_IS_RECORDING = "is_recording"
         private const val EXTRA_PLAYLIST_URIS = "playlist_uris"
         private const val EXTRA_PLAYLIST_NAMES = "playlist_names"
         private const val EXTRA_TRACK_VOICE_INTRO_ENABLED = "track_voice_intro_enabled"
@@ -595,6 +597,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
             val durations = extras.getLongArray(EXTRA_DURATIONS)
             val years = extras.getIntArray(EXTRA_YEARS)
             val addedAt = extras.getLongArray(EXTRA_ADDED_AT)
+            // The phone's scan knows each file's folder; these URIs alone may not.
+            val isPodcast = extras.getBooleanArray(EXTRA_IS_PODCAST)
+            val isRecording = extras.getBooleanArray(EXTRA_IS_RECORDING)
 
             mediaCacheService.clearFiles()
             val count = minOf(uris.size, names.size, sizes.size)
@@ -607,6 +612,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
             val durationsSize = durations?.size ?: 0
             val yearsSize = years?.size ?: 0
             val addedAtSize = addedAt?.size ?: 0
+            val isPodcastSize = isPodcast?.size ?: 0
+            val isRecordingSize = isRecording?.size ?: 0
 
             for (i in 0 until count) {
                 val titleStr = if (titles != null && i < titlesSize) titles[i] else null
@@ -651,7 +658,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
                         genre = genre,
                         durationMs = durationMs,
                         year = year,
-                        addedAtMs = addedAtMs
+                        addedAtMs = addedAtMs,
+                        isPodcast = isPodcast != null && i < isPodcastSize && isPodcast[i],
+                        isRecording = isRecording != null && i < isRecordingSize && isRecording[i]
                     )
                 )
             }

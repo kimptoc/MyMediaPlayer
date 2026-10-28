@@ -97,6 +97,8 @@ class MainActivity : ComponentActivity() {
         private const val EXTRA_DURATIONS = "durations"
         private const val EXTRA_YEARS = "years"
         private const val EXTRA_ADDED_AT = "added_at"
+        private const val EXTRA_IS_PODCAST = "is_podcast"
+        private const val EXTRA_IS_RECORDING = "is_recording"
         private const val EXTRA_PLAYLIST_URIS = "playlist_uris"
         private const val EXTRA_PLAYLIST_NAMES = "playlist_names"
         private const val EXTRA_TRACK_VOICE_INTRO_ENABLED = "track_voice_intro_enabled"
@@ -751,6 +753,8 @@ class MainActivity : ComponentActivity() {
         val durations = LongArray(size)
         val years = IntArray(size)
         val addedAt = LongArray(size)
+        val isPodcast = BooleanArray(size)
+        val isRecording = BooleanArray(size)
 
         for (i in 0 until size) {
             val file = files[i]
@@ -763,6 +767,8 @@ class MainActivity : ComponentActivity() {
             durations[i] = file.durationMs ?: -1L
             years[i] = file.year ?: 0
             addedAt[i] = file.addedAtMs ?: -1L
+            isPodcast[i] = file.isPodcast
+            isRecording[i] = file.isRecording
         }
 
         val bundle = Bundle().apply {
@@ -776,6 +782,8 @@ class MainActivity : ComponentActivity() {
             putLongArray(EXTRA_DURATIONS, durations)
             putIntArray(EXTRA_YEARS, years)
             putLongArray(EXTRA_ADDED_AT, addedAt)
+            putBooleanArray(EXTRA_IS_PODCAST, isPodcast)
+            putBooleanArray(EXTRA_IS_RECORDING, isRecording)
         }
         controller.transportControls.sendCustomAction(ACTION_SET_MEDIA_FILES, bundle)
         lastSentUris = uris

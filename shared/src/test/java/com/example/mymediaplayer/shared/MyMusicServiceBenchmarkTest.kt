@@ -327,4 +327,42 @@ class MyMusicServiceBenchmarkTest {
         assertNull(f3.year)
         assertNull(f3.addedAtMs)
     }
+
+    @Test
+    @org.robolectric.annotation.Config(sdk = [33])
+    fun handleSetMediaFiles_keepsPodcastAndRecordingFlags() {
+        val service = Robolectric.buildService(MyMusicService::class.java).create().get()
+
+        val callbackField = MyMusicService::class.java.getDeclaredField("callback")
+        callbackField.isAccessible = true
+        val callbackObj = callbackField.get(service)
+        val handleSetMediaFilesMethod = callbackObj.javaClass.declaredMethods
+            .find { it.name.startsWith("handleSetMediaFiles") }
+            ?: throw IllegalStateException("Could not find handleSetMediaFiles method")
+        handleSetMediaFilesMethod.isAccessible = true
+
+        // MediaStore URIs carry no folder, so only the flags say what each file is.
+        val bundle = android.os.Bundle().apply {
+            putStringArrayList(
+                "uris",
+                arrayListOf(
+                    "content://media/external/audio/media/1",
+                    "content://media/external/audio/media/2",
+                    "content://media/external/audio/media/3"
+                )
+            )
+            putStringArrayList("names", arrayListOf("song.mp3", "episode.mp3", "New Recording.m4a"))
+            putLongArray("sizes", longArrayOf(1L, 1L, 1L))
+            putBooleanArray("is_podcast", booleanArrayOf(false, true, false))
+            putBooleanArray("is_recording", booleanArrayOf(false, false, true))
+        }
+
+        handleSetMediaFilesMethod.invoke(callbackObj, bundle)
+
+        val byName = service.mediaCacheService.cachedFiles.associateBy { it.displayName }
+        assertTrue(byName.getValue("song.mp3").isMusic)
+        assertTrue(byName.getValue("episode.mp3").isPodcast)
+        assertTrue(byName.getValue("New Recording.m4a").isRecording)
+        assertEquals(listOf("song.mp3"), service.mediaCacheService.cachedMusicFiles.map { it.displayName })
+    }
 }
