@@ -1448,7 +1448,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return if (onPlaylistsTab && selectedPlaylist != null) {
             state.playlist.playlistSongs
         } else {
-            state.scan.scannedFiles
+            // Songs only: podcasts and recordings are reached through their own genres (#530).
+            musicFilesOf(state.scan.scannedFiles)
         }
     }
 

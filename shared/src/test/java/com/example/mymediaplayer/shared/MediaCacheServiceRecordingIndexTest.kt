@@ -54,4 +54,23 @@ class MediaCacheServiceRecordingIndexTest {
         assertEquals(PODCAST_GENRE, libraryGenreOf(song.copy(isPodcast = true)))
         assertEquals(bucketGenre("Rock"), libraryGenreOf(song))
     }
+
+    @Test
+    fun matchesGenreQuery_podcastsAndRecordingsMatchOnlyTheirOwnGenre() {
+        val podcast = song.copy(isPodcast = true)
+        assertTrue(matchesGenreQuery(song, "rock"))
+        assertFalse(matchesGenreQuery(podcast, "rock"))
+        assertTrue(matchesGenreQuery(podcast, "podcast"))
+        assertTrue(matchesGenreQuery(recording, "Recordings"))
+        assertFalse(matchesGenreQuery(song, "podcast"))
+    }
+
+    @Test
+    fun matchesGenreQuery_songsMatchTheirTagOrTheirLibraryGenre() {
+        val punk = song.copy(genre = "Punk")
+        assertEquals("Rock/Metal", libraryGenreOf(punk))
+        assertTrue(matchesGenreQuery(punk, "punk"))
+        assertTrue(matchesGenreQuery(punk, " Rock/Metal "))
+        assertFalse(matchesGenreQuery(punk, "jazz"))
+    }
 }

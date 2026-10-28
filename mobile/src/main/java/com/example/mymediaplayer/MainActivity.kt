@@ -114,7 +114,9 @@ class MainActivity : ComponentActivity() {
     private var mediaController: MediaControllerCompat? = null
     // The whole files, not just their URIs, so a rescan that only changes tags or flags is resent.
     private var lastSentFiles: List<com.example.mymediaplayer.shared.MediaFileInfo>? = null
-    private var lastSentLargeLibraryCount: Int? = null
+    // Compared by identity: each scan or reload gives a new list, and the service then
+    // reloads only if the saved cache is newer than what it holds.
+    private var lastSentLargeLibrary: List<com.example.mymediaplayer.shared.MediaFileInfo>? = null
     private var lastSentPlaylistUris: List<String>? = null
     private var pendingScanLimit: Int = MediaCacheService.MAX_CACHE_SIZE
     private var pendingDeepScan: Boolean = false
@@ -201,7 +203,7 @@ class MainActivity : ComponentActivity() {
             // service instance. Clearing alone isn't enough because StateFlow
             // won't re-emit if the value hasn't changed.
             lastSentFiles = null
-            lastSentLargeLibraryCount = null
+            lastSentLargeLibrary = null
             lastSentPlaylistUris = null
             val scanState = viewModel.uiState.value.scan
             if (scanState.scannedFiles.isNotEmpty()) {
@@ -539,7 +541,8 @@ class MainActivity : ComponentActivity() {
     private fun observeViewModel() {
         lifecycleScope.launch {
             viewModel.uiState.collect { state ->
-                if (state.scan.scannedFiles.isNotEmpty()) {
+                // Send the library once a scan has finished, not at each progress update.
+                if (state.scan.scannedFiles.isNotEmpty() && !state.scan.isScanning) {
                     sendFilesToServiceIfNeeded(state.scan.scannedFiles)
                 }
                 if (state.scan.discoveredPlaylists.isNotEmpty()) {
@@ -736,9 +739,9 @@ class MainActivity : ComponentActivity() {
     private fun sendFilesToServiceIfNeeded(files: List<com.example.mymediaplayer.shared.MediaFileInfo>) {
         val controller = mediaController ?: return
         if (files.size > MAX_MEDIA_FILES_FOR_BUNDLE) {
-            if (lastSentLargeLibraryCount == files.size) return
+            if (files === lastSentLargeLibrary) return
             controller.transportControls.sendCustomAction(ACTION_REFRESH_LIBRARY, null)
-            lastSentLargeLibraryCount = files.size
+            lastSentLargeLibrary = files
             return
         }
         if (files == lastSentFiles) return
@@ -788,7 +791,7 @@ class MainActivity : ComponentActivity() {
         }
         controller.transportControls.sendCustomAction(ACTION_SET_MEDIA_FILES, bundle)
         lastSentFiles = files
-        lastSentLargeLibraryCount = null
+        lastSentLargeLibrary = null
     }
 
     private fun sendPlaylistsToServiceIfNeeded(playlists: List<PlaylistInfo>) {
