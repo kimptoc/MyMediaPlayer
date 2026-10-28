@@ -31,6 +31,26 @@ class RecordingDetectionTest {
     }
 
     @Test
+    fun appMediaFolders_match() {
+        assertTrue(isRecordingMedia("Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Audio/"))
+        assertTrue(isRecordingMedia("Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Documents/"))
+        assertTrue(isRecordingMedia("Android/media/org.telegram.messenger/Telegram/Telegram Audio/"))
+        assertTrue(
+            isRecordingMedia(
+                "content://com.android.externalstorage.documents/tree/primary%3A/document/" +
+                    "primary%3AAndroid%2Fmedia%2Fcom.whatsapp%2FWhatsApp%2FMedia%2FWhatsApp%20Audio%2Fclip.opus"
+            )
+        )
+    }
+
+    @Test
+    fun androidMediaNeedsAnAppFolderBelowIt() {
+        assertFalse(isRecordingMedia("Android/media.mp3"))
+        assertFalse(isRecordingMedia("Music/Android/"))
+        assertFalse(isRecordingMedia("Music/Media/"))
+    }
+
+    @Test
     fun folderNamesThatOnlyContainTheWord_doNotMatch() {
         assertFalse(isRecordingMedia("Music/Beach Boys/Pet Sounds/"))
         assertFalse(isRecordingMedia("Music/Live Recordings 1999/"))
