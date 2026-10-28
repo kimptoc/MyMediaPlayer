@@ -142,7 +142,9 @@ class MyMusicServiceLibraryScopeTest {
         onIo { phone.persistCache(context, wholeDevice, 50, scannedAt = 2_000L) }
         assertTrue(service.tryBeginScan())
         service.refreshLibraryFromCache()
-        Thread.sleep(300)
+        val deadline = System.currentTimeMillis() + 5_000
+        while (!service.refreshPending && System.currentTimeMillis() < deadline) Thread.sleep(20)
+        assertTrue(service.refreshPending)
         assertEquals(listOf(song), service.mediaCacheService.cachedFiles)
 
         // When that load finishes, the newer scan is picked up.

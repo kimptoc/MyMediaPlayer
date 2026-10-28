@@ -364,7 +364,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
     private var loadedLibraryScannedAt: Long = 0L
     // Set when a refresh arrives while another load holds the scan guard.
     @Volatile
-    private var refreshPending: Boolean = false
+    @VisibleForTesting
+    internal var refreshPending: Boolean = false
     private var isForegroundPromoted: Boolean = false
     private val pendingResults =
         mutableMapOf<String, MutableList<MediaBrowserServiceCompat.Result<MutableList<MediaItem>>>>()
@@ -1811,6 +1812,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
     @VisibleForTesting
     internal fun refreshLibraryFromCache() {
         if (!mediaCacheService.hasCachedFiles()) {
+            // A load already running may have read the cache before the phone saved this scan.
+            if (isScanning) refreshPending = true
             loadCachedTreeIfAvailable()
             return
         }
@@ -1827,9 +1830,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 return@launch
             }
             try {
-                // Drop the old library first so only one full copy is in memory (#382). Browse
-                // requests wait while the guard is held.
-                mediaCacheService.clearFiles()
+                // The old library stays in place until the new one is swapped in: search doesn't
+                // wait for the guard, and voice search would start its own load on an empty
+                // cache (#382).
                 val persisted = mediaCacheService.loadPersistedCache(this@MyMusicService, uri, limit)
                 if (persisted != null && persisted.files.isNotEmpty()) {
                     loadedLibraryScannedAt = persisted.scannedAt
@@ -1837,10 +1840,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 }
             } finally {
                 endScan()
-                // The saved scan couldn't be used (settings changed, or it's stale): load the
-                // library the usual way, which delivers results when it's done.
-                if (!mediaCacheService.hasCachedFiles()) loadCachedTreeIfAvailable()
-                if (!isScanning) onLibraryLoaded()
+                onLibraryLoaded()
             }
         }
     }
