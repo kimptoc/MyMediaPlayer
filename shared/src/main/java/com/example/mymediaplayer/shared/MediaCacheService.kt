@@ -384,7 +384,9 @@ class MediaCacheService {
         resolver.query(
             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
             arrayOf(MediaStore.Audio.Media._ID, MediaStore.Audio.Media.DISPLAY_NAME),
-            wholeDeviceAudioSelection(),
+            // Music only: files are matched by name, and a podcast sharing a song's file name
+            // would hand the song its genre.
+            "${MediaStore.Audio.Media.IS_MUSIC} != 0",
             null,
             null
         )?.use { cursor ->
@@ -846,7 +848,7 @@ class MediaCacheService {
                     if (it.isNull(modifiedIndex)) null else it.getLong(modifiedIndex)
 
                 if (mimeType == DocumentsContract.Document.MIME_TYPE_DIR) {
-                    if (isNonLibraryFolder(name)) {
+                    if (isNonLibraryFolder(childId)) {
                         skippedReasons["non_library_folder"] = (skippedReasons["non_library_folder"] ?: 0) + 1
                         continue
                     }
