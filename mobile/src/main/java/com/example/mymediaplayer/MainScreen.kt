@@ -69,6 +69,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.unit.dp
+import com.example.mymediaplayer.shared.PODCAST_GENRE
 import com.example.mymediaplayer.shared.bucketGenre
 import com.example.mymediaplayer.shared.MediaFileInfo
 import com.example.mymediaplayer.shared.PlaylistInfo
@@ -386,7 +387,9 @@ fun MainScreen(
     }
 
     PlaylistDialogs(
-        maxScannedFilesCount = uiState.scan.scannedFiles.size,
+        maxScannedFilesCount = remember(uiState.scan.scannedFiles) {
+            uiState.scan.scannedFiles.count { !it.isPodcast }
+        },
         discoveredPlaylists = uiState.scan.discoveredPlaylists,
         playlistCountText = playlistCountText,
         setPlaylistCountText = setPlaylistCountText,
@@ -1257,14 +1260,20 @@ private inline fun buildCounts(
     crossinline selector: (MediaFileInfo) -> String
 ): Map<String, Int> = files.groupingBy(selector).eachCount()
 
-private fun buildAlbumCounts(files: List<MediaFileInfo>): Map<String, Int> =
+internal fun filterSongsByDecade(files: List<MediaFileInfo>, decade: String?): List<MediaFileInfo> =
+    if (decade != null) files.filter { decadeLabelForYear(it.year) == decade } else files
+
+internal fun musicFilesOf(files: List<MediaFileInfo>): List<MediaFileInfo> =
+    files.filterNot { it.isPodcast }
+
+internal fun buildAlbumCounts(files: List<MediaFileInfo>): Map<String, Int> =
     buildCounts(files) { it.album?.ifBlank { null } ?: "Unknown Album" }
 
-private fun buildArtistCounts(files: List<MediaFileInfo>): Map<String, Int> =
+internal fun buildArtistCounts(files: List<MediaFileInfo>): Map<String, Int> =
     buildCounts(files) { it.artist?.ifBlank { null } ?: "Unknown Artist" }
 
-private fun buildGenreCounts(files: List<MediaFileInfo>): Map<String, Int> =
-    buildCounts(files) { bucketGenre(it.genre) }
+internal fun buildGenreCounts(files: List<MediaFileInfo>): Map<String, Int> =
+    buildCounts(files) { if (it.isPodcast) PODCAST_GENRE else bucketGenre(it.genre) }
 
 private fun buildSmartPlaylistCounts(
     files: List<MediaFileInfo>,
@@ -1287,7 +1296,7 @@ internal fun songsQueueTitle(selectedDecade: String?, favoritesOnly: Boolean): S
     else -> "All Songs"
 }
 
-private fun decadeLabelForYear(year: Int?): String {
+internal fun decadeLabelForYear(year: Int?): String {
     if (year == null || year <= 0) return "Unknown Decade"
     val decade = (year / 10) * 10
     return "${decade}s"
@@ -2675,11 +2684,7 @@ private fun SongsTabContent(
     currentMediaId: String?
 ) {
     val filteredByDecade = remember(scannedFiles, selectedDecade) {
-        if (selectedDecade != null) {
-            scannedFiles.filter { decadeLabelForYear(it.year) == selectedDecade }
-        } else {
-            scannedFiles
-        }
+        filterSongsByDecade(scannedFiles, selectedDecade)
     }
     val songsForTab = remember(filteredByDecade, songsFavoritesOnly, favoriteUris) {
         if (songsFavoritesOnly) {
@@ -2885,6 +2890,8 @@ private fun MainScreenContent(
                 Spacer(modifier = Modifier.height(8.dp))
             }
 
+            // Podcasts live only in their own genre (#252), so every other list uses musicFiles.
+            val musicFiles = remember(uiState.scan.scannedFiles) { musicFilesOf(uiState.scan.scannedFiles) }
             if (uiState.search.searchQuery.isNotBlank()) {
                 Spacer(modifier = Modifier.height(8.dp))
                 val visibleSearchResults = if (searchFavoritesOnly) {
@@ -2895,7 +2902,7 @@ private fun MainScreenContent(
                 if (visibleSearchResults.isEmpty()) {
                     Text("No results for \"${uiState.search.searchQuery}\"")
                 } else if (uiState.library.selectedTab == LibraryTab.Albums) {
-                    val allByAlbum = uiState.scan.scannedFiles.groupBy { albumLabel(it) }
+                    val allByAlbum = musicFiles.groupBy { albumLabel(it) }
                     val albumHits = visibleSearchResults
                         .groupBy { albumLabel(it) }
                         .map { (album, matches) ->
@@ -2979,8 +2986,8 @@ private fun MainScreenContent(
                 Spacer(modifier = Modifier.height(8.dp))
             }
 
-            val albumCounts = remember(uiState.scan.scannedFiles) { buildAlbumCounts(uiState.scan.scannedFiles) }
-            val artistCounts = remember(uiState.scan.scannedFiles) { buildArtistCounts(uiState.scan.scannedFiles) }
+            val albumCounts = remember(musicFiles) { buildAlbumCounts(musicFiles) }
+            val artistCounts = remember(musicFiles) { buildArtistCounts(musicFiles) }
             val genreCounts = remember(uiState.scan.scannedFiles) { buildGenreCounts(uiState.scan.scannedFiles) }
             val tabs = LibraryTab.values().toList()
             ScrollableTabRow(
@@ -3011,8 +3018,8 @@ private fun MainScreenContent(
             when (uiState.library.selectedTab) {
                 LibraryTab.Songs -> {
                     val (selectedDecade, setSelectedDecade) = rememberSaveable { mutableStateOf<String?>(null) }
-                    val availableDecades = remember(uiState.scan.scannedFiles) {
-                        uiState.scan.scannedFiles
+                    val availableDecades = remember(musicFiles) {
+                        musicFiles
                             .map { decadeLabelForYear(it.year) }
                             .filter { it != "Unknown Decade" }
                             .distinct()
@@ -3024,7 +3031,7 @@ private fun MainScreenContent(
                         selectedDecade = selectedDecade,
                         availableDecades = availableDecades,
                         onDecadeSelected = { setSelectedDecade(it) },
-                        scannedFiles = uiState.scan.scannedFiles,
+                        scannedFiles = musicFiles,
                         favoriteUris = uiState.favoriteUris,
                         isPlayingPlaylist = uiState.playback.isPlayingPlaylist,
                         hasNext = uiState.playback.hasNext,
@@ -3076,14 +3083,14 @@ private fun MainScreenContent(
                         )
                     }
                     val songCounts = remember(
-                        uiState.scan.scannedFiles,
+                        musicFiles,
                         uiState.favoriteUris,
                         uiState.flaggedUris,
                         uiState.playCounts,
                         uiState.playlist.playlistSongCounts
                     ) {
                         buildSmartPlaylistCounts(
-                            files = uiState.scan.scannedFiles,
+                            files = musicFiles,
                             favoriteUris = uiState.favoriteUris,
                             flaggedUris = uiState.flaggedUris,
                             playCounts = uiState.playCounts
