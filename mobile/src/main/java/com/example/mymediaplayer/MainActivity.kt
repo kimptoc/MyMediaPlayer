@@ -112,7 +112,8 @@ class MainActivity : ComponentActivity() {
 
     private var mediaBrowser: MediaBrowserCompat? = null
     private var mediaController: MediaControllerCompat? = null
-    private var lastSentUris: List<String>? = null
+    // The whole files, not just their URIs, so a rescan that only changes tags or flags is resent.
+    private var lastSentFiles: List<com.example.mymediaplayer.shared.MediaFileInfo>? = null
     private var lastSentLargeLibraryCount: Int? = null
     private var lastSentPlaylistUris: List<String>? = null
     private var pendingScanLimit: Int = MediaCacheService.MAX_CACHE_SIZE
@@ -199,7 +200,7 @@ class MainActivity : ComponentActivity() {
             // Clear dedup state and re-send data to the (possibly recreated)
             // service instance. Clearing alone isn't enough because StateFlow
             // won't re-emit if the value hasn't changed.
-            lastSentUris = null
+            lastSentFiles = null
             lastSentLargeLibraryCount = null
             lastSentPlaylistUris = null
             val scanState = viewModel.uiState.value.scan
@@ -740,8 +741,8 @@ class MainActivity : ComponentActivity() {
             lastSentLargeLibraryCount = files.size
             return
         }
+        if (files == lastSentFiles) return
         val uris = files.map { it.uriString }
-        if (uris == lastSentUris) return
 
         val size = files.size
         val names = ArrayList<String>(size)
@@ -786,7 +787,7 @@ class MainActivity : ComponentActivity() {
             putBooleanArray(EXTRA_IS_RECORDING, isRecording)
         }
         controller.transportControls.sendCustomAction(ACTION_SET_MEDIA_FILES, bundle)
-        lastSentUris = uris
+        lastSentFiles = files
         lastSentLargeLibraryCount = null
     }
 
