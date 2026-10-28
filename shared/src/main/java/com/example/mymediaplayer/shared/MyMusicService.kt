@@ -362,6 +362,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
     // scannedAt of the library now in memory, so a refresh reloads only a newer saved scan.
     @Volatile
     private var loadedLibraryScannedAt: Long = 0L
+    // Set when a refresh arrives while another load holds the scan guard.
+    @Volatile
+    private var refreshPending: Boolean = false
     private var isForegroundPromoted: Boolean = false
     private val pendingResults =
         mutableMapOf<String, MutableList<MediaBrowserServiceCompat.Result<MutableList<MediaItem>>>>()
@@ -1780,7 +1783,8 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }
     }
 
-    private suspend fun onLibraryLoaded() {
+    @VisibleForTesting
+    internal suspend fun onLibraryLoaded() {
         resolvePendingQueueIfNeeded()
         refreshQueueMetadata()
         rebuildPlaylistShortIds()
@@ -1793,6 +1797,10 @@ class MyMusicService : MediaBrowserServiceCompat() {
         notifyChildrenChanged(GENRES_ID)
         notifyChildrenChanged(ARTISTS_ID)
         notifyChildrenChanged(DECADES_ID)
+        if (refreshPending) {
+            refreshPending = false
+            refreshLibraryFromCache()
+        }
     }
 
     /**
@@ -1812,9 +1820,16 @@ class MyMusicService : MediaBrowserServiceCompat() {
             // a load, so a refresh with nothing newer must not hold it.
             val savedAt = mediaCacheService.persistedScannedAt(this@MyMusicService) ?: return@launch
             if (savedAt <= loadedLibraryScannedAt) return@launch
-            // A load already running will deliver its own results.
-            if (!tryBeginScan()) return@launch
+            // A load already running may have read the cache before the phone saved this scan,
+            // so check again once it finishes.
+            if (!tryBeginScan()) {
+                refreshPending = true
+                return@launch
+            }
             try {
+                // Drop the old library first so only one full copy is in memory (#382). Browse
+                // requests wait while the guard is held.
+                mediaCacheService.clearFiles()
                 val persisted = mediaCacheService.loadPersistedCache(this@MyMusicService, uri, limit)
                 if (persisted != null && persisted.files.isNotEmpty()) {
                     loadedLibraryScannedAt = persisted.scannedAt
@@ -1822,7 +1837,10 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 }
             } finally {
                 endScan()
-                onLibraryLoaded()
+                // The saved scan couldn't be used (settings changed, or it's stale): load the
+                // library the usual way, which delivers results when it's done.
+                if (!mediaCacheService.hasCachedFiles()) loadCachedTreeIfAvailable()
+                if (!isScanning) onLibraryLoaded()
             }
         }
     }

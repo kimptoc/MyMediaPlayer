@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.provider.MediaStore
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -119,6 +120,35 @@ class MyMusicServiceLibraryScopeTest {
         onIo { phone.persistCache(context, wholeDevice, 50, scannedAt = 2_000L) }
         service.refreshLibraryFromCache()
         awaitFiles(service, listOf(song.copy(title = "Retagged"), podcast))
+    }
+
+    @Test
+    fun refreshLibrary_whileAnotherLoadRuns_reloadsWhenItFinishes() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        context.getSharedPreferences("mymediaplayer_prefs", Context.MODE_PRIVATE).edit()
+            .putBoolean("scan_whole_drive", true)
+            .putInt("scan_limit", 50)
+            .commit()
+        val wholeDevice = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+        val phone = MediaCacheService()
+        phone.addAllFiles(listOf(song))
+        onIo { phone.persistCache(context, wholeDevice, 50, scannedAt = 1_000L) }
+        val service = Robolectric.buildService(MyMusicService::class.java).create().get()
+        service.refreshLibraryFromCache()
+        awaitFiles(service, listOf(song))
+
+        // The phone saves a newer scan while another load holds the guard.
+        phone.addFile(podcast)
+        onIo { phone.persistCache(context, wholeDevice, 50, scannedAt = 2_000L) }
+        assertTrue(service.tryBeginScan())
+        service.refreshLibraryFromCache()
+        Thread.sleep(300)
+        assertEquals(listOf(song), service.mediaCacheService.cachedFiles)
+
+        // When that load finishes, the newer scan is picked up.
+        service.endScan()
+        kotlinx.coroutines.runBlocking { service.onLibraryLoaded() }
+        awaitFiles(service, listOf(song, podcast))
     }
 
     // Room refuses the main thread, which Robolectric runs tests on.

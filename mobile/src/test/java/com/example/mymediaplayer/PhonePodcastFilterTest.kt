@@ -99,7 +99,7 @@ class PhonePodcastFilterTest {
             MainUiState(scan = ScanState(scannedFiles = files, lastScanLimit = 10), isPreferencesLoading = false)
         )
 
-        // "e" is in every title; only the song is found.
+        // "e" matches the song (via its album) and both non-music files; only the song is found.
         viewModel.updateSearchQuery("e")
 
         assertEquals(listOf(song), viewModel.uiState.value.search.searchResults)

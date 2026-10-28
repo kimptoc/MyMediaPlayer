@@ -6,15 +6,15 @@ const val PODCAST_GENRE: String = "Podcasts"
 const val RECORDINGS_GENRE: String = "Recordings"
 
 /**
- * Whether a voice or typed genre request matches [file]. Podcasts and recordings match only
- * their own genre ("play podcasts"), so a podcast tagged "Rock" isn't played as rock.
+ * Whether a voice or typed genre request matches [file]. Songs match their own tag ("punk") or
+ * the library genre it's listed under ("Rock/Metal"). Podcasts and recordings match only their
+ * own genre ("play podcasts"), so a podcast tagged "Rock" isn't played as rock.
  */
-fun matchesGenreQuery(file: MediaFileInfo, query: String): Boolean =
-    if (file.isMusic) {
-        file.genre?.contains(query, ignoreCase = true) == true
-    } else {
-        libraryGenreOf(file).contains(query.trim(), ignoreCase = true)
-    }
+fun matchesGenreQuery(file: MediaFileInfo, query: String): Boolean {
+    val q = query.trim()
+    if (libraryGenreOf(file).contains(q, ignoreCase = true)) return true
+    return file.isMusic && file.genre?.contains(q, ignoreCase = true) == true
+}
 
 /** The library genre a file is listed under: its own genre for podcasts and recordings. */
 fun libraryGenreOf(file: MediaFileInfo): String = when {
