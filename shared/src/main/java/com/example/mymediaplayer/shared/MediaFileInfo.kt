@@ -11,8 +11,13 @@ data class MediaFileInfo(
     val durationMs: Long? = null,
     val year: Int? = null,
     val addedAtMs: Long? = null,
-    val isPodcast: Boolean = false
+    val isPodcast: Boolean = false,
+    val isRecording: Boolean = false
 ) {
+    /** Podcasts and recordings live only in their own genre; everything else is a song. */
+    val isMusic: Boolean
+        get() = !isPodcast && !isRecording
+
     val cleanTitle: String
         get() = title?.takeIf { it.isNotBlank() }
             ?: displayName.substringBeforeLast('.')

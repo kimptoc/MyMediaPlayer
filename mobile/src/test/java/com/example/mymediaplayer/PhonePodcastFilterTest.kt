@@ -5,13 +5,14 @@ import androidx.test.core.app.ApplicationProvider
 import com.example.mymediaplayer.shared.MediaFileInfo
 import com.example.mymediaplayer.shared.PODCAST_GENRE
 import com.example.mymediaplayer.shared.PlaylistInfo
+import com.example.mymediaplayer.shared.RECORDINGS_GENRE
 import com.example.mymediaplayer.shared.bucketGenre
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
-// #530: the phone keeps podcasts out of everything but their own genre, as the service does.
+// #530: the phone keeps podcasts and recordings out of everything but their own genres, as the service does.
 @RunWith(RobolectricTestRunner::class)
 class PhonePodcastFilterTest {
 
@@ -38,10 +39,20 @@ class PhonePodcastFilterTest {
         addedAtMs = 2L,
         isPodcast = true
     )
-    private val files = listOf(song, podcast)
+    private val recording = MediaFileInfo(
+        uriString = "content://test/recording",
+        displayName = "New Recording.m4a",
+        sizeBytes = 1L,
+        title = "New Recording",
+        album = "Sounds",
+        year = 1986,
+        addedAtMs = 3L,
+        isRecording = true
+    )
+    private val files = listOf(song, podcast, recording)
 
     @Test
-    fun musicFilesOf_dropsPodcasts() {
+    fun musicFilesOf_dropsPodcastsAndRecordings() {
         assertEquals(listOf(song), musicFilesOf(files))
     }
 
@@ -54,8 +65,11 @@ class PhonePodcastFilterTest {
     }
 
     @Test
-    fun genreCounts_putPodcastsInTheirOwnGenre() {
-        assertEquals(mapOf(bucketGenre("Rock") to 1, PODCAST_GENRE to 1), buildGenreCounts(files))
+    fun genreCounts_putPodcastsAndRecordingsInTheirOwnGenres() {
+        assertEquals(
+            mapOf(bucketGenre("Rock") to 1, PODCAST_GENRE to 1, RECORDINGS_GENRE to 1),
+            buildGenreCounts(files)
+        )
     }
 
     @Test

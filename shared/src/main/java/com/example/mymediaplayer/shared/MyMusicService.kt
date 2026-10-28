@@ -1595,9 +1595,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }.eachCount()
 
     private fun buildGenreCounts(files: List<MediaFileInfo>): Map<String, Int> =
-        files.groupingBy { file ->
-            if (file.isPodcast) PODCAST_GENRE else bucketGenre(file.genre)
-        }.eachCount()
+        files.groupingBy(::libraryGenreOf).eachCount()
 
     @VisibleForTesting
     internal fun buildSongLetterBuckets(songs: List<MediaFileInfo>): List<String> {

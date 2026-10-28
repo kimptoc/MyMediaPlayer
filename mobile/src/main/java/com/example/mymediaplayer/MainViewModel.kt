@@ -1527,7 +1527,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun smartPlaylistSongs(smartId: String): List<MediaFileInfo> {
         val current = _uiState.value
         if (current.isPreferencesLoading) return emptyList()
-        // Matches the service's smart playlists, which leave out podcasts.
+        // Matches the service's smart playlists, which leave out podcasts and recordings.
         val files = musicFilesOf(current.scan.scannedFiles)
         return when (smartId) {
             SMART_FAVORITES -> getFavoriteSongs(files, current.favoriteUris)

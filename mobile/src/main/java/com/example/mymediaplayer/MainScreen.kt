@@ -69,8 +69,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.unit.dp
-import com.example.mymediaplayer.shared.PODCAST_GENRE
-import com.example.mymediaplayer.shared.bucketGenre
+import com.example.mymediaplayer.shared.libraryGenreOf
 import com.example.mymediaplayer.shared.MediaFileInfo
 import com.example.mymediaplayer.shared.PlaylistInfo
 
@@ -388,7 +387,7 @@ fun MainScreen(
 
     PlaylistDialogs(
         maxScannedFilesCount = remember(uiState.scan.scannedFiles) {
-            uiState.scan.scannedFiles.count { !it.isPodcast }
+            uiState.scan.scannedFiles.count { it.isMusic }
         },
         discoveredPlaylists = uiState.scan.discoveredPlaylists,
         playlistCountText = playlistCountText,
@@ -1264,7 +1263,7 @@ internal fun filterSongsByDecade(files: List<MediaFileInfo>, decade: String?): L
     if (decade != null) files.filter { decadeLabelForYear(it.year) == decade } else files
 
 internal fun musicFilesOf(files: List<MediaFileInfo>): List<MediaFileInfo> =
-    files.filterNot { it.isPodcast }
+    files.filter { it.isMusic }
 
 internal fun buildAlbumCounts(files: List<MediaFileInfo>): Map<String, Int> =
     buildCounts(files) { it.album?.ifBlank { null } ?: "Unknown Album" }
@@ -1273,7 +1272,7 @@ internal fun buildArtistCounts(files: List<MediaFileInfo>): Map<String, Int> =
     buildCounts(files) { it.artist?.ifBlank { null } ?: "Unknown Artist" }
 
 internal fun buildGenreCounts(files: List<MediaFileInfo>): Map<String, Int> =
-    buildCounts(files) { if (it.isPodcast) PODCAST_GENRE else bucketGenre(it.genre) }
+    buildCounts(files, ::libraryGenreOf)
 
 private fun buildSmartPlaylistCounts(
     files: List<MediaFileInfo>,
@@ -2890,7 +2889,7 @@ private fun MainScreenContent(
                 Spacer(modifier = Modifier.height(8.dp))
             }
 
-            // Podcasts live only in their own genre (#252), so every other list uses musicFiles.
+            // Podcasts and recordings live only in their own genre (#252, #530), so every other list uses musicFiles.
             val musicFiles = remember(uiState.scan.scannedFiles) { musicFilesOf(uiState.scan.scannedFiles) }
             if (uiState.search.searchQuery.isNotBlank()) {
                 Spacer(modifier = Modifier.height(8.dp))
