@@ -26,6 +26,7 @@ class PodcastDetectionTest {
         assertTrue(isPodcastMedia(null, "/storage/Podcasts/show.mp3"))
         assertTrue(isPodcastMedia("Rock", "/storage/Podcasts/show.mp3"))
         assertTrue(isPodcastMedia(null, "content://.../podcast-feeds/ep.mp3"))
+        assertTrue(isPodcastMedia(null, "Audiobooks/Some Novel/ch1.mp3"))
     }
 
     @Test

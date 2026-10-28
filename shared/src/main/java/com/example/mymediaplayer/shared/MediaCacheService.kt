@@ -136,7 +136,7 @@ class MediaCacheService {
         }
         val projection = projectionList.toTypedArray()
         val sortOrder = "${MediaStore.Audio.Media.DATE_ADDED} DESC"
-        val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
+        val selection = wholeDeviceAudioSelection()
 
         context.contentResolver.query(
             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
@@ -384,6 +384,8 @@ class MediaCacheService {
         resolver.query(
             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
             arrayOf(MediaStore.Audio.Media._ID, MediaStore.Audio.Media.DISPLAY_NAME),
+            // Music only: files are matched by name, and a podcast sharing a song's file name
+            // would hand the song its genre.
             "${MediaStore.Audio.Media.IS_MUSIC} != 0",
             null,
             null
@@ -598,10 +600,9 @@ class MediaCacheService {
             durationMs = durationMs,
             year = yearValue,
             addedAtMs = candidate.lastModified,
-            isPodcast = isPodcastMedia(
-                metadata?.genre,
-                candidate.parentFolderName ?: candidate.uri.toString()
-            ),
+            // The whole path, as the whole-device scan uses, so a show's own folder below
+            // PodcastRepublic/ still counts.
+            isPodcast = isPodcastMedia(metadata?.genre, Uri.decode(candidate.uri.toString())),
             isRecording = isRecordingMedia(candidate.uri.toString())
         )
     }
@@ -847,6 +848,10 @@ class MediaCacheService {
                     if (it.isNull(modifiedIndex)) null else it.getLong(modifiedIndex)
 
                 if (mimeType == DocumentsContract.Document.MIME_TYPE_DIR) {
+                    if (isNonLibraryFolder(childId)) {
+                        skippedReasons["non_library_folder"] = (skippedReasons["non_library_folder"] ?: 0) + 1
+                        continue
+                    }
                     toVisit.add(childId to name)
                     foldersScanned += 1
                     continue
@@ -1250,7 +1255,7 @@ class MediaCacheService {
         context.contentResolver.query(
             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
             projection,
-            "${MediaStore.Audio.Media.IS_MUSIC} != 0",
+            wholeDeviceAudioSelection(),
             null,
             "${MediaStore.Audio.Media.DATE_ADDED} DESC"
         )?.use { cursor ->
