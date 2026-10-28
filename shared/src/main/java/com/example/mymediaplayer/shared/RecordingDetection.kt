@@ -30,7 +30,7 @@ fun isRecordingMedia(pathOrUri: String?): Boolean {
     val lastFolder = segments.size - 2
     for (i in 0..lastFolder) {
         if (segments[i] in RECORDING_FOLDERS) return true
-        if (segments[i] == APP_MEDIA_PARENT && i < lastFolder && segments[i + 1] == APP_MEDIA_FOLDER) {
+        if (segments[i] == APP_MEDIA_PARENT && i + 1 < lastFolder && segments[i + 1] == APP_MEDIA_FOLDER) {
             return true
         }
     }

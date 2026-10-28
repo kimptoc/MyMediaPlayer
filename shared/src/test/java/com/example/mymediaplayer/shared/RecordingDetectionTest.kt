@@ -46,6 +46,8 @@ class RecordingDetectionTest {
     @Test
     fun androidMediaNeedsAnAppFolderBelowIt() {
         assertFalse(isRecordingMedia("Android/media.mp3"))
+        assertFalse(isRecordingMedia("Android/media/clip.mp3"))
+        assertFalse(isRecordingMedia("Android/media/"))
         assertFalse(isRecordingMedia("Music/Android/"))
         assertFalse(isRecordingMedia("Music/Media/"))
     }
