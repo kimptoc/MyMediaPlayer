@@ -3,6 +3,7 @@ package com.example.mymediaplayer.shared
 import android.net.Uri
 import android.os.Looper
 import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.Dispatchers
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -37,6 +38,7 @@ class MyMusicServiceAnnouncementSchedulingTest {
 
     @After
     fun teardown() {
+        MyMusicService.metadataDispatcher = Dispatchers.IO
         NetworkQualityChecker.testInterceptor = null
     }
 
@@ -109,6 +111,8 @@ class MyMusicServiceAnnouncementSchedulingTest {
             .putBoolean("track_voice_intro_enabled", intro)
             .putBoolean("track_voice_outro_enabled", outro)
             .commit()
+        // Reads each song's tags inline, so it starts as soon as the main looper is idled.
+        MyMusicService.metadataDispatcher = Dispatchers.Unconfined
         service = Robolectric.buildService(MyMusicService::class.java).create().get()
         songs.forEach {
             service.mediaCacheService.addFile(it)

@@ -52,6 +52,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.extractor.metadata.flac.PictureFrame
 import androidx.media3.extractor.metadata.id3.ApicFrame
 import androidx.media3.exoplayer.MetadataRetriever
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -123,6 +124,11 @@ class MyMusicService : MediaBrowserServiceCompat() {
         /** How long before a track ends its outro and the next intro are generated. */
         @VisibleForTesting
         internal const val PRE_GENERATE_BEFORE_END_MS = 30_000L
+
+        // Where a song's tags are read before it plays. Tests swap in Dispatchers.Unconfined so
+        // a song starts as soon as the main looper is idled.
+        @VisibleForTesting
+        internal var metadataDispatcher: CoroutineDispatcher = Dispatchers.IO
         private const val KEY_TRACK_VOICE_OUTRO_ENABLED = "track_voice_outro_enabled"
         private const val KEY_DEBUG_CLOUD_ANNOUNCEMENTS = "debug_cloud_announcements"
         private const val KEY_SEARCH_HISTORY = "search_history"
@@ -320,6 +326,10 @@ class MyMusicService : MediaBrowserServiceCompat() {
     private var repeatMode: Int = PlaybackStateCompat.REPEAT_MODE_NONE
     private var pendingResumePositionMs: Long? = null
     private var resumeOnAudioFocusGain: Boolean = false
+    // A song is set up but not started yet: it's preparing, its tags are being read, or its
+    // intro is playing. A pause in that time holds the start rather than being lost.
+    private var startPending = false
+    private var pausedBeforeStart = false
     // Track that couldn't start because audio focus was refused or delayed (#518).
     private var trackAwaitingAudioFocus: MediaFileInfo? = null
     private var audioFocusRetryCount: Int = 0
@@ -380,7 +390,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 abandonAudioFocus()
             }
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
-                resumeOnAudioFocusGain = mediaPlayer?.isPlaying == true
+                resumeOnAudioFocusGain = mediaPlayer?.isPlaying == true || (startPending && !pausedBeforeStart)
                 unduckIfNeeded()
                 handlePause()
             }
@@ -399,11 +409,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     startTrack(awaiting)
                     return@OnAudioFocusChangeListener
                 }
-                if (resumeOnAudioFocusGain && mediaPlayer != null && mediaPlayer?.isPlaying == false) {
-                    mediaPlayer?.start()
-                    updatePlaybackState(PlaybackStateCompat.STATE_PLAYING)
-                    savePlaybackSnapshot()
-                }
+                if (resumeOnAudioFocusGain) resumePlayer()
                 resumeOnAudioFocusGain = false
             }
         }
@@ -446,10 +452,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 }
                 else -> return
             }
-            if (mediaPlayer?.isPlaying == false) {
-                mediaPlayer?.start()
-                updatePlaybackState(PlaybackStateCompat.STATE_PLAYING)
-            }
+            resumePlayer()
         }
 
         override fun onPlayFromMediaId(mediaId: String?, extras: Bundle?) {
@@ -884,7 +887,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         }
         lastSearchQuery = null
         lastSearchResults = if (setSearchResults) list else emptyList()
-        playlistQueue = if (shuffle) list.shuffled() else list
+        playlistQueue = if (shuffle) shuffledWithoutDuplicates(list) else list
         queueIsShuffled = shuffle
         currentQueueIndex = 0
         currentPlaylistName = queueTitle
@@ -1879,16 +1882,36 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
     private fun preGenerateForTrackEnd() {
         val current = announcementTrack ?: return
-        val next = peekNextQueueTrack()?.let { enrichWithMetadata(it) }
-        announcementPreGenerator?.prepareTrackEnd(current, next, trackVoiceIntroEnabled, trackVoiceOutroEnabled)
+        val next = peekNextQueueTrack()
+        serviceScope.launch(metadataDispatcher) {
+            val enrichedNext = next?.let { enrichWithMetadata(it) }
+            mainHandler.post {
+                if (announcementTrack !== current) return@post
+                announcementPreGenerator?.prepareTrackEnd(
+                    current, enrichedNext, trackVoiceIntroEnabled, trackVoiceOutroEnabled
+                )
+            }
+        }
     }
 
     @VisibleForTesting
     internal fun scheduledAnnouncementsForTesting(): Set<Pair<String, Boolean>> =
         announcementPreGenerator?.scheduledForTesting().orEmpty()
 
-    private fun prepareAndStartMediaPlayer(fileInfo: MediaFileInfo, enrichedFileInfo: MediaFileInfo) {
+    private fun prepareAndStartMediaPlayer(fileInfo: MediaFileInfo) {
         val player = MediaPlayer()
+        // Reading the song's tags can be slow, so it happens off the main thread while the player
+        // prepares (#518 point 8). The song starts once both are done. Both run on the main thread.
+        var enrichedFileInfo: MediaFileInfo? = null
+        var prepared = false
+        fun startWhenReady() {
+            val enriched = enrichedFileInfo ?: return
+            if (!prepared || mediaPlayer !== player) return
+            serviceScope.launch {
+                updateMetadata(enriched)
+            }
+            maybeSpeakTrackIntroThenStart(enriched, player)
+        }
         try {
             val uri = Uri.parse(fileInfo.uriString)
             player.apply {
@@ -1908,15 +1931,14 @@ class MyMusicService : MediaBrowserServiceCompat() {
                     }
                     pendingResumePositionMs = null
                     unduckIfNeeded()
-                    serviceScope.launch {
-                        updateMetadata(enrichedFileInfo)
-                    }
-                    maybeSpeakTrackIntroThenStart(enrichedFileInfo, this)
+                    prepared = true
+                    startWhenReady()
                 }
                 setOnCompletionListener {
                     holdWakeLockBetweenSongs()
-                    Log.d("MyMusicService", "Track completed: ${enrichedFileInfo.cleanTitle}, calling maybeSpeakTrackFinished")
-                    maybeSpeakTrackFinishedThenAdvance(enrichedFileInfo)
+                    val finished = enrichedFileInfo ?: fileInfo
+                    Log.d("MyMusicService", "Track completed: ${finished.cleanTitle}, calling maybeSpeakTrackFinished")
+                    maybeSpeakTrackFinishedThenAdvance(finished)
                 }
                 setOnErrorListener { _, what, extra ->
                     Log.e(
@@ -1931,6 +1953,17 @@ class MyMusicService : MediaBrowserServiceCompat() {
                 prepareAsync()
             }
             mediaPlayer = player
+            startPending = true
+            pausedBeforeStart = false
+            serviceScope.launch(metadataDispatcher) {
+                val enriched = enrichWithMetadata(fileInfo)
+                mainHandler.post {
+                    if (mediaPlayer !== player) return@post
+                    enrichedFileInfo = enriched
+                    prepareAnnouncementsForTrackStart(enriched)
+                    startWhenReady()
+                }
+            }
         } catch (e: Exception) {
             handleMediaPlayerSetupError(e, player, fileInfo)
         }
@@ -1975,15 +2008,24 @@ class MyMusicService : MediaBrowserServiceCompat() {
         currentMediaId = fileInfo.uriString
         savePlaybackSnapshot()
 
-        val enrichedFileInfo = enrichWithMetadata(fileInfo)
-        prepareAnnouncementsForTrackStart(enrichedFileInfo)
-        prepareAndStartMediaPlayer(fileInfo, enrichedFileInfo)
+        // The previous song's end-of-track generation is no longer wanted; this song's
+        // announcements are prepared once its tags are read.
+        mainHandler.removeCallbacks(endOfTrackPreGeneration)
+        announcementTrack = null
+        prepareAndStartMediaPlayer(fileInfo)
     }
 
     private fun maybeSpeakTrackIntroThenStart(fileInfo: MediaFileInfo, preparedPlayer: MediaPlayer) {
         val onComplete: () -> Unit = {
             mainHandler.post {
                 if (mediaPlayer !== preparedPlayer) return@post
+                startPending = false
+                // Paused while it was getting ready: it stays prepared, and Play starts it.
+                if (pausedBeforeStart) {
+                    pausedBeforeStart = false
+                    releaseWakeLockBetweenSongs()
+                    return@post
+                }
                 runCatching {
                     preparedPlayer.start()
                     updatePlaybackState(PlaybackStateCompat.STATE_PLAYING)
@@ -2923,6 +2965,13 @@ class MyMusicService : MediaBrowserServiceCompat() {
         currentQueueIndex = 0
     }
 
+    /**
+     * A shuffle plays each song once, even if the list has it twice (such as an .m3u that lists
+     * it twice) (#518 point 9). Lists played in order keep their repeats.
+     */
+    private fun shuffledWithoutDuplicates(tracks: List<MediaFileInfo>): List<MediaFileInfo> =
+        tracks.distinctBy { it.uriString }.shuffled()
+
     private fun applyRepeatMode(mode: Int) {
         repeatMode = mode
         session.setRepeatMode(mode)
@@ -2934,7 +2983,7 @@ class MyMusicService : MediaBrowserServiceCompat() {
         wantsShuffle: Boolean,
         playlistName: String
     ) {
-        playlistQueue = if (wantsShuffle) tracks.shuffled() else tracks
+        playlistQueue = if (wantsShuffle) shuffledWithoutDuplicates(tracks) else tracks
         queueIsShuffled = wantsShuffle
         currentQueueIndex = 0
         currentPlaylistName = playlistName
@@ -3221,6 +3270,25 @@ class MyMusicService : MediaBrowserServiceCompat() {
         if (mediaPlayer?.isPlaying == true) {
             mediaPlayer?.pause()
             updatePlaybackState(PlaybackStateCompat.STATE_PAUSED)
+            savePlaybackSnapshot()
+        } else if (mediaPlayer != null && startPending && !pausedBeforeStart) {
+            // Paused before the song started: hold it, rather than starting it once it's ready.
+            pausedBeforeStart = true
+            updatePlaybackState(PlaybackStateCompat.STATE_PAUSED)
+            savePlaybackSnapshot()
+        }
+    }
+
+    /** Plays the paused song, or lets a held start go ahead once the song is ready. */
+    private fun resumePlayer() {
+        val player = mediaPlayer ?: return
+        if (startPending) {
+            pausedBeforeStart = false
+            return
+        }
+        if (!player.isPlaying) {
+            player.start()
+            updatePlaybackState(PlaybackStateCompat.STATE_PLAYING)
             savePlaybackSnapshot()
         }
     }
@@ -3900,6 +3968,9 @@ class MyMusicService : MediaBrowserServiceCompat() {
 
     @VisibleForTesting
     internal fun handlePlayForTesting() = callback.onPlay()
+
+    @VisibleForTesting
+    internal fun handlePauseForTesting() = callback.onPause()
 
     @VisibleForTesting
     internal fun handleSkipToNextForTesting() = callback.onSkipToNext()

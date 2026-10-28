@@ -8,6 +8,8 @@ import android.os.Looper
 import android.support.v4.media.session.MediaControllerCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
+import kotlinx.coroutines.Dispatchers
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -49,10 +51,17 @@ class MyMusicServiceAudioFocusTest {
         title = "Song Two"
     )
 
+    @After
+    fun resetTagReading() {
+        MyMusicService.metadataDispatcher = Dispatchers.IO
+    }
+
     @Before
     fun setup() {
         EncryptedPrefsManager.clearCacheForTesting()
         MyMusicService.clearPrefsCacheForTesting()
+        // Reads each song's tags inline, so it starts as soon as the main looper is idled.
+        MyMusicService.metadataDispatcher = Dispatchers.Unconfined
         service = Robolectric.buildService(MyMusicService::class.java).create().get()
         audioManager = service.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         ShadowMediaPlayer.addMediaInfo(

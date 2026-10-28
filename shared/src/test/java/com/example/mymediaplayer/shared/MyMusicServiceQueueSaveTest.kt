@@ -6,6 +6,7 @@ import android.os.Looper
 import android.support.v4.media.session.PlaybackStateCompat
 import androidx.test.core.app.ApplicationProvider
 import java.io.File
+import kotlinx.coroutines.Dispatchers
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -42,6 +43,8 @@ class MyMusicServiceQueueSaveTest {
 
     @Before
     fun setup() {
+        // Reads each song's tags inline, so it starts as soon as the main looper is idled.
+        MyMusicService.metadataDispatcher = Dispatchers.Unconfined
         EncryptedPrefsManager.clearCacheForTesting()
         MyMusicService.clearPrefsCacheForTesting()
         // Keeps announcement generation off the real network.
@@ -55,6 +58,7 @@ class MyMusicServiceQueueSaveTest {
 
     @After
     fun teardown() {
+        MyMusicService.metadataDispatcher = Dispatchers.IO
         ShadowMediaPlayer.setCreateListener(null)
         NetworkQualityChecker.testInterceptor = null
     }

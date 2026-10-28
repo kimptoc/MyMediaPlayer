@@ -3,6 +3,8 @@ package com.example.mymediaplayer.shared
 import android.net.Uri
 import android.support.v4.media.session.MediaControllerCompat
 import android.support.v4.media.session.PlaybackStateCompat
+import kotlinx.coroutines.Dispatchers
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
@@ -17,8 +19,15 @@ import org.robolectric.shadows.util.DataSource
 @Config(sdk = [33])
 class MyMusicServicePlaybackErrorTest {
 
+    @After
+    fun resetTagReading() {
+        MyMusicService.metadataDispatcher = Dispatchers.IO
+    }
+
     @Before
     fun setup() {
+        // Reads each song's tags inline, so it starts as soon as the main looper is idled.
+        MyMusicService.metadataDispatcher = Dispatchers.Unconfined
         EncryptedPrefsManager.clearCacheForTesting()
         // The service caches its prefs statically; without this, a repeat mode saved by one
         // test is restored by the next.
