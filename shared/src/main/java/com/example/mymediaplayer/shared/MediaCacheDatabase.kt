@@ -1,6 +1,8 @@
 package com.example.mymediaplayer.shared
 
 import android.content.Context
+import androidx.annotation.VisibleForTesting
+import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
@@ -25,7 +27,9 @@ data class MediaFileEntity(
     val genre: String?,
     val durationMs: Long?,
     val year: Int?,
-    val addedAtMs: Long?
+    val addedAtMs: Long?,
+    @ColumnInfo(defaultValue = "0") val isPodcast: Boolean = false,
+    @ColumnInfo(defaultValue = "0") val isRecording: Boolean = false
 )
 
 @Entity(tableName = "playlists")
@@ -104,7 +108,7 @@ interface MediaCacheDao {
 
 @Database(
     entities = [MediaFileEntity::class, PlaylistEntity::class, ScanStateEntity::class],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class MediaCacheDatabase : RoomDatabase() {
@@ -114,6 +118,15 @@ abstract class MediaCacheDatabase : RoomDatabase() {
         private val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE media_files ADD COLUMN addedAtMs INTEGER")
+            }
+        }
+
+        // Rows from before this read 0 until the next scan rewrites them.
+        @VisibleForTesting
+        internal val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE media_files ADD COLUMN isPodcast INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE media_files ADD COLUMN isRecording INTEGER NOT NULL DEFAULT 0")
             }
         }
 
@@ -127,7 +140,7 @@ abstract class MediaCacheDatabase : RoomDatabase() {
                     MediaCacheDatabase::class.java,
                     "media_cache.db"
                 )
-                    .addMigrations(MIGRATION_1_2)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_3_4)
                     .fallbackToDestructiveMigration(dropAllTables = true)
                     .build()
                     .also { instance = it }

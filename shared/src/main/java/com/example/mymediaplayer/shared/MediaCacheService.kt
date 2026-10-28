@@ -127,6 +127,9 @@ class MediaCacheService {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
             projectionList.add(MediaStore.Audio.Media.GENRE)
         }
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            projectionList.add(MediaStore.Audio.Media.IS_RECORDING)
+        }
         val projection = projectionList.toTypedArray()
         val sortOrder = "${MediaStore.Audio.Media.DATE_ADDED} DESC"
         val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
@@ -150,6 +153,11 @@ class MediaCacheService {
             val addedIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
             val genreIndex = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
                 cursor.getColumnIndex(MediaStore.Audio.Media.GENRE)
+            } else {
+                -1
+            }
+            val isRecordingIndex = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                cursor.getColumnIndex(MediaStore.Audio.Media.IS_RECORDING)
             } else {
                 -1
             }
@@ -191,7 +199,9 @@ class MediaCacheService {
                         durationMs = durationMs,
                         year = year,
                         addedAtMs = addedAtMs,
-                        isPodcast = isPodcastMedia(osGenre, relativePath)
+                        isPodcast = isPodcastMedia(osGenre, relativePath),
+                        isRecording = isRecordingMedia(relativePath) ||
+                            (isRecordingIndex >= 0 && cursor.getInt(isRecordingIndex) != 0)
                     )
                 )
                 outIds.add(id)
@@ -423,7 +433,7 @@ class MediaCacheService {
         get() = synchronized(cacheLock) {
             var result = _cachedMusicFiles
             if (result == null) {
-                result = _cachedFiles.filter { !it.isPodcast }
+                result = _cachedFiles.filter { it.isMusic }
                 _cachedMusicFiles = result
             }
             result
@@ -578,7 +588,8 @@ class MediaCacheService {
             isPodcast = isPodcastMedia(
                 metadata?.genre,
                 candidate.parentFolderName ?: candidate.uri.toString()
-            )
+            ),
+            isRecording = isRecordingMedia(candidate.uri.toString())
         )
     }
 
@@ -693,7 +704,9 @@ class MediaCacheService {
                 genre = it.genre,
                 durationMs = it.durationMs,
                 year = it.year,
-                addedAtMs = it.addedAtMs
+                addedAtMs = it.addedAtMs,
+                isPodcast = it.isPodcast,
+                isRecording = it.isRecording
             )
         }
         val playlists = synchronized(cacheLock) { _discoveredPlaylists.toList() }.map {
@@ -1119,8 +1132,10 @@ class MediaCacheService {
             inferGenreFromPath(entity.uriString) ?: inferGenreFromPath(decodedUriValue())
         )
         val decodedPath = decodedUri
-        val isPodcast = isPodcastMedia(entity.genre, entity.uriString) ||
+        // The stored flags keep what the scan saw (a MediaStore URI has no folder path to re-check).
+        val isPodcast = entity.isPodcast || isPodcastMedia(entity.genre, entity.uriString) ||
             (decodedPath != null && isPodcastMedia(entity.genre, decodedPath))
+        val isRecording = entity.isRecording || isRecordingMedia(entity.uriString)
 
         return MediaFileInfo(
             uriString = entity.uriString,
@@ -1133,7 +1148,8 @@ class MediaCacheService {
             durationMs = entity.durationMs,
             year = entity.year,
             addedAtMs = entity.addedAtMs,
-            isPodcast = isPodcast
+            isPodcast = isPodcast,
+            isRecording = isRecording
         )
     }
 
@@ -1151,8 +1167,8 @@ class MediaCacheService {
         genreIdx: MutableMap<String, MutableList<MediaFileInfo>>,
         decadeIdx: MutableMap<String, MutableList<MediaFileInfo>>
     ) {
-        if (file.isPodcast) {
-            genreIdx.getOrPut(PODCAST_GENRE) { mutableListOf() }.add(file)
+        if (!file.isMusic) {
+            genreIdx.getOrPut(libraryGenreOf(file)) { mutableListOf() }.add(file)
             return
         }
         val album = file.album?.ifBlank { null } ?: "Unknown Album"

@@ -3,6 +3,14 @@ package com.example.mymediaplayer.shared
 import java.util.Locale
 
 const val PODCAST_GENRE: String = "Podcasts"
+const val RECORDINGS_GENRE: String = "Recordings"
+
+/** The library genre a file is listed under: its own genre for podcasts and recordings. */
+fun libraryGenreOf(file: MediaFileInfo): String = when {
+    file.isPodcast -> PODCAST_GENRE
+    file.isRecording -> RECORDINGS_GENRE
+    else -> bucketGenre(file.genre)
+}
 
 private val WHITESPACE_REGEX = Regex("\\s+")
 

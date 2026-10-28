@@ -1140,7 +1140,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun createRandomPlaylist(count: Int) {
         val uri = resolvePlaylistTreeUri() ?: return
-        val files = _uiState.value.scan.scannedFiles
+        val files = musicFilesOf(_uiState.value.scan.scannedFiles)
         if (files.isEmpty()) return
         val safeCount = count.coerceIn(1, files.size)
         val selected = files.shuffled().take(safeCount)
@@ -1527,7 +1527,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun smartPlaylistSongs(smartId: String): List<MediaFileInfo> {
         val current = _uiState.value
         if (current.isPreferencesLoading) return emptyList()
-        val files = current.scan.scannedFiles
+        // Matches the service's smart playlists, which leave out podcasts and recordings.
+        val files = musicFilesOf(current.scan.scannedFiles)
         return when (smartId) {
             SMART_FAVORITES -> getFavoriteSongs(files, current.favoriteUris)
             SMART_FLAGGED -> getFlaggedSongs(files, current.flaggedUris)
