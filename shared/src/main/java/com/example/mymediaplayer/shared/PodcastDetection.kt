@@ -8,5 +8,5 @@ fun isPodcastMedia(rawGenre: String?, pathOrUri: String?): Boolean {
         return true
     }
     val path = pathOrUri.orEmpty().lowercase(Locale.US)
-    return path.contains("podcast")
+    return path.contains("podcast") || path.contains("audiobook")
 }
