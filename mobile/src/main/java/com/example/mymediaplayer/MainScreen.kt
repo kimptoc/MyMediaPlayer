@@ -79,7 +79,7 @@ data class TrustedBluetoothDevice(
     val name: String?
 )
 
-private data class AlbumSearchHit(
+internal data class AlbumSearchHit(
     val album: String,
     val matchedCount: Int,
     val songs: List<MediaFileInfo>
@@ -1261,6 +1261,26 @@ private inline fun buildCounts(
 
 internal fun filterSongsByDecade(files: List<MediaFileInfo>, decade: String?): List<MediaFileInfo> =
     if (decade != null) files.filter { decadeLabelForYear(it.year) == decade } else files
+
+// Search still finds podcasts and recordings, but the album index leaves them out, so their
+// albums aren't offered as hits: they would open to nothing.
+internal fun buildAlbumSearchHits(
+    results: List<MediaFileInfo>,
+    musicFiles: List<MediaFileInfo>
+): List<AlbumSearchHit> {
+    val allByAlbum = musicFiles.groupBy { albumLabel(it) }
+    return results
+        .filter { it.isMusic }
+        .groupBy { albumLabel(it) }
+        .map { (album, matches) ->
+            AlbumSearchHit(
+                album = album,
+                matchedCount = matches.size,
+                songs = allByAlbum[album].orEmpty()
+            )
+        }
+        .sortedBy { it.album.lowercase() }
+}
 
 internal fun musicFilesOf(files: List<MediaFileInfo>): List<MediaFileInfo> =
     files.filter { it.isMusic }
@@ -2901,17 +2921,7 @@ private fun MainScreenContent(
                 if (visibleSearchResults.isEmpty()) {
                     Text("No results for \"${uiState.search.searchQuery}\"")
                 } else if (uiState.library.selectedTab == LibraryTab.Albums) {
-                    val allByAlbum = musicFiles.groupBy { albumLabel(it) }
-                    val albumHits = visibleSearchResults
-                        .groupBy { albumLabel(it) }
-                        .map { (album, matches) ->
-                            AlbumSearchHit(
-                                album = album,
-                                matchedCount = matches.size,
-                                songs = allByAlbum[album].orEmpty()
-                            )
-                        }
-                        .sortedBy { it.album.lowercase() }
+                    val albumHits = buildAlbumSearchHits(visibleSearchResults, musicFiles)
                     AlbumSearchResultsSection(
                         query = uiState.search.searchQuery,
                         albumHits = albumHits,

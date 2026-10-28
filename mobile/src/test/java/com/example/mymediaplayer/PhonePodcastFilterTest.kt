@@ -80,6 +80,16 @@ class PhonePodcastFilterTest {
     }
 
     @Test
+    fun albumSearchHits_leaveOutPodcastAndRecordingAlbums() {
+        val podcastOnly = podcast.copy(uriString = "content://test/podcast2", album = "Podcast Show")
+        val hits = buildAlbumSearchHits(files + podcastOnly, musicFilesOf(files + podcastOnly))
+
+        assertEquals(listOf("Shared Album"), hits.map { it.album })
+        assertEquals(1, hits.single().matchedCount)
+        assertEquals(listOf(song), hits.single().songs)
+    }
+
+    @Test
     fun smartPlaylists_leaveOutPodcasts() {
         val app = ApplicationProvider.getApplicationContext<Application>()
         clearPrefs(app)
